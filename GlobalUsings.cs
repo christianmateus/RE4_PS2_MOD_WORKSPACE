@@ -1,0 +1,9 @@
+global using RE4_PS2_MOD_WORKSPACE.Core.Afs;
+global using RE4_PS2_MOD_WORKSPACE.Core.Dat;
+global using RE4_PS2_MOD_WORKSPACE.Core.Iso;
+global using RE4_PS2_MOD_WORKSPACE.Core.Smd;
+global using RE4_PS2_MOD_WORKSPACE.Core.Workspace;
+global using System.Diagnostics;
+global using System.Drawing;
+global using System.Text.Json;
+global using System.Windows.Forms;
