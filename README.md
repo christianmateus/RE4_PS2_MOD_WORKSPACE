@@ -6,6 +6,7 @@
 
 > Only available in portuguese language for now.
 
+**Requires .NET 8.0 Runtime** — [https://dotnet.microsoft.com/en-us/download/dotnet/8.0](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
 ## Português
 
 A versão **v0.2.2** ainda está em desenvolvimento. Atualmente, a ferramenta suporta **apenas edição de texturas de cenários (SMD)**.
