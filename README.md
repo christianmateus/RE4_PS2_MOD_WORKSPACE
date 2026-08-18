@@ -1,4 +1,4 @@
-# RE4 PS2 Tool — v0.2.2
+# RE4 PS2 MOD WORKSPACE — v0.2.2
 
 ![Screenshot](Images/screenshot.png)
 
