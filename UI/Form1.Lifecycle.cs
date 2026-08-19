@@ -1,4 +1,4 @@
-namespace RE4_PS2_MOD_WORKSPACE;
+﻿namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
@@ -36,10 +36,10 @@ public partial class Form1
 
     private void ShowPage(Panel page, Button navButton, string title)
     {
-        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlBuild, pnlTools, pnlLogs }) panel.Visible = false;
+        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlVisualEditor, pnlBuild, pnlTools, pnlLogs }) panel.Visible = false;
         page.Visible = true;
         page.BringToFront();
-        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavBuild, btnNavTools, btnNavLogs })
+        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavVisualEditor, btnNavBuild, btnNavTools, btnNavLogs })
         {
             button.BackColor = Color.FromArgb(18, 20, 24);
             button.ForeColor = Color.FromArgb(145, 151, 163);
@@ -49,11 +49,18 @@ public partial class Form1
         lblTopTitle.Text = title;
     }
 
-    private void btnNavDashboard_Click(object? sender, EventArgs e) { RefreshDashboard(); ShowPage(pnlDashboard, btnNavDashboard, "Dashboard"); RememberMainPage("Dashboard"); }
-    private void btnNavWorkspace_Click(object? sender, EventArgs e) { ApplyDataToUi(); ShowPage(pnlWorkspace, btnNavWorkspace, "Projeto"); RememberMainPage("Project"); }
-    private void btnNavAssets_Click(object? sender, EventArgs e) { RefreshExtractedContent(); ShowPage(pnlAssets, btnNavAssets, "Arquivos"); RememberMainPage("Assets"); }
+    private void SaveVisualCameraIfLeaving()
+    {
+        if (pnlVisualEditor != null && pnlVisualEditor.Visible)
+            SaveVisualCameraStateForActiveDat();
+    }
+
+    private void btnNavDashboard_Click(object? sender, EventArgs e) { SaveVisualCameraIfLeaving(); RefreshDashboard(); ShowPage(pnlDashboard, btnNavDashboard, "Dashboard"); RememberMainPage("Dashboard"); }
+    private void btnNavWorkspace_Click(object? sender, EventArgs e) { SaveVisualCameraIfLeaving(); ApplyDataToUi(); ShowPage(pnlWorkspace, btnNavWorkspace, "Projeto"); RememberMainPage("Project"); }
+    private void btnNavAssets_Click(object? sender, EventArgs e) { SaveVisualCameraIfLeaving(); RefreshExtractedContent(); ShowPage(pnlAssets, btnNavAssets, "Arquivos"); RememberMainPage("Assets"); }
     private async void btnNavTextures_Click(object? sender, EventArgs e)
     {
+        SaveVisualCameraIfLeaving();
         RefreshTextureDatList();
         RefreshTextureSmdList();
         ShowPage(pnlTextures, btnNavTextures, "Texturas");
@@ -61,9 +68,15 @@ public partial class Form1
         if (cmbTextureSmd.SelectedItem is TextureSmdItem item && (!string.Equals(activeTextureSmdPath, item.FullPath, StringComparison.OrdinalIgnoreCase) || lvTextures.Items.Count == 0))
             await LoadNativeTexturesAsync(false);
     }
-    private void btnNavBuild_Click(object? sender, EventArgs e) { ApplyDataToUi(); UpdateBuildUi(); ShowPage(pnlBuild, btnNavBuild, "Build & Test"); RememberMainPage("Build"); _ = RefreshTrackedDatsAsync(); }
-    private void btnNavTools_Click(object? sender, EventArgs e) { ApplyDataToUi(); ShowPage(pnlTools, btnNavTools, "Ferramentas"); RememberMainPage("Tools"); }
-    private void btnNavLogs_Click(object? sender, EventArgs e) { ShowPage(pnlLogs, btnNavLogs, "Console"); RememberMainPage("Logs"); }
+    private async void btnNavVisualEditor_Click(object? sender, EventArgs e)
+    {
+        ShowPage(pnlVisualEditor, btnNavVisualEditor, "Visual Editor");
+        RememberMainPage("VisualEditor");
+        await RefreshAndLoadVisualEditorAsync();
+    }
+    private void btnNavBuild_Click(object? sender, EventArgs e) { SaveVisualCameraIfLeaving(); ApplyDataToUi(); UpdateBuildUi(); ShowPage(pnlBuild, btnNavBuild, "Build & Test"); RememberMainPage("Build"); _ = RefreshTrackedDatsAsync(); }
+    private void btnNavTools_Click(object? sender, EventArgs e) { SaveVisualCameraIfLeaving(); ApplyDataToUi(); ShowPage(pnlTools, btnNavTools, "Ferramentas"); RememberMainPage("Tools"); }
+    private void btnNavLogs_Click(object? sender, EventArgs e) { SaveVisualCameraIfLeaving(); ShowPage(pnlLogs, btnNavLogs, "Console"); RememberMainPage("Logs"); }
     private void btnTopBuild_Click(object? sender, EventArgs e) => btnNavBuild_Click(sender, e);
     private void btnDashboardWorkspace_Click(object? sender, EventArgs e) => btnNavWorkspace_Click(sender, e);
 
@@ -79,6 +92,7 @@ public partial class Form1
         {
             case "Assets": btnNavAssets_Click(null, EventArgs.Empty); break;
             case "Textures": btnNavTextures_Click(null, EventArgs.Empty); break;
+            case "VisualEditor": btnNavVisualEditor_Click(null, EventArgs.Empty); break;
             case "Build": btnNavBuild_Click(null, EventArgs.Empty); break;
             case "Tools": btnNavTools_Click(null, EventArgs.Empty); break;
             case "Logs": btnNavLogs_Click(null, EventArgs.Empty); break;

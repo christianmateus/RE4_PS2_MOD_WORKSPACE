@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Textures;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
@@ -248,6 +248,7 @@ public partial class Form1
             string backup = GetSmdBackupPath(activeTextureSmdPath);
             await Task.Run(() => SmdTextureService.InjectTpl(activeTextureSmdPath, activeTextureTplPath, backup));
             ExtractLog($"Textura #{info.Index:D3} substituída em {Path.GetFileName(activeTextureSmdPath)} e reinjetada no SMD.");
+            RefreshVisualEditorTexturesFromTextureManager();
             await RefreshTextureItemAsync(updated);
             await RefreshChangeStatusAsync();
             _ = RefreshTrackedDatsAsync();
@@ -310,6 +311,7 @@ public partial class Form1
                 string backup = GetSmdBackupPath(activeTextureSmdPath);
                 await Task.Run(() => SmdTextureService.InjectTpl(activeTextureSmdPath, activeTextureTplPath, backup));
                 ExtractLog($"Substituição em lote: {replaced} textura(s) reinjetadas em {Path.GetFileName(activeTextureSmdPath)}.");
+                RefreshVisualEditorTexturesFromTextureManager();
                 await LoadNativeTexturesAsync(false);
                 await RefreshChangeStatusAsync();
                 _ = RefreshTrackedDatsAsync();
@@ -644,6 +646,7 @@ public partial class Form1
         string backup = GetSmdBackupPath(activeTextureSmdPath);
         await Task.Run(() => SmdTextureService.InjectTpl(activeTextureSmdPath, activeTextureTplPath, backup));
         ExtractLog(log);
+        RefreshVisualEditorTexturesFromTextureManager();
         await RefreshChangeStatusAsync(); _ = RefreshTrackedDatsAsync();
     }
 

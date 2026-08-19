@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Workspace;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Workspace;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
@@ -29,6 +29,15 @@ public sealed class DatProjectState
     public string? AfsPath { get; set; }
     public DateTime? LastBuildUtc { get; set; }
     public int InjectedGeneration { get; set; }
+
+    public bool HasVisualCamera { get; set; }
+    public float VisualCameraX { get; set; }
+    public float VisualCameraY { get; set; }
+    public float VisualCameraZ { get; set; }
+    public float VisualCameraYaw { get; set; }
+    public float VisualCameraPitch { get; set; }
+    public int VisualMoveSpeedSlider { get; set; } = 100;
+    public int VisualLookSpeedSlider { get; set; } = 100;
 }
 
 public sealed record TrackedDatStatus(DatProjectState State, SnapshotDiff Diff, int PendingTpl, bool NeedsRepack, bool NeedsInject);
