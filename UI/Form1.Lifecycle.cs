@@ -36,10 +36,10 @@ public partial class Form1
 
     private void ShowPage(Panel page, Button navButton, string title)
     {
-        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlVisualEditor, pnlBuild, pnlTools, pnlLogs }) panel.Visible = false;
+        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlVisualEditor, pnlEnemies, pnlAnimations, pnlBuild, pnlTools, pnlLogs }) panel.Visible = false;
         page.Visible = true;
         page.BringToFront();
-        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavVisualEditor, btnNavBuild, btnNavTools, btnNavLogs })
+        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavVisualEditor, btnNavEnemies, btnNavAnimations, btnNavBuild, btnNavTools, btnNavLogs })
         {
             button.BackColor = Color.FromArgb(18, 20, 24);
             button.ForeColor = Color.FromArgb(145, 151, 163);
@@ -93,6 +93,8 @@ public partial class Form1
             case "Assets": btnNavAssets_Click(null, EventArgs.Empty); break;
             case "Textures": btnNavTextures_Click(null, EventArgs.Empty); break;
             case "VisualEditor": btnNavVisualEditor_Click(null, EventArgs.Empty); break;
+            case "Enemies": btnNavEnemies_Click(null, EventArgs.Empty); break;
+            case "Animations": btnNavAnimations_Click(null, EventArgs.Empty); break;
             case "Build": btnNavBuild_Click(null, EventArgs.Empty); break;
             case "Tools": btnNavTools_Click(null, EventArgs.Empty); break;
             case "Logs": btnNavLogs_Click(null, EventArgs.Empty); break;

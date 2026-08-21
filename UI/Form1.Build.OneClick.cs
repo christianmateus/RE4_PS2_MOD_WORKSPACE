@@ -10,6 +10,10 @@ public partial class Form1
         if (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path)) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
+        // v0.4.7: Build & Test always commits the currently loaded Visual Editor data first.
+        // AEV lives inside the extracted DAT content; ESL lives separately in the AFS.
+        await SaveVisualEditorAllAsync(false);
+
         string contentDir = GetActiveContentPath()!;
         string scenario = Path.GetFileNameWithoutExtension(project.ActiveDatName);
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
@@ -81,7 +85,11 @@ public partial class Form1
                 activeDatState.InjectedGeneration = project.BuildIsoGeneration;
                 WriteLog("FAST INJECT concluído e validado.");
             }
-            else WriteLog("ISO de Build já contém o último build: injeção ignorada.");
+            else WriteLog("ISO de Build já contém o último DAT: injeção do DAT ignorada.");
+
+            // ESL files are not part of the scenario DAT. Keep the selected emleonXX.esl
+            // synchronized with the Build ISO independently of the DAT fast-build state.
+            await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
 
             var builtSnapshot = await Task.Run(() => ChangeDetectionService.Capture(contentDir));
             ChangeDetectionService.Save(GetChangeStatePath(project.ActiveDatName), builtSnapshot);
@@ -106,5 +114,29 @@ public partial class Form1
             await RefreshChangeStatusAsync();
             await RefreshTrackedDatsAsync();
         }
+    }
+
+    private async Task InjectCurrentEnemyEslIntoBuildIsoAsync(string buildIso)
+    {
+        if (selectedEnemyScene == null || string.IsNullOrWhiteSpace(currentEnemyEslPath) || !File.Exists(currentEnemyEslPath)) return;
+        string eslName = Path.GetFileName(currentEnemyEslPath);
+        if (string.IsNullOrWhiteSpace(eslName) || !eslName.StartsWith("emleon", StringComparison.OrdinalIgnoreCase) || !eslName.EndsWith(".esl", StringComparison.OrdinalIgnoreCase)) return;
+
+        string afsPath = project.ActiveAfsPath ?? "DATA/BIO4DAT.AFS";
+        var afsFiles = await Task.Run(() => AfsService.FindAfsFiles(buildIso));
+        var afsFile = afsFiles.FirstOrDefault(x => x.FullPath.Equals(afsPath, StringComparison.OrdinalIgnoreCase))
+            ?? afsFiles.FirstOrDefault(x => x.Name.Equals("BIO4DAT.AFS", StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException("BIO4DAT.AFS não encontrado na ISO de Build para reinserir o ESL.");
+        var afs = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
+        var entry = AfsService.FindFirstValidEntryByName(afs, eslName)
+            ?? throw new InvalidDataException($"{eslName} não encontrado no AFS da ISO de Build.");
+        long size = new FileInfo(currentEnemyEslPath).Length;
+        if (size > entry.AllocatedSize) throw new InvalidOperationException($"O ESL {eslName} excede o Reserved Space em {FormatBytes(size-entry.AllocatedSize)}.");
+        WriteLog($"ESL AUTO INJECT: {eslName} ({FormatBytes(size)})...");
+        await Task.Run(() => AfsService.InjectEntryInPlace(afs, entry, currentEnemyEslPath));
+        var verify = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
+        var verified = verify.Entries.First(x => x.Index == entry.Index);
+        if (verified.CurrentSize != size) throw new InvalidDataException($"A validação do Current Size de {eslName} falhou após a injeção.");
+        WriteLog($"ESL AUTO INJECT concluído: {eslName}.");
     }
 }

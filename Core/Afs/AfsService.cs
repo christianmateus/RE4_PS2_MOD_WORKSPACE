@@ -48,6 +48,15 @@ public static class AfsService
             .FirstOrDefault();
     }
 
+    public static IReadOnlyList<AfsEntry> GetEmleonEslEntries(AfsImage image)
+    {
+        return image.Entries
+            .Where(x => !x.IsDummy && x.FileName.StartsWith("emleon", StringComparison.OrdinalIgnoreCase) && x.FileName.EndsWith(".ESL", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.FileName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Index)
+            .ToArray();
+    }
+
     public static IReadOnlyList<AfsEntry> GetUniqueValidDatEntries(AfsImage image)
     {
         return image.Entries
@@ -150,12 +159,12 @@ public static class AfsService
     public static void InjectEntryInPlace(AfsImage image, AfsEntry entry, string sourceFile)
     {
         if (entry.IsEmpty) throw new InvalidOperationException("Não é possível importar sobre uma entrada vazia.");
-        if (!File.Exists(sourceFile)) throw new FileNotFoundException("O DAT reconstruído não existe.", sourceFile);
+        if (!File.Exists(sourceFile)) throw new FileNotFoundException("O arquivo a ser injetado não existe.", sourceFile);
 
         long newSize = new FileInfo(sourceFile).Length;
         if (newSize > uint.MaxValue) throw new InvalidDataException("O arquivo é grande demais para o campo de tamanho do AFS.");
         if (newSize > entry.AllocatedSize)
-            throw new InvalidDataException($"O novo DAT possui {newSize:N0} bytes, mas o slot reservado permite {entry.AllocatedSize:N0} bytes. A injeção foi bloqueada para evitar corromper a ISO.");
+            throw new InvalidDataException($"O novo arquivo possui {newSize:N0} bytes, mas o slot reservado permite {entry.AllocatedSize:N0} bytes. A injeção foi bloqueada para evitar corromper a ISO.");
         if (image.TocOffset == 0 || image.TocSize < image.Entries.Count * 48L)
             throw new InvalidDataException("A TOC de 48 bytes não foi encontrada. A importação segura exige a TOC para atualizar o Current Size.");
 
