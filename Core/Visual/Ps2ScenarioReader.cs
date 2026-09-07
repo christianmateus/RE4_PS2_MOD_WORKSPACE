@@ -4,8 +4,21 @@ namespace RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
 public static class Ps2ScenarioReader
 {
+    public static IReadOnlyList<ScenarioTriangle> ReadStandaloneBin(byte[] data, int textureIndexBase = 0, bool useRegularUvLayout = true)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        if (data.Length < 0x50) return Array.Empty<ScenarioTriangle>();
+        using var stream = new MemoryStream(data, writable: false);
+        using var reader = new BinaryReader(stream);
+        List<LocalTriangle> local = ReadBinTriangles(reader, 0, data.Length, 0, useRegularUvLayout);
+        return local.Select(t => new ScenarioTriangle(t.A, t.B, t.C, t.UvA, t.UvB, t.UvC,
+            t.TextureIndex < 0 ? -1 : t.TextureIndex + textureIndexBase)).ToArray();
+    }
+
     private sealed class SmdEntry
     {
+        public int FileOrder;
+        public byte[] RawData = new byte[0x40];
         public Vector3 Position;
         public Vector3 Angle;
         public Vector3 Scale;
@@ -17,12 +30,14 @@ public static class Ps2ScenarioReader
         public readonly Vector3 A, B, C;
         public readonly Vector2 UvA, UvB, UvC;
         public readonly int TextureIndex;
+        public readonly int OffsetA,OffsetB,OffsetC,StripFlagOffset;public readonly float Factor;
 
-        public LocalTriangle(Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, int textureIndex)
+        public LocalTriangle(Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, int textureIndex,int offsetA=-1,int offsetB=-1,int offsetC=-1,float factor=1f,int stripFlagOffset=-1)
         {
             A = a; B = b; C = c;
             UvA = uvA; UvB = uvB; UvC = uvC;
             TextureIndex = textureIndex;
+            OffsetA=offsetA;OffsetB=offsetB;OffsetC=offsetC;Factor=factor;StripFlagOffset=stripFlagOffset;
         }
     }
 
@@ -31,6 +46,8 @@ public static class Ps2ScenarioReader
         public Vector3 Position;
         public Vector2 Uv;
         public ushort IndexComplement;
+        public int SourceOffset;
+        public float Factor;
     }
 
     private readonly struct MaterialInfo
@@ -68,18 +85,17 @@ public static class Ps2ScenarioReader
         for (int i = 0; i < entryCount; i++)
         {
             fs.Position = 0x10L + i * 0x40L;
+            byte[] raw = br.ReadBytes(0x40);
+            if (raw.Length != 0x40) throw new EndOfStreamException("Entry SMD incompleta.");
             var e = new SmdEntry
             {
-                Position = new Vector3(br.ReadSingle() / 100f, br.ReadSingle() / 100f, br.ReadSingle() / 100f),
+                FileOrder = i,
+                RawData = raw,
+                Position = new Vector3(BitConverter.ToSingle(raw, 0) / 100f, BitConverter.ToSingle(raw, 4) / 100f, BitConverter.ToSingle(raw, 8) / 100f),
             };
-            br.ReadSingle();
-            e.Angle = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-            br.ReadSingle();
-            e.Scale = new Vector3(br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
-            br.ReadSingle();
-            e.BinId = br.ReadByte();
-            br.ReadByte(); br.ReadByte(); br.ReadByte();
-            br.ReadUInt32(); br.ReadUInt32(); br.ReadUInt32();
+            e.Angle = new Vector3(BitConverter.ToSingle(raw, 0x10), BitConverter.ToSingle(raw, 0x14), BitConverter.ToSingle(raw, 0x18));
+            e.Scale = new Vector3(BitConverter.ToSingle(raw, 0x20), BitConverter.ToSingle(raw, 0x24), BitConverter.ToSingle(raw, 0x28));
+            e.BinId = raw[0x30];
             entries.Add(e);
             if (e.BinId > maxBin) maxBin = e.BinId;
         }
@@ -110,7 +126,7 @@ public static class Ps2ScenarioReader
             long end = FindBinEnd(binId, offsets, binTableOffset, tplTableOffset, fs.Length);
             try
             {
-                cache[binId] = ReadBinTriangles(br, start, end, binId);
+                cache[binId] = ReadBinTriangles(br, start, end, binId, useRegularUvLayout: false);
                 loadedBins++;
             }
             catch (Exception ex)
@@ -120,17 +136,28 @@ public static class Ps2ScenarioReader
         }
 
         var worldTriangles = new List<ScenarioTriangle>();
+        var sceneEntries = new List<ScenarioEntry>(entries.Count);
         Vector3 min = new(float.PositiveInfinity);
         Vector3 max = new(float.NegativeInfinity);
 
         foreach (var e in entries)
         {
-            if (!cache.TryGetValue(e.BinId, out var local)) continue;
+            cache.TryGetValue(e.BinId, out var local);
+            sceneEntries.Add(new ScenarioEntry
+            {
+                FileOrder = e.FileOrder, RawData = e.RawData, BinId = (byte)e.BinId,
+                PositionX = e.Position.X, PositionY = e.Position.Y, PositionZ = e.Position.Z,
+                RotationX = e.Angle.X, RotationY = e.Angle.Y, RotationZ = e.Angle.Z,
+                ScaleX = e.Scale.X, ScaleY = e.Scale.Y, ScaleZ = e.Scale.Z,
+                LocalTriangles = local == null ? Array.Empty<ScenarioTriangle>() : local.Select(t => new ScenarioTriangle(t.A, t.B, t.C, t.UvA, t.UvB, t.UvC, t.TextureIndex,t.OffsetA,t.OffsetB,t.OffsetC,t.Factor,t.StripFlagOffset)).ToArray(),
+                TextureIndex = local?.Select(t=>t.TextureIndex).Where(x=>x>=0).DefaultIfEmpty(-1).First() ?? -1
+            });
+            if (local == null) continue;
 
             Vector3 scale = new(
-                Math.Abs(e.Scale.X) < 0.000001f ? 1f : e.Scale.X,
-                Math.Abs(e.Scale.Y) < 0.000001f ? 1f : e.Scale.Y,
-                Math.Abs(e.Scale.Z) < 0.000001f ? 1f : e.Scale.Z);
+                float.IsFinite(e.Scale.X) ? e.Scale.X : 1f,
+                float.IsFinite(e.Scale.Y) ? e.Scale.Y : 1f,
+                float.IsFinite(e.Scale.Z) ? e.Scale.Z : 1f);
 
             bool mirrored = scale.X * scale.Y * scale.Z < 0f;
             foreach (var t in local)
@@ -173,6 +200,7 @@ public static class Ps2ScenarioReader
             SkippedBinCount = usedBins.Length - loadedBins,
             Warnings = warnings,
             Triangles = worldTriangles,
+            Entries = sceneEntries,
             BoundsMin = min,
             BoundsMax = max
         };
@@ -186,7 +214,7 @@ public static class Ps2ScenarioReader
         return fileLength;
     }
 
-    private static List<LocalTriangle> ReadBinTriangles(BinaryReader br, long start, long end, int binId)
+    private static List<LocalTriangle> ReadBinTriangles(BinaryReader br, long start, long end, int binId, bool useRegularUvLayout)
     {
         Stream s = br.BaseStream;
         if (start < 0 || start + 0x50 > s.Length) throw new InvalidDataException("offset fora do arquivo.");
@@ -265,6 +293,7 @@ public static class Ps2ScenarioReader
                 int vertexCount = header2[0];
                 int chunkBytes = header3[0] * 0x10;
                 byte[] vertexData = br.ReadBytes(chunkBytes);
+                int vertexDataOffset=checked((int)(s.Position-start-chunkBytes));
                 if (vertexData.Length != chunkBytes) throw new EndOfStreamException("bloco de vértices incompleto.");
 
                 var vertices = new List<SegmentVertex>(vertexCount);
@@ -276,9 +305,14 @@ public static class Ps2ScenarioReader
                     // Re4QuadX PS2 loader normalizes TextureU/TextureV by 255.
                     // ScenarioWithColors stores UV at +08/+0A; normal BIN vertices
                     // store UV at +10/+12.
-                    int uvOffset = scenarioWithColors ? 8 : 16;
+                    // Standalone ETM BINs use the regular PMD/ITM vertex layout even
+                    // when their VIF header resembles a colored scenario segment.
+                    int uvOffset = useRegularUvLayout || !scenarioWithColors ? 16 : 8;
                     short textureU = BitConverter.ToInt16(vertexData, o + uvOffset);
                     short textureV = BitConverter.ToInt16(vertexData, o + uvOffset + 2);
+                    float normalizedU = useRegularUvLayout
+                        ? (textureU & 0xFF) / 255f
+                        : textureU / 255f;
                     vertices.Add(new SegmentVertex
                     {
                         Position = new Vector3(
@@ -286,16 +320,18 @@ public static class Ps2ScenarioReader
                             BitConverter.ToInt16(vertexData, o + 2) * factor / 100f,
                             BitConverter.ToInt16(vertexData, o + 4) * factor / 100f),
                         IndexComplement = BitConverter.ToUInt16(vertexData, o + 14),
+                        SourceOffset=vertexDataOffset+o,
+                        Factor=factor,
                         // ScenarioWithColors is used heavily by foliage/decal-style
                         // scenario meshes on PS2. Its V orientation is opposite to the
                         // regular BIN path in our OpenGL preview.
-                        Uv = scenarioWithColors
-                            ? new Vector2(textureU / 255f, 1f - (textureV / 255f))
-                            : new Vector2(textureU / 255f, textureV / 255f)
+                        Uv = scenarioWithColors && !useRegularUvLayout
+                            ? new Vector2(normalizedU, 1f - (textureV / 255f))
+                            : new Vector2(normalizedU, textureV / 255f)
                     });
                 }
 
-                BuildStrip(vertices, result, material.TextureIndex);
+                BuildStrip(vertices, result, material.TextureIndex, useRegularUvLayout);
 
                 // Alinhamento observado no decoder PS2 usado como referência.
                 if (segmentIndex > 0 && s.Position + 0x10 <= s.Length) br.ReadBytes(0x10);
@@ -305,7 +341,7 @@ public static class Ps2ScenarioReader
         return result;
     }
 
-    private static void BuildStrip(List<SegmentVertex> vertices, List<LocalTriangle> output, int textureIndex)
+    private static void BuildStrip(List<SegmentVertex> vertices, List<LocalTriangle> output, int textureIndex, bool orientEtmUvs)
     {
         bool invertFace = false;
 
@@ -319,12 +355,17 @@ public static class Ps2ScenarioReader
 
                 Vector3 a = va.Position, b = vb.Position, c = vc.Position;
                 Vector2 uvA = va.Uv, uvB = vb.Uv, uvC = vc.Uv;
+                int offsetA=va.SourceOffset,offsetB=vb.SourceOffset,offsetC=vc.SourceOffset;
 
                 if (invertFace)
                 {
                     (a, c) = (c, a);
                     (uvA, uvC) = (uvC, uvA);
+                    (offsetA,offsetC)=(offsetC,offsetA);
                 }
+
+                if (orientEtmUvs)
+                    OrientVerticalFaceUvs(a, b, c, ref uvA, ref uvB, ref uvC);
 
                 invertFace = !invertFace;
 
@@ -337,9 +378,38 @@ public static class Ps2ScenarioReader
                 if (!float.IsFinite(cross.LengthSquared()) || cross.LengthSquared() < 0.0000000001f)
                     continue;
 
-                output.Add(new LocalTriangle(a, b, c, uvA, uvB, uvC, textureIndex));
+                output.Add(new LocalTriangle(a, b, c, uvA, uvB, uvC, textureIndex,offsetA,offsetB,offsetC,va.Factor,vertices[i].SourceOffset+14));
             }
             else invertFace = false;
+        }
+    }
+
+    private static void OrientVerticalFaceUvs(
+        Vector3 a, Vector3 b, Vector3 c,
+        ref Vector2 uvA, ref Vector2 uvB, ref Vector2 uvC)
+    {
+        Vector3 normal = Vector3.Cross(b - a, c - a);
+        if (normal.LengthSquared() < 0.0000000001f ||
+            MathF.Abs(normal.Y) >= MathF.Max(MathF.Abs(normal.X), MathF.Abs(normal.Z)))
+            return;
+
+        float meanY = (a.Y + b.Y + c.Y) / 3f;
+        float meanU = (uvA.X + uvB.X + uvC.X) / 3f;
+        float meanV = (uvA.Y + uvB.Y + uvC.Y) / 3f;
+        float covarianceU = MathF.Abs(
+            (a.Y - meanY) * (uvA.X - meanU) +
+            (b.Y - meanY) * (uvB.X - meanU) +
+            (c.Y - meanY) * (uvC.X - meanU));
+        float covarianceV = MathF.Abs(
+            (a.Y - meanY) * (uvA.Y - meanV) +
+            (b.Y - meanY) * (uvB.Y - meanV) +
+            (c.Y - meanY) * (uvC.Y - meanV));
+
+        if (covarianceU > covarianceV * 1.25f)
+        {
+            uvA = new Vector2(uvA.Y, uvA.X);
+            uvB = new Vector2(uvB.Y, uvB.X);
+            uvC = new Vector2(uvC.Y, uvC.X);
         }
     }
 

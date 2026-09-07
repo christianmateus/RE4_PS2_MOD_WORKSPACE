@@ -38,6 +38,7 @@ public sealed class DatProjectState
     public float VisualCameraPitch { get; set; }
     public int VisualMoveSpeedSlider { get; set; } = 100;
     public int VisualLookSpeedSlider { get; set; } = 100;
+    public float VisualFlySpeed { get; set; }
 }
 
 public sealed record TrackedDatStatus(DatProjectState State, SnapshotDiff Diff, int PendingTpl, bool NeedsRepack, bool NeedsInject);

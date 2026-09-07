@@ -1,4 +1,4 @@
-namespace RE4_PS2_MOD_WORKSPACE;
+﻿namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
@@ -11,14 +11,19 @@ public partial class Form1
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
         try
         {
-            btnBuildAll.Enabled = false; btnBuildOneClick.Enabled = false;
+            SetBuildBusy(true, "Salvando o Visual Editor antes do Build All...");
+            foreach (DatProjectState state in project.DatStates ?? new List<DatProjectState>())
+                await SyncCharacterDatToContentAsync(state);
+            await SaveVisualEditorAllAsync(false);
+            SetBuildBusy(true, "Preparando o build de todos os DATs modificados...");
             WriteLog("=== BUILD ALL & TEST ===");
             var statuses = await GetTrackedDatStatusesAsync();
             var targets = statuses.Where(x => x.NeedsRepack || x.NeedsInject).ToArray();
             if (targets.Length == 0)
             {
-                WriteLog("Nenhum DAT modificado. Abrindo a ISO de Build existente.");
+                WriteLog("Nenhum DAT modificado. Sincronizando o ESL atual e abrindo a ISO de Build existente.");
                 if (!File.Exists(buildIso)) throw new FileNotFoundException("Nenhum DAT precisa de build, mas a ISO de Build ainda não existe.");
+                await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
                 LaunchPcsx2WithIso(buildIso); return;
             }
             if (File.Exists(buildIso) && !string.IsNullOrWhiteSpace(project.BuildIsoSourcePath) && !string.Equals(Path.GetFullPath(project.BuildIsoSourcePath), Path.GetFullPath(project.IsoPath), StringComparison.OrdinalIgnoreCase))
@@ -36,6 +41,7 @@ public partial class Form1
             foreach (var target in targets)
             {
                 var st = target.State; string scenario = Path.GetFileNameWithoutExtension(st.DatName);
+                SetBuildBusy(true, $"Processando {st.DatName}...");
                 WriteLog($"--- {st.DatName} ---");
                 if (target.NeedsRepack)
                 {
@@ -60,8 +66,8 @@ public partial class Form1
                 var afs = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
                 var entry = AfsService.FindFirstValidEntryByName(afs, st.DatName) ?? throw new InvalidDataException($"{st.DatName} não encontrado em {afsFile.Name}.");
                 long buildSize = new FileInfo(st.BuildDatPath).Length;
-                if (buildSize > entry.AllocatedSize) throw new InvalidOperationException($"{st.DatName} excede o Reserved Space em {FormatBytes(buildSize - entry.AllocatedSize)}. Build All interrompido antes de corromper a ISO.");
-                await Task.Run(() => AfsService.InjectEntryInPlace(afs, entry, st.BuildDatPath));
+                                if (buildSize > entry.AllocatedSize) WriteLog($"AFS: {st.DatName} excede o Reserved em {FormatBytes(buildSize-entry.AllocatedSize)}; realocando automaticamente.");
+                await Task.Run(() => AfsService.InjectEntryAuto(afs, entry, st.BuildDatPath));
                 var verify = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
                 if (verify.Entries.First(x => x.Index == entry.Index).CurrentSize != buildSize) throw new InvalidDataException($"{st.DatName}: validação após injeção falhou.");
                 var snapshot = await Task.Run(() => ChangeDetectionService.Capture(st.ContentPath!));
@@ -70,15 +76,17 @@ public partial class Form1
                 st.InjectedGeneration = project.BuildIsoGeneration;
                 WriteLog($"{st.DatName}: {(target.NeedsRepack ? "repack + " : "")}Fast Inject concluído ({FormatBytes(buildSize)}).");
             }
+            await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
             project.ActiveBuildIsoPath = buildIso; project.BuildIsoSourcePath = project.IsoPath;
             var activeState = !string.IsNullOrWhiteSpace(project.ActiveDatName) ? GetDatState(project.ActiveDatName, false) : null;
             if (activeState != null) { project.ActiveBuildDatPath = activeState.BuildDatPath; project.LastBuildUtc = activeState.LastBuildUtc; }
             SaveProject(); UpdateBuildUi(); await RefreshTrackedDatsAsync(); await RefreshChangeStatusAsync();
             WriteLog($"BUILD ALL concluído: {targets.Length} DAT(s) reconstruído(s) e injetado(s). Abrindo PCSX2...");
+            SetBuildBusy(true, "Build All concluído. Abrindo o PCSX2...");
             LaunchPcsx2WithIso(buildIso);
         }
         catch (Exception ex) { WriteLog("ERRO NO BUILD ALL: " + ex.Message); MessageBox.Show(ex.Message, "Build All", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { btnBuildAll.Enabled = true; btnBuildOneClick.Enabled = true; await RefreshTrackedDatsAsync(); }
+        finally { SetBuildBusy(false); await RefreshTrackedDatsAsync(); }
     }
 
     private void lvTrackedDats_DoubleClick(object? sender, EventArgs e)

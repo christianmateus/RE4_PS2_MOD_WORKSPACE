@@ -1,0 +1,393 @@
+01 00 1E = Fog congelante (freezer)
+01 00 1F = Fog normal
+
+r11b (del lago noite)
+01 4B C0 = Algo no Meio do lago r11b
+01 00 1F = Fog
+01 0C 00 = Unknown
+01 45 00 =
+01 00 00 = Água (cor: 9B 98 87 FF) 
+01 46 00 = cor laranja
+01 08 72 = 
+01 00 FE = cor ciano escuro
+01 14 E9 = 
+01 00 2E = Fogo Fogueiras montanha
+01 0B 08 = mesmo de cima (Bloom)
+01 00 28 = Fogueira perto da primeira doca
+01 00 2E = Fogo tocha mercante 
+01 08 C5 = Luz na casa do save do início
+-- header tochas --
+14 00 00 00 00 00 00 00 00 00 FE 00 0A B3 A5 46 05 93 3F 46 B8 34
+-- header tochas --
+01 00 28 = Fogo das Tochas (header de 14 texturas, cada uma com 2)
+01 0B 79 = Bloom das tochas
+
+- - - - - - - - - - - - - - - - - - - - -
+
+r117 (church)
+01 0A 13 = Luzes dos holofotes, um grupo abaixo do outro
+01 00 DA = Cor dos enigmas (azul=14 14 55 FF)
+01 00 DB = Verde
+01 00 DC = Vermelho = 55 14 14 FF
+-- header estátuas de fogo --
+01 0B 79 00 00 00 00 FE 00 00 00 00 26 F5 28 C5
+-- header --
+01 0B 79 = Gloom
+01 00 2E = Fogo
+01 0B 08 = Velas do cenário todo
+
+- - - - - - - - - - - - - - - - - - - - -
+
+r113
+Inicia em offset 1A000
+01 45 00 = Luz do relâmpago igual flash
+01 08 1F = Fog junto do relâmpago
+01 45 00 = Luz do relâmpago igual flash (casa)
+01 00 32 =
+01 00 E9 = 
+01 08 1F = Fog das costas do Leon (229E0)
+
+- - - - - - - - - - - - - - - - - - - - - 
+
+r10d
+01 00 FE =
+01 08 FE =
+01 08 F7 =
+01 00 FF = Algo azul
+01 00 08 = Luz do fogo azul refletido na água (33CE0)
+01 00 1E = Fog suave perto das tochas azuis
+01 00 2E = Fogos azuis (34190)
+01 0B 13 = Bloom tochas azuis
+01 0B 08 = Bloom velas do mercante
+01 07 CD = Gotas de água caindo do teto
+01 00 1F = Fog entrada da caverna
+01 00 1F = Fog dentro da água (mudar para 04 vira sangue)
+01 46 00 =
+01 00 C4 = Efeito da água batendo nas madeiras
+01 00 28 = Fogos tochas penduradas (366C0)
+01 0B 79 = Bloom fogos tochas penduradas
+
+r119
+01 0C 00 = Relâmpagos
+01 00 51 =
+01 08 1F = Flash do relâmpago
+01 45 00 = Outro flash
+01 11 00 = Outro flash
+01 FE 15 =  
+01 0B 1E = 
+01 00 1E = 
+01 00 1F =
+01 FE 1A = 
+-------------------
+Fogueiras começam em offset 21060
+-------------------
+
+r10e
+01 40 CA = 
+01 00 FE =
+01 08 F7 =
+01 08 FE = 
+01 00 2E = Tochas com pedestal
+01 0B 79 = Bloom tochas
+01 00 FF = Fumaça
+01 00 08 =
+01 07 CD = 
+01 46 00 =
+01 08 72 =
+01 0B 08 = Velas
+01 00 86 = Bloom velas
+01 00 28 = Tochas penduradas
+01 0B 79 = Bloom tochas
+
+r111
+Começa em 18B70
+01 10 57 =
+01 08 1F = Fumaça que aparece quando tem relâmpago
+01 45 00 = Complementar de cima
+01 00 1E = Possivelmente fumaça complementar
+01 0C 00 = Mais fumaça de relâmpago
+01 00 E9 =
+01 00 32 =
+01 00 08 =
+01 01 00 =
+01 08 C5 =
+01 46 00 =
+01 15 1F = 
+01 08 72 =
+01 00 28 = Fogo tochas (começa 1E090)
+01 0B 79 = Bloom tochas (mudei para 1C no meu)	
+01 0B 2E = Fumaça das tochas
+01 08 EF = 
+01 08 72 =
+01 00 96 = 
+01 00 51 = 
+
+r10c
+Começa em 53DF0
+01 08 FE =
+01 47 CA =
+01 08 FC =
+01 11 00 =
+01 08 1F = Fumaça do relâmpago
+01 45 00 = Complementar
+01 00 1E = Alguma fumaça
+01 0C 00 = Mais efeito de relâmpago no leon
+01 10 57 =
+01 01 C3 = 
+01 00 C3 = Efeitos da água batendo em objetos
+01 4A 00 = Velas próximo ao emblema
+01 0B 1E = Bloom velas
+01 07 CD = Pingos de água
+01 0B 13 = Fogueira e velas
+===
+Inicio tochas 619F0
+===
+01 00 28 = Tochas
+
+r11a
+===
+Inicio tochas 4F7A0
+===
+
+r118
+01 4B E1 = Luzes do pedestal (nao notei diferença)
+===
+Inicio tochas 52E50
+===
+01 00 28 = Tochas
+01 0B 79 = Bloom
+01 08 1F = Fumaça detrás do Leon
+01 45 00 = Efeito do relâmpago na tela
+
+r112
+01 00 1B = 
+01 00 59 =
+01 00 14 =
+01 00 5F =
+01 00 28 = Textura tochas merchant
+01 00 2E = Efeito do fogo merchant
+01 0B 79 = Bloom tochas merchant
+01 08 59 = 
+01 15 1F = 
+===
+Inicio velas 187E0 
+===
+01 00 85 = Textura velas
+01 0B 13 = Bloom velas
+01 00 24 = 
+01 00 2E = Fumaça se movendo nas poças
+01 00 13 = Reflexo nas poças de água
+01 00 1B = Pingo de água tocando a poça
+
+r11c
+===
+Inicio tochas D3C0
+===
+01 0B 28 = Vela no mecanismo
+01 00 28 = Texturas fogos
+01 0B 79 = Bloom
+01 0B 1C = Lâmpadas
+01 0B 13 = Bloom das lâmpadas (não vi diferença)
+
+r11f
+01 00 2C = Fogo grande
+01 0B 2C = Fogo pequeno no barril
+01 0B 13 = 
+01 0B 2C = Mais fogo
+01 00 13 = Provavelmente mais fogo
+01 00 E9 = Chama pequena no chão
+01 00 29 = 
+01 00 28 = Textura de algum fogo
+01 00 1E = Fumaça dos fogos
+01 00 1F = Neblina do teto
+01 00 26 = 
+
+r327
+01 0B 13 = Luzes e lâmpadas em geral
+01 00 FF = Complementar acima
+01 0B 08 = Luzes cartão
+01 00 13 = Textura luz cartão
+01 00 F7 =
+01 00 08 = 
+01 46 00 =
+01 04 72 =
+01 15 1E = 
+01 0B 32 = Luz vermelha
+01 0E 79 = Lâmpadas 2 andar
+01 0B E9 = Possivelmente bloom das lâmpadas
+01 4E FC = 
+
+r11d
+01 00 28 = Texturas das tochas
+01 0B 79 = Bloom tochas
+01 00 1F = Neblina do relâmpago
+01 45 00 = Complementar de cima
+01 11 00 = Provavelmente algo  no céu
+01 00 51 = 
+ 
+r10f
+01 00 13 = Efeito vermelho da porta
+01 06 08 = Mais efeito da porta
+01 45 00 =
+01 0E 13 = Mais efeito da porta
+01 08 1B = 
+01 0B 08 = 
+01 0B 5F =
+01 09 FF =
+01 0B 0A =
+
+****** CASTELO / CASTLE ******
+r200
+01 0B 13 = Algo azul perto da portão inicial
+01 00 13 =
+01 00 00 = 
+01 00 FF = 
+01 15 1F = 
+01 00 1E = Neblina 
+01 09 FF = 
+01 0B 0A = 
+01 10 1E = 
+01 00 26 = 
+01 4A 00 = 
+
+r207
+01 00 1E = Fumaça da porta
+01 00 59 = Mais algo na porta
+01 08 72 = 
+01 46 00 = 
+01 0B 08 = Bloom lustre
+
+r20c
+01 10 1E = Fumaça do chão (grade caindo)
+01 10 E2 = Complementar fumaça
+******
+- WINE BOTTLE -
+01 00 0A = Garrafa de vinho explodindo
+01 00 1E = Fumaça
+01 00 59 = Algo na garrafa
+01 00 5F =
+01 00 51 =
+01 00 56 =
+01 00 D1 =
+01 00 16 =
+01 00 07 =
+- WINE BOTTLE -
+******
+01 46 00 =
+01 04 72 = 
+01 0B 13 = Lustres
+01 00 13 = Lustres reflexo no chão 
+
+r20b
+01 00 B2 = Estátua da direita 
+01 00 59 = 
+01 08 EF = 
+01 08 FC = 
+01 00 52 = Efeito água espalhando
+01 00 59 = Pingos de água
+01 0B 08 = Bloom Lampadas
+01 00 2E = Efeito do fogo merchant
+01 0B 79 = Bloom tochas merchant
+
+r202
+01 0B 79 = 
+01 00 2C =
+01 0B 2C = 
+01 0B 13 = 
+01 0B 08 = 
+01 FE 08 = 
+01 0B 5F =
+===
+Inicio tochas offset 9570
+===
+01 00 28 = Tochas simples
+01 0B 2E = Fogo detalhado
+01 0B 79 = Bloom
+
+r203
+01 00 2E = Fogo
+01 0B 79 = Bloom
+01 0B 08 = Velas
+
+r208 COMEÇA EM 20B00
+01 00 FC = 
+01 08 FC = 
+01 0B 59 = 
+(OFFSET 22950)
+01 14 28 = Reflexo do fogo na água
+01 14 E9 = Mais reflexo *estático
+01 00 E2 = 
+01 4A 00 = 
+01 0B 1F =
+01 40 52 =
+(OFFSET 2B210)
+01 0B 28 = Fogo tochas da água
+(OFFSET 2C9C0)
+01 0B 08 = Velas
+
+r204
+01 08 10 = Bloom velas
+01 00 2E = Velas, fogo mercante
+01 00 28 = Mais Velas
+01 0B 08 = Bloom velas CORRETO
+01 0B 79 = Bloom Tocha mercante
+
+r201
+(OFFSET 160 - Estátuas de fogo, 14 efeitos)
+01 00 E2 = Similar a uma fumaça perto da boca
+01 0B 08 = Bloom
+01 0B 1E = Vapor
+01 00 2C = Fogo 1, 2 e 3
+(Repetem para a estátua da esquerda)
+01 00 13 = Efeito de fogo no chão, estátua
+---
+(OFFSET 1CC0 - Efeitos da corrente Garrador, não analisados)
+01 00 1E / 01 00 5F
+01 0B 08 / 01 0B 0A 
+01 0B 5F / 01 0B E2  
+---
+(OFFSET 5A60 - Tochas)
+01 0B 13 = Bloom
+01 0B 28 = Fogo
+01 00 08 = Fogo depois dos ornamentos
+
+r205
+(OFFSET 25D70, 18 efeitos)
+01 00 51 = Água sendo drenada (ativa na cutscene)
+01 08 FE = Provavelmenta água
+--
+(OFFSET 2D740, 12 efeitos)
+01 00 28 = Fogo das tochas 
+01 0B 79 = Provavelmente Bloom das tochas
+--
+(OFFSET 2E580, 12 efeitos)
+01 0B 08 = Bloom das velas
+--
+(OFFSET 2FB00)
+01 00 1F = Neblina primeiro corredor
+
+
+r328
+(OFFSET 21DD0)
+01 00 28 = Fogos pequenos
+01 00 1F = Fumaça que se mexe
+01 0B 08 = Flare bonitão
+
+===============================
+r20a
+(OFFSET 105A0)
+01 00 E9 = Luz direcional azul clara (na parte das escadas)
+
+===============================
+r20f
+01 00 0E = Fumaça da ponte levantando
+01 0B 08 = Bloom
+
+===============================
+r206
+01 0B 13 = Bloom na estátua e nas velas
+01 0B 08 = Bloom fogos
+01 14 E9 = Reflexo fogo no chão
+01 00 2E = Fogos grandes
+01 00 28 = Fogos pequenos
+01 00 13 = Bloom velas

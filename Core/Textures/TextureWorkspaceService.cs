@@ -70,6 +70,12 @@ public sealed class TextureWorkspaceService
         return ReplaceFromBitmap(tplPath, index, bitmap, true);
     }
 
+    public int AppendFromImage(string tplPath, string imagePath)
+    {
+        var textures=new List<TPLDefinition.TPL>();uint count=reader.ReadTextureCount(tplPath);for(int i=0;i<count;i++)textures.Add(reader.ReadTexture(tplPath,i));
+        using Image source=Image.FromFile(imagePath);using Bitmap bitmap=new(source);textures.Add(encoder.EncodeImage(bitmap,256,2));writer.RebuildFile(tplPath,textures);return textures.Count-1;
+    }
+
     public TextureInfo ReplaceFromBitmap(string tplPath, int index, Bitmap source, bool preserveDimensions)
     {
         var target = reader.ReadTexture(tplPath, index);

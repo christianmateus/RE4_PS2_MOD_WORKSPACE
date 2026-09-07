@@ -1,4 +1,4 @@
-namespace RE4_PS2_MOD_WORKSPACE;
+﻿namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
@@ -32,6 +32,7 @@ public partial class Form1
         try
         {
             btnBuildRepackDat.Enabled = false;
+            await SyncActiveCharacterDatToContentAsync();
             WriteLog($"Preparando repack de {project.ActiveDatName}...");
             WriteLog("Copiando Content para a área temporária de repack...");
             WriteLog("Executando RE4_UHD_DAT_Tool.exe -p...");
@@ -76,14 +77,7 @@ public partial class Form1
         string afsPath = project.ActiveAfsPath ?? loadedAfs?.IsoAfsEntry.FullPath ?? "DATA/BIO4DAT.AFS";
         long buildSize = new FileInfo(project.ActiveBuildDatPath).Length;
         AfsEntry? sourceEntry = loadedAfs == null ? null : AfsService.FindFirstValidEntryByName(loadedAfs, project.ActiveDatName);
-        if (sourceEntry != null && buildSize > sourceEntry.AllocatedSize)
-        {
-            long over = buildSize - sourceEntry.AllocatedSize;
-            MessageBox.Show($"O DAT reconstruído excede o Reserved Space em {FormatBytes(over)}.\n\nO Workspace bloqueia esta operação para não arriscar corromper a ISO. A realocação automática será portada da ISOAFS em uma versão posterior.", "Reserved Space excedido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
+string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
         bool alreadyExists = File.Exists(buildIso);
         if (alreadyExists && !string.IsNullOrWhiteSpace(project.BuildIsoSourcePath) && !string.Equals(Path.GetFullPath(project.BuildIsoSourcePath), Path.GetFullPath(project.IsoPath), StringComparison.OrdinalIgnoreCase))
         {
@@ -118,8 +112,9 @@ public partial class Form1
                 ?? throw new InvalidDataException($"DAT não encontrado no AFS de Build: {project.ActiveDatName}");
 
             WriteLog($"Reserved: {FormatBytes(buildEntry.AllocatedSize)} | Novo DAT: {FormatBytes(buildSize)}");
+            if (buildSize > buildEntry.AllocatedSize) WriteLog($"AFS: Reserved insuficiente em {FormatBytes(buildSize - buildEntry.AllocatedSize)}; iniciando realocação nativa automática.");
             WriteLog($"Injetando {project.ActiveDatName} no slot original...");
-            await Task.Run(() => AfsService.InjectEntryInPlace(buildAfs, buildEntry, project.ActiveBuildDatPath!));
+            await Task.Run(() => AfsService.InjectEntryAuto(buildAfs, buildEntry, project.ActiveBuildDatPath!));
 
             // Reabre para validar o Current Size gravado na TOC.
             var verify = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, buildAfsFile));
@@ -164,23 +159,18 @@ public partial class Form1
 
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
         string warning = File.Exists(buildIso)
-            ? $"Isso vai APAGAR a ISO de Build atual e copiá-la novamente da ISO original.\n\nBuild atual: {buildIso}\nOrigem: {project.IsoPath}\n\nTodas as injeções feitas somente na ISO de Build serão descartadas. Continuar?"
-            : $"Criar uma ISO de Build limpa a partir da ISO original?\n\nOrigem: {project.IsoPath}\nDestino: {buildIso}\n\nEsta cópia pode levar algum tempo.";
+            ? $"Isso apagará a ISO, os DATs gerados e os temporários de repack, depois copiará novamente a ISO original.\n\nBuild atual: {buildIso}\nOrigem: {project.IsoPath}\n\nSeus arquivos editados em Extracted/Content serão preservados. Continuar?"
+            : $"Limpar todos os artefatos gerados e criar uma ISO de Build a partir da original?\n\nOrigem: {project.IsoPath}\nDestino: {buildIso}\n\nSeus arquivos editados em Extracted/Content serão preservados.";
         if (MessageBox.Show(warning, "RECRIAR ISO LIMPA", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
         try
         {
-            btnBuildRecreateIso.Enabled = false;
-            btnBuildInjectIso.Enabled = false;
-            WriteLog("Recriando ISO de Build limpa a partir da ISO original...");
-            Directory.CreateDirectory(Path.GetDirectoryName(buildIso)!);
+            SetBuildBusy(true, "Limpando artefatos e copiando a ISO base...");
+            WriteLog("Removendo todos os artefatos gerados antes de recriar a ISO...");
             await Task.Run(() =>
             {
-                string tempIso = buildIso + ".new";
-                if (File.Exists(tempIso)) File.Delete(tempIso);
-                File.Copy(project.IsoPath!, tempIso, overwrite: true);
-                if (File.Exists(buildIso)) File.Delete(buildIso);
-                File.Move(tempIso, buildIso);
+                CleanGeneratedBuildArtifacts();
+                File.Copy(project.IsoPath!, buildIso, overwrite: false);
             });
             project.ActiveBuildIsoPath = buildIso;
             project.BuildIsoSourcePath = project.IsoPath;
@@ -189,7 +179,7 @@ public partial class Form1
             SaveProject();
             WriteLog("ISO de Build limpa criada: " + buildIso);
             UpdateBuildUi();
-            MessageBox.Show($"ISO de Build limpa criada com sucesso.\n\n{buildIso}\n\nAgora o FAST INJECT reutilizará esta cópia sem copiá-la novamente.", "ISO de Build pronta", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show($"Limpeza completa concluída e ISO base copiada novamente.\n\n{buildIso}\n\nOs arquivos editados em Extracted/Content foram preservados.", "ISO de Build pronta", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
@@ -198,15 +188,13 @@ public partial class Form1
         }
         finally
         {
-            if (btnBuildRecreateIso != null && !btnBuildRecreateIso.IsDisposed) btnBuildRecreateIso.Enabled = true;
+            SetBuildBusy(false);
             UpdateBuildUi();
             await RefreshTrackedDatsAsync();
         }
     }
 
     private void btnBuildOpenDat_Click(object? sender, EventArgs e) => Launch(settings.DatToolPath, "DAT Tool");
-
-    private void btnBuildOpenIsoAfs_Click(object? sender, EventArgs e) => Launch(settings.IsoAfsPath, "ISOAFS");
 
     private void btnBuildOpenPcsx2_Click(object? sender, EventArgs e)
     {

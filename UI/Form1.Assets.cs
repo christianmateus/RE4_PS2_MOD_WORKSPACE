@@ -52,6 +52,108 @@ public partial class Form1
         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
     }
 
+    private void gridAssets_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Right || e.RowIndex < 0) return;
+        gridAssets.ClearSelection();
+        gridAssets.Rows[e.RowIndex].Selected = true;
+        gridAssets.CurrentCell = gridAssets.Rows[e.RowIndex].Cells[Math.Max(0, e.ColumnIndex)];
+    }
+
+    private void replaceAsset_Click(object? sender, EventArgs e)
+    {
+        string? target = GetSelectedContentFile();
+        if (string.IsNullOrWhiteSpace(target) || !File.Exists(target)) return;
+
+        string extension = Path.GetExtension(target);
+        string typeLabel = string.IsNullOrWhiteSpace(extension) ? "Arquivo sem extensão" : extension.TrimStart('.').ToUpperInvariant();
+        using var dialog = new OpenFileDialog
+        {
+            Title = $"Substituir {Path.GetFileName(target)}",
+            Filter = string.IsNullOrWhiteSpace(extension)
+                ? "Todos os arquivos (*.*)|*.*"
+                : $"Arquivos {typeLabel} (*{extension})|*{extension}|Todos os arquivos (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+
+        string source = Path.GetFullPath(dialog.FileName);
+        string destination = Path.GetFullPath(target);
+        if (source.Equals(destination, StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show("O arquivo selecionado já é o arquivo de destino.", "Substituir arquivo", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (!Path.GetExtension(source).Equals(extension, StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show($"Selecione um arquivo {typeLabel}. A extensão precisa ser a mesma do arquivo original.", "Extensão incompatível", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        long oldSize = new FileInfo(destination).Length;
+        long newSize = new FileInfo(source).Length;
+        string confirmation = $"Substituir o arquivo extraído?\n\nDestino: {Path.GetFileName(destination)}\nOriginal: {FormatBytes(oldSize)}\nNovo: {FormatBytes(newSize)}\n\nUm backup inicial será preservado no workspace.";
+        if (MessageBox.Show(confirmation, "SUBSTITUIR ARQUIVO", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+        try
+        {
+            string backup = GetAssetBackupPath(destination);
+            Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+            if (!File.Exists(backup)) File.Copy(destination, backup, overwrite: false);
+            File.Copy(source, destination, overwrite: true);
+            ExtractLog($"Arquivo substituído: {Path.GetFileName(destination)} • backup: {backup}");
+            RefreshExtractedContentPreserveSelection(destination);
+        }
+        catch (Exception ex)
+        {
+            ExtractLog("ERRO AO SUBSTITUIR ARQUIVO: " + ex.Message);
+            MessageBox.Show(ex.Message, "Erro ao substituir arquivo", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private string GetAssetBackupPath(string assetPath)
+    {
+        string workspace = project.RootPath ?? throw new InvalidOperationException("Workspace não definido.");
+        string? content = GetActiveContentPath();
+        if (string.IsNullOrWhiteSpace(content)) throw new InvalidOperationException("Nenhum pacote DAT está ativo.");
+        string dat = Path.GetFileNameWithoutExtension(project.ActiveDatName ?? "dat");
+        string relative = Path.GetRelativePath(content, assetPath);
+        if (Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException("O arquivo selecionado está fora do conteúdo extraído.");
+        return Path.Combine(workspace, ".workspace", "backups", "assets", dat, relative + ".bak");
+    }
+
+    private string? GetAssetBackupPathSafe(string? assetPath)
+    {
+        if (string.IsNullOrWhiteSpace(assetPath)) return null;
+        try { return GetAssetBackupPath(assetPath); }
+        catch { return null; }
+    }
+
+    private void restoreAsset_Click(object? sender, EventArgs e)
+    {
+        string? target = GetSelectedContentFile();
+        string? backup = GetAssetBackupPathSafe(target);
+        if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(backup) || !File.Exists(backup))
+        {
+            MessageBox.Show("Não existe um backup original para este arquivo.", "Restaurar original", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (MessageBox.Show($"Restaurar a primeira versão preservada de {Path.GetFileName(target)}?\n\nAs alterações atuais desse arquivo serão descartadas.", "RESTAURAR ARQUIVO ORIGINAL", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        try
+        {
+            File.Copy(backup, target, overwrite: true);
+            ExtractLog($"Arquivo original restaurado: {Path.GetFileName(target)}");
+            RefreshExtractedContentPreserveSelection(target);
+        }
+        catch (Exception ex)
+        {
+            ExtractLog("ERRO AO RESTAURAR ARQUIVO: " + ex.Message);
+            MessageBox.Show(ex.Message, "Erro ao restaurar arquivo", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
 
 
     private void gridAssets_ColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
@@ -115,7 +217,7 @@ public partial class Form1
             string? content = GetActiveContentPath();
             if (string.IsNullOrWhiteSpace(content) || !Directory.Exists(content))
             {
-                lblContentSummary.Text = "Nenhum cenário extraído carregado.";
+                lblContentSummary.Text = "Nenhum pacote DAT extraído carregado.";
                 btnOpenContentFolder.Enabled = false;
                 assetBinding.DataSource = assetTable;
                 gridAssets.DataSource = assetBinding;
@@ -151,7 +253,7 @@ public partial class Form1
         int total = assetBinding.Count;
         int smds = 0;
         foreach (DataRowView row in assetBinding) if (string.Equals(row["Type"]?.ToString(), "SMD", StringComparison.OrdinalIgnoreCase)) smds++;
-        lblContentSummary.Text = string.IsNullOrWhiteSpace(content) ? "Nenhum cenário carregado." : $"{total:N0} arquivo(s) visíveis • {smds:N0} SMD • {Path.GetFileName(Path.GetDirectoryName(content))}";
+        lblContentSummary.Text = string.IsNullOrWhiteSpace(content) ? "Nenhum pacote DAT carregado." : $"{total:N0} arquivo(s) visíveis • {smds:N0} SMD • pacote {Path.GetFileName(Path.GetDirectoryName(content))}";
     }
 
     private void SelectAsset(string fullPath)

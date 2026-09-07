@@ -189,7 +189,7 @@ public partial class Form1
         {
             lblBuildDatStatus.Text = string.IsNullOrWhiteSpace(project.ActiveDatName) ? "Extraia e edite um cenário antes de reconstruir." : "Pronto para reconstruir a partir de Content.";
             lblBuildDatStatus.ForeColor = Color.FromArgb(145, 151, 163);
-            _ = RefreshChangeStatusAsync();
+            if (!restoringSession) _ = RefreshChangeStatusAsync();
             return;
         }
 
@@ -213,6 +213,6 @@ public partial class Form1
             lblBuildDatStatus.Text = $"DAT reconstruído: {FormatBytes(size.Value)}  •  {buildDat}";
             lblBuildDatStatus.ForeColor = Color.FromArgb(113, 190, 137);
         }
-        _ = RefreshChangeStatusAsync();
+        if (!restoringSession) _ = RefreshChangeStatusAsync();
     }
 }

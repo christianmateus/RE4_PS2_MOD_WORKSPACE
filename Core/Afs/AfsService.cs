@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using RE4_PS2_MOD_WORKSPACE.Core.Iso;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Afs;
@@ -12,8 +12,12 @@ public sealed class AfsEntry
     public long AllocatedSize { get; set; }
     public string FileName { get; set; } = string.Empty;
     public bool IsEmpty { get; set; }
-    public uint CurrentSize => ActualSize > 0 ? ActualSize : StoredSize;
-    public bool IsDummy => IsEmpty || ActualSize == 0;
+    // The primary AFS table is the canonical source for payload size. Some original
+    // PS2 images contain stale/invalid values in the optional filename TOC; using
+    // that metadata as the payload size can turn a ~4 MB DAT into a fictitious
+    // 800 MB entry and make extraction exceed its physical slot.
+    public uint CurrentSize => IsEmpty ? 0 : StoredSize;
+    public bool IsDummy => IsEmpty || StoredSize == 0;
     public long FreeSpace => Math.Max(0, AllocatedSize - CurrentSize);
     public override string ToString() => string.IsNullOrWhiteSpace(FileName) ? $"Entry {Index:D5}" : FileName;
 }
@@ -23,8 +27,8 @@ public sealed class AfsImage
     public required string IsoPath { get; init; }
     public required IsoFileEntry IsoAfsEntry { get; init; }
     public required IReadOnlyList<AfsEntry> Entries { get; init; }
-    public uint TocOffset { get; init; }
-    public uint TocSize { get; init; }
+    public uint TocOffset { get; set; }
+    public uint TocSize { get; set; }
 }
 
 public static class AfsService
@@ -61,6 +65,17 @@ public static class AfsService
     {
         return image.Entries
             .Where(x => !x.IsDummy && x.FileName.EndsWith(".DAT", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(x => x.Index)
+            .GroupBy(x => x.FileName, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
+            .OrderBy(x => x.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public static IReadOnlyList<AfsEntry> GetUniqueValidEntries(AfsImage image)
+    {
+        return image.Entries
+            .Where(x => !x.IsDummy && !string.IsNullOrWhiteSpace(x.FileName))
             .OrderBy(x => x.Index)
             .GroupBy(x => x.FileName, StringComparer.OrdinalIgnoreCase)
             .Select(x => x.First())
@@ -156,6 +171,124 @@ public static class AfsService
         while (remaining > 0) { int read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining)); if (read <= 0) throw new EndOfStreamException(); output.Write(buffer, 0, read); remaining -= read; }
     }
 
+    /// <summary>
+    /// Injects an AFS entry and automatically grows its reserved slot when necessary.
+    /// Growth is sector-aligned (0x800): the ISO tail is shifted forward, all affected
+    /// ISO9660 LBAs are patched, later AFS entry offsets/TOC are advanced and the AFS
+    /// directory-record size is updated. The original/source ISO is never chosen here;
+    /// callers decide which ISO image is being modified.
+    /// </summary>
+    public static void InjectEntryAuto(AfsImage image, AfsEntry entry, string sourceFile, Action<string>? log = null)
+    {
+        if (entry.IsEmpty) throw new InvalidOperationException("Não é possível importar sobre uma entrada vazia.");
+        if (!File.Exists(sourceFile)) throw new FileNotFoundException("O arquivo a ser injetado não existe.", sourceFile);
+
+        long newSize = new FileInfo(sourceFile).Length;
+        if (newSize <= entry.AllocatedSize)
+        {
+            InjectEntryInPlace(image, entry, sourceFile);
+            return;
+        }
+
+        ExpandEntrySlot(image, entry, newSize, log);
+        InjectEntryInPlace(image, entry, sourceFile);
+    }
+
+    private static void ExpandEntrySlot(AfsImage image, AfsEntry entry, long requiredSize, Action<string>? log)
+    {
+        if (requiredSize > uint.MaxValue)
+            throw new InvalidDataException("O arquivo é grande demais para o campo de tamanho do AFS.");
+        if (image.TocOffset == 0 || image.TocSize < image.Entries.Count * 48L)
+            throw new InvalidDataException("A TOC de 48 bytes não foi encontrada. A realocação segura exige a TOC completa.");
+
+        long oldAllocation = entry.AllocatedSize;
+        long wantedAllocation = AlignUp(requiredSize, Alignment);
+        long growBy = wantedAllocation - oldAllocation;
+        if (growBy <= 0) return;
+        growBy = AlignUp(growBy, Alignment);
+
+        long afsBase = image.IsoAfsEntry.DataOffset;
+        long shiftRelative = entry.Offset + oldAllocation;
+        long shiftAbsolute = afsBase + shiftRelative;
+
+        if ((shiftRelative % Alignment) != 0 || (shiftAbsolute % Alignment) != 0)
+            throw new InvalidDataException(
+                $"O limite físico do slot não está alinhado a 0x{Alignment:X}. " +
+                $"Offset relativo: 0x{shiftRelative:X}. A realocação automática foi interrompida por segurança.");
+
+        long oldAfsSize = image.IsoAfsEntry.Size;
+        long newAfsSizeLong = checked(oldAfsSize + growBy);
+        if (newAfsSizeLong > uint.MaxValue)
+            throw new InvalidDataException("O AFS expandido ultrapassaria o limite de 4 GiB do ISO9660/AFS.");
+
+        log?.Invoke($"Reserved Space insuficiente: {oldAllocation:N0} bytes; necessário: {requiredSize:N0} bytes.");
+        log?.Invoke($"Expandindo slot AFS em {growBy:N0} bytes ({growBy / Alignment:N0} setor(es) de 0x{Alignment:X})...");
+
+        // Physically create room at the exact end of the entry's current slot. This moves the
+        // remainder of the AFS and every later ISO extent while keeping the AFS start LBA fixed.
+        Iso9660Reader.InsertSpaceBeforeExtent(image.IsoPath, shiftAbsolute, growBy);
+
+        // The AFS is now physically larger. Its ISO9660 directory record starts before the
+        // insertion boundary, so its LBA is unchanged; only its data length must be patched.
+        Iso9660Reader.UpdateFileSize(image.IsoPath, image.IsoAfsEntry, checked((uint)newAfsSizeLong));
+
+        // Adjust the in-memory AFS layout to match the bytes that InsertSpaceBeforeExtent moved.
+        foreach (AfsEntry other in image.Entries)
+        {
+            if (other.Index == entry.Index || other.IsEmpty) continue;
+            if (other.Offset >= shiftRelative)
+                other.Offset = checked((uint)(other.Offset + growBy));
+        }
+
+        uint newTocOffset = image.TocOffset;
+        if (image.TocOffset >= shiftRelative)
+            newTocOffset = checked((uint)(image.TocOffset + growBy));
+
+        // Patch AFS header table + TOC pointer. All these structures live before the inserted
+        // payload boundary except the TOC contents themselves (which were moved automatically).
+        using (var iso = new FileStream(image.IsoPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        using (var bw = new BinaryWriter(iso, Encoding.ASCII, leaveOpen: true))
+        {
+            long tableBase = afsBase + 8L;
+            foreach (AfsEntry item in image.Entries)
+            {
+                if (item.IsEmpty) continue;
+                iso.Position = tableBase + item.Index * 8L;
+                bw.Write(item.Offset);
+                // The main AFS table is the actual file size; reserved space comes from the
+                // distance to the next offset. Keep all other sizes untouched here.
+                bw.Write(item.Index == entry.Index ? checked((uint)requiredSize) : item.StoredSize);
+            }
+
+            long tocPointer = afsBase + 8L + image.Entries.Count * 8L;
+            iso.Position = tocPointer;
+            bw.Write(newTocOffset);
+            bw.Write(image.TocSize);
+            iso.Flush(true);
+        }
+
+        entry.StoredSize = checked((uint)requiredSize);
+        entry.AllocatedSize = oldAllocation + growBy;
+        image.TocOffset = newTocOffset;
+
+        // Every later allocation is unchanged in size because both its start and following start
+        // moved by the same delta. Recalculate all allocations to catch the last-entry/TOC case.
+        if (image.Entries is List<AfsEntry> list)
+            CalculateAllocation(newAfsSizeLong, newTocOffset, list);
+        else
+        {
+            var mutable = image.Entries.ToList();
+            CalculateAllocation(newAfsSizeLong, newTocOffset, mutable);
+            foreach (var updated in mutable)
+            {
+                AfsEntry original = image.Entries.First(x => x.Index == updated.Index);
+                original.AllocatedSize = updated.AllocatedSize;
+            }
+        }
+
+        log?.Invoke($"Realocação concluída. Novo Reserved Space da entry: {entry.AllocatedSize:N0} bytes.");
+    }
+
     public static void InjectEntryInPlace(AfsImage image, AfsEntry entry, string sourceFile)
     {
         if (entry.IsEmpty) throw new InvalidOperationException("Não é possível importar sobre uma entrada vazia.");
@@ -175,6 +308,14 @@ public static class AfsService
         if (absoluteSlotEnd > afsEnd) throw new InvalidDataException("O slot físico da entrada ultrapassa os limites do AFS dentro da ISO.");
 
         using var iso = new FileStream(image.IsoPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        // Keep the primary AFS table size synchronized with the TOC Current Size. Reserved
+        // capacity is represented by the distance to the next entry offset, not by this field.
+        iso.Position = afsBase + 8L + entry.Index * 8L + 4L;
+        using (var sizeWriter = new BinaryWriter(iso, Encoding.ASCII, leaveOpen: true))
+            sizeWriter.Write(checked((uint)newSize));
+        entry.StoredSize = checked((uint)newSize);
+
         iso.Position = absoluteEntry;
         using (var input = new FileStream(sourceFile, FileMode.Open, FileAccess.Read, FileShare.Read))
             input.CopyTo(iso, 1024 * 1024);

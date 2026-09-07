@@ -1,4 +1,4 @@
-namespace RE4_PS2_MOD_WORKSPACE;
+﻿namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
@@ -10,17 +10,21 @@ public partial class Form1
         if (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path)) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
-        // v0.4.7: Build & Test always commits the currently loaded Visual Editor data first.
-        // AEV lives inside the extracted DAT content; ESL lives separately in the AFS.
-        await SaveVisualEditorAllAsync(false);
-
         string contentDir = GetActiveContentPath()!;
         string scenario = Path.GetFileNameWithoutExtension(project.ActiveDatName);
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
         try
         {
-            btnBuildOneClick.Enabled = false;
+            SetBuildBusy(true, $"Compilando e testando {project.ActiveDatName}...");
             WriteLog("=== BUILD & TEST ===");
+            // Character edits are made against the complete DAT. Expand them back
+            // to Content before the regular repack evaluates file changes.
+            await SyncActiveCharacterDatToContentAsync();
+
+            // v0.4.7: commit the currently loaded Visual Editor data first.
+            // AEV lives inside Content; ESL lives separately in the AFS.
+            await SaveVisualEditorAllAsync(false);
+
             if (File.Exists(buildIso) && !string.IsNullOrWhiteSpace(project.BuildIsoSourcePath) && !string.Equals(Path.GetFullPath(project.BuildIsoSourcePath), Path.GetFullPath(project.IsoPath), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("A ISO base mudou desde a criação da ISO de Build. Use RECRIAR ISO LIMPA antes do Build & Test.");
 
@@ -38,6 +42,7 @@ public partial class Form1
 
             if (needRepack)
             {
+                SetBuildBusy(true, $"Reconstruindo {project.ActiveDatName}...");
                 string stagingDir = Path.Combine(project.RootPath!, "Temp", "Repack", scenario);
                 string outputDat = Path.Combine(project.RootPath!, "Build", scenario, project.ActiveDatName);
                 WriteLog("Mudanças detectadas: executando REPACK DAT...");
@@ -54,6 +59,7 @@ public partial class Form1
 
             if (needInject)
             {
+                SetBuildBusy(true, $"Injetando {project.ActiveDatName} na ISO de Build...");
                 if (string.IsNullOrWhiteSpace(project.ActiveBuildDatPath) || !File.Exists(project.ActiveBuildDatPath)) throw new FileNotFoundException("DAT de Build não encontrado.");
                 if (!File.Exists(buildIso))
                 {
@@ -74,9 +80,9 @@ public partial class Form1
                 var afs = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
                 var entry = AfsService.FindFirstValidEntryByName(afs, project.ActiveDatName)
                     ?? throw new InvalidDataException($"{project.ActiveDatName} não encontrado no AFS.");
-                if (buildSize > entry.AllocatedSize) throw new InvalidOperationException($"O DAT excede o Reserved Space em {FormatBytes(buildSize - entry.AllocatedSize)}. A injeção foi bloqueada.");
-                WriteLog($"FAST INJECT: {project.ActiveDatName} ({FormatBytes(buildSize)}) em {afsFile.Name}...");
-                await Task.Run(() => AfsService.InjectEntryInPlace(afs, entry, project.ActiveBuildDatPath!));
+                                WriteLog($"FAST INJECT: {project.ActiveDatName} ({FormatBytes(buildSize)}) em {afsFile.Name}...");
+                if (buildSize > entry.AllocatedSize) WriteLog($"AFS: {project.ActiveDatName} excede o Reserved em {FormatBytes(buildSize-entry.AllocatedSize)}; realocando automaticamente.");
+                await Task.Run(() => AfsService.InjectEntryAuto(afs, entry, project.ActiveBuildDatPath!));
                 var verify = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
                 var verified = verify.Entries.First(x => x.Index == entry.Index);
                 if (verified.CurrentSize != buildSize) throw new InvalidDataException("A validação do Current Size após a injeção falhou.");
@@ -100,6 +106,7 @@ public partial class Form1
             UpdateBuildUi();
             await RefreshChangeStatusAsync();
             WriteLog("Abrindo ISO de Build no PCSX2...");
+            SetBuildBusy(true, "Build concluído. Abrindo o PCSX2...");
             LaunchPcsx2WithIso(buildIso);
             WriteLog("=== BUILD & TEST concluído ===");
         }
@@ -110,7 +117,7 @@ public partial class Form1
         }
         finally
         {
-            btnBuildOneClick.Enabled = true;
+            SetBuildBusy(false);
             await RefreshChangeStatusAsync();
             await RefreshTrackedDatsAsync();
         }
@@ -131,9 +138,9 @@ public partial class Form1
         var entry = AfsService.FindFirstValidEntryByName(afs, eslName)
             ?? throw new InvalidDataException($"{eslName} não encontrado no AFS da ISO de Build.");
         long size = new FileInfo(currentEnemyEslPath).Length;
-        if (size > entry.AllocatedSize) throw new InvalidOperationException($"O ESL {eslName} excede o Reserved Space em {FormatBytes(size-entry.AllocatedSize)}.");
-        WriteLog($"ESL AUTO INJECT: {eslName} ({FormatBytes(size)})...");
-        await Task.Run(() => AfsService.InjectEntryInPlace(afs, entry, currentEnemyEslPath));
+                WriteLog($"ESL AUTO INJECT: {eslName} ({FormatBytes(size)})...");
+        if (size > entry.AllocatedSize) WriteLog($"AFS: {eslName} excede o Reserved em {FormatBytes(size-entry.AllocatedSize)}; realocando automaticamente.");
+        await Task.Run(() => AfsService.InjectEntryAuto(afs, entry, currentEnemyEslPath));
         var verify = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
         var verified = verify.Entries.First(x => x.Index == entry.Index);
         if (verified.CurrentSize != size) throw new InvalidDataException($"A validação do Current Size de {eslName} falhou após a injeção.");

@@ -1,0 +1,299 @@
+MATILDA wep17.dat
+006 = Stand
+007 = Turn Right
+008 = Turn Left
+009 = Walk Forward
+010 = Walk Backward
+011 = Run Forward
+012 = 180 Turn
+013 = Aim Begin
+014 = Aiming
+015 = Run Forward
+016 = Shoot
+017 = Aim end
+018 = Reload
+019 = Aim up
+020 = Shoot Up
+021 = Aim Down
+022 = Shoot Down
+029 = Aim Forward
+030 = Aim Up
+031 = Aim Down
+032 = Reload
+
+MINE LAUNCHER wep14.dat
+007 = Stand
+008 = Right Turn
+009 = Left Turn
+010 = Walk Forward
+011 = Walk Backward
+012 = Run Forward
+013 = 180 Turn
+014 = Aim
+015 = Scope Aim
+016 = Shoot
+017 = Put Down
+018 = Reload
+019 = Aim Up
+020 = Shoot Up
+021 = Aim Down
+022 = Shoot Down
+023 = Quick Reload
+025 = Sniper Aim
+
+KRAUSER'S BOW wep28.dat
+006 = Stand
+007 = Walk Forward
+008 = Walk Backward
+009 = Run Forward
+010 = 180 Turn
+011 = Right Turn
+012 = Left Turn
+025 = Unequip Bow
+026 = Equip Bow
+027 = Aim Begin
+028 = Put away
+029 = Aiming
+030 = Shoot
+031 = Put away after shot
+032 = Aim up
+033 = Shoot Up
+034 = Put away after Upward shot
+035 = Aim Down
+036 = Shoot Down
+037 = Put away after Downward shot
+
+BROKEN BUTTERFLY wep05.dat
+007 = Stand
+009 = Turn Right
+011 = Turn Left
+013 = Walk Forward
+015 = Walk Backward
+017 = Run Forward
+019 = 180 Turn
+027 = Run Forward
+030 = Aim Begin
+032 = Aim End
+034 = Aim
+035 = Aim Up
+036 = Aim Down
+037 = Shoot
+038 = Shoot Up
+039 = Shoot Down
+041 = Reload 1
+042 = Reload 2
+043 = Reload 3
+044 = Reload End
+045 = Reload End (back to aim)
+
+CHICAGO TYPEWRITER (BARREL MAG) wep49.dat
+009 = Stand
+010 = Turn Right
+012 = Turn Left
+014 = Walk Forward
+016 = Walk Backward
+018 = Run Forward
+020 = 180 Turn
+022 = Aim Begin
+023 = Aiming
+024 = Shoot
+025 = Aim End
+027 = Aim Up
+028 = Shoot Up
+029 = Aim Down
+030 = Shoot Down
+031 = Reload Begin
+032 = Reload Mid point
+033 = Reload End aim
+034 = Reload End cancel
+
+UNARMED wep00.dat
+000 = Stand
+001 = Walk Forward
+002 = Walk Backward
+003 = Run Forward
+004 = Turn 180
+005 = Turn Right
+006 = Turn Left
+
+ADA TMP wep39.dat
+09 = Stand
+10 = Walk Forward
+12 = Walk Backward
+14 = Run Forward
+16 = 180
+18 = Right Turn
+20 = Left Turn
+22 = Aim Begin
+23 = Aiming
+24 = Shoot Forward
+25 = Aim End
+27 = Aim Up
+28 = Shoot Up
+29 = Aim Down
+30 = Shoot Down
+31 = Reload
+33 = Reload End
+34 = Reload End Aim
+
+BOWGUN
+06 = Stand
+07 = Walk Forward
+08 = Walk Backward
+09 = Run
+10 = 180
+11 = Right Turn
+12 = Left Turn
+20 = Aim Begin
+21 = Aiming
+22 = Shoot
+23 = Aim End
+24 = Aiming
+25 = Shoot
+26 = Aim Up
+27 = Shoot Up
+28 = Aim Down
+29 = Shoot Down
+30 = Reload
+31 = Reload Up
+32 = Reload Down
+33 = Reload
+
+RIOT SHOTGUN wep33.dat
+006 = Idle
+008 = Turn Right
+010 = Turn Left
+012 = Walk Forward
+014 = Walk Backward
+016 = Run Forward
+018 = 180 Turn
+020 = Aim Begin
+022 = Aiming
+024 = Run Forward
+026 = Shoot
+027 = Aim end
+028 = Aim Up
+029 = Shoot Up
+030 = Aim Down
+031 = Shoot Down
+
+
+
+About 90 percent of these are wrong =P
+
+USP/"handgun"(Leon) wep02.dat
+007 = Stand
+009 = Turn Right
+011 = Turn Left
+013 = Walk Forward
+015 = Walk Backward
+017 = Run Forward
+019 = 180 Turn
+030 = Aim Begin
+032 = Aim End
+034 = Aim Forward
+035 = Aim Up
+036 = Aim Down
+037 = Shooting
+038 = Firing Up
+039 = Firing Down
+041 = Reload
+
+
+Punisher wep01.dat
+
+
+Red 9(stockless) wep03.dat
+
+
+Blacktail(Leon) wep04.dat
+
+
+Killer 7 wep06.dat (some of it may be wrong)
+007 = Stand
+009 = Turn Right
+011 = Turn Left
+013 = Walk Forward
+015 = Walk Backward
+017 = Run Forward
+019 = 180 Turn
+027 = Run Forward
+030 = Aim Begin
+032 = Aim End
+034 = Aim
+035 = Aim Up
+036 = Aim Down
+037 = Shoot
+038 = Shoot Up
+039 = Shoot Down
+
+
+Pump Shotgun(Leon) wep07.dat
+
+
+Striker wep08.dat
+
+
+Rifle wep09.dat
+010 = Stand
+011 = Turn Right
+012 = Turn Left
+013 = Walk Forward
+014 = walk backward
+015 = Run forward
+016 = Look into scope
+017 = Scope twitch (the small up down movement)
+018 = leave scope
+019 = reload
+020 = 180 turn
+
+
+semi-auto rifle wep10.dat
+same as above
+
+
+TMP(stockless/Leon) wep11.dat
+
+
+Rifle w/ scope wep21.dat
+same
+
+
+semi-auto rifle w/ scope wep31.dat
+same
+
+
+semi-auto rifle w/ thermal scope wep32.dat
+same
+
+
+RPG wep13.dat
+004 = stand
+005 = walk forward
+006 = walk backward
+007 = run forward
+008 = 180 turn
+009 = turn right
+010 = turn left
+
+
+Grenades(Leon) wep19.dat
+
+
+Striker wep08.dat
+006 = Idle
+008 = Turn Right
+010 = Turn Left
+012 = Walk Forward
+014 = Walk Backward
+016 = Run Forward
+018 = 180 Turn
+020 = Aim Begin
+022 = Aiming
+024 = Run Forward
+026 = Shoot
+027 = Aim end
+028 = Aim Up
+029 = Shoot Up
+030 = Aim Down
+031 = Shoot Down

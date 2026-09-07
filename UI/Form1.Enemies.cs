@@ -10,6 +10,7 @@ public partial class Form1
     private AfsEntry? currentEnemyAfsEntry;
     private bool syncingEnemyFriendlyUi;
     private bool syncingEnemyFileSelection;
+    private bool enemySceneModified;
     private readonly Dictionary<byte, EnemyModelScene> visualEnemyModelCache = new();
     private readonly HashSet<byte> visualEnemyModelFailed = new();
     private bool loadingVisualEnemyModels;
@@ -64,6 +65,7 @@ public partial class Form1
 
     private void NotifyEnemyEntriesChanged(IEnumerable<int>? selectedIndices = null)
     {
+        enemySceneModified = true;
         RefreshEnemyEntriesPreserveSelection(selectedIndices);
         PopulateEnemyLocationFilter();
         PopulateVisualEnemyLocationFilter(project.ActiveDatName);
@@ -315,6 +317,7 @@ public partial class Form1
             else ExtractLog($"Enemy Manager: usando cópia já extraída de {entry.FileName}.");
 
             selectedEnemyScene = Ps2EslReader.Read(path);
+            enemySceneModified = false;
             currentEnemyEslPath = path;
             currentEnemyAfsEntry = entry;
             PopulateEnemyLocationFilter();
@@ -388,6 +391,7 @@ public partial class Form1
         try
         {
             Ps2EslWriter.Save(selectedEnemyScene);
+            enemySceneModified = false;
             lstEnemyEntries.Refresh();
             OnEnemySceneLoaded(selectedEnemyScene);
             lblEnemyStatus.Text = $"{Path.GetFileName(currentEnemyEslPath)} salvo.";
@@ -411,7 +415,7 @@ public partial class Form1
         IEnumerable<EslEnemyEntry> source = selectedEnemyScene.Entries;
         if (stage.HasValue && room.HasValue) source = source.Where(x => x.StageID == stage.Value && x.RoomID == room.Value);
         byte[] needed = source.Select(x => x.EnemyType).Distinct().Where(x => !visualEnemyModelCache.ContainsKey(x) && !visualEnemyModelFailed.Contains(x)).OrderBy(x => x).ToArray();
-        if (needed.Length == 0) { visualViewport.SetEnemyModels(visualEnemyModelCache); visualViewport.SetEnemyAttachmentAnimation(null, 0f); RefreshVisualEnemyModelParts(GetVisualSelectedEnemies().FirstOrDefault()); return; }
+        if (needed.Length == 0) { visualViewport.SetEnemyModels(visualEnemyModelCache); visualViewport.SetEnemyAttachmentAnimation(null, 0f); RefreshVisualEnemyModelParts(GetVisualSelectedEnemies().FirstOrDefault()); RefreshVisualEnemyAnimationChoices(); return; }
 
         loadingVisualEnemyModels = true;
         try
@@ -444,6 +448,7 @@ public partial class Form1
             visualViewport.SetEnemyModels(visualEnemyModelCache);
             visualViewport.SetEnemyAttachmentAnimation(null, 0f);
             RefreshVisualEnemyModelParts(GetVisualSelectedEnemies().FirstOrDefault());
+            RefreshVisualEnemyAnimationChoices();
             UpdateVisualStatus();
         }
         finally { loadingVisualEnemyModels = false; }
@@ -455,6 +460,7 @@ public partial class Form1
         visualEnemyModelFailed.Clear();
         visualViewport?.SetEnemyModels(visualEnemyModelCache);
         RefreshVisualEnemyModelParts(null);
+        RefreshVisualEnemyAnimationChoices();
     }
 
     private void OnEnemySceneLoaded(EslScene? scene)

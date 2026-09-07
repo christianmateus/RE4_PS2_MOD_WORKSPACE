@@ -15,7 +15,14 @@ public readonly record struct EnemyModelTriangle(
     Vector2 UvA, Vector2 UvB, Vector2 UvC,
     int TextureIndex,
     int TplEntryIndex,
-    EnemyVertexSkin SkinA, EnemyVertexSkin SkinB, EnemyVertexSkin SkinC);
+    EnemyVertexSkin SkinA, EnemyVertexSkin SkinB, EnemyVertexSkin SkinC)
+{
+    public int SourceVertexA { get; init; } = -1;
+    public int SourceVertexB { get; init; } = -1;
+    public int SourceVertexC { get; init; } = -1;
+    public int StripFlagOffset { get; init; } = -1;
+}
+public readonly record struct EnemyModelFaceHit(EnemyModelPart Part, EnemyModelTriangle Triangle);
 
 /// <summary>One embedded TPL package inside an enemy emXX.dat.</summary>
 public sealed class EnemyTexturePackage

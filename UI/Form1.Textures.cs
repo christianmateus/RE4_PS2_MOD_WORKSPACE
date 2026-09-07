@@ -201,6 +201,17 @@ public partial class Form1
         }
     }
 
+    private async Task OpenTextureModuleForSmdAsync(string smdPath,int textureIndex)
+    {
+        SaveVisualCameraIfLeaving();
+        RefreshTextureDatList();RefreshTextureSmdList();
+        for(int i=0;i<cmbTextureSmd.Items.Count;i++)if(cmbTextureSmd.Items[i] is TextureSmdItem item&&item.FullPath.Equals(smdPath,StringComparison.OrdinalIgnoreCase)){cmbTextureSmd.SelectedIndex=i;break;}
+        ShowPage(pnlTextures,btnNavTextures,"Texturas");RememberMainPage("Textures");
+        await LoadNativeTexturesAsync(false);
+        ListViewItem? target=lvTextures.Items.Cast<ListViewItem>().FirstOrDefault(x=>x.Tag is TextureInfo info&&info.Index==textureIndex);
+        if(target!=null){foreach(ListViewItem item in lvTextures.Items)item.Selected=false;target.Selected=true;target.Focused=true;target.EnsureVisible();lvTextures.Focus();}
+    }
+
     private async void lvTextures_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (lvTextures.SelectedItems.Count != 1 || lvTextures.SelectedItems[0].Tag is not TextureInfo info || string.IsNullOrWhiteSpace(activeTextureTplPath))

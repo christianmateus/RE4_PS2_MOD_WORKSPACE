@@ -1,16 +1,13 @@
-namespace RE4_PS2_MOD_WORKSPACE;
+﻿namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
-    private void btnBrowseIsoAfs_Click(object? sender, EventArgs e) => PickTool(txtIsoAfs, v => settings.IsoAfsPath = v);
 
     private void btnBrowseDatTool_Click(object? sender, EventArgs e) => PickTool(txtDatTool, v => settings.DatToolPath = v);
 
     private void btnBrowseTpl_Click(object? sender, EventArgs e) => PickTool(txtTplManager, v => settings.TplManagerPath = v);
 
     private void btnBrowsePcsx2_Click(object? sender, EventArgs e) => PickTool(txtPcsx2, v => settings.Pcsx2Path = v);
-
-    private void btnOpenIsoAfs_Click(object? sender, EventArgs e) => Launch(settings.IsoAfsPath, "ISOAFS");
 
     private void btnOpenDatTool_Click(object? sender, EventArgs e) => Launch(settings.DatToolPath, "DAT Tool");
 

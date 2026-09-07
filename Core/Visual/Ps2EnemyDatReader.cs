@@ -25,6 +25,7 @@ public static class Ps2EnemyDatReader
         public ushort IndexComplement;
         public ushort WeightMapRawIndex;
         public EnemyVertexSkin Skin;
+        public int SourceVertexOffset;
     }
 
     private readonly record struct RawWeightMap(uint Bone1, uint Bone2, uint Bone3, int Count, float Weight1, float Weight2, float Weight3);
@@ -89,7 +90,15 @@ public static class Ps2EnemyDatReader
             try
             {
                 List<EnemyModelTriangle> local = ReadBinTriangles(br, start, end, tplEntryIndex);
-                if (local.Count == 0) continue;
+                if (local.Count == 0)
+                {
+                    parts.Add(new EnemyModelPart
+                    {
+                        BinIndex = binIndex, DatEntryIndex = i, TplEntryIndex = tplEntryIndex, TplResolution = tplResolution.Kind,
+                        Triangles = local, DiffuseMaps = Array.Empty<int>(), BoundsMin = Vector3.Zero, BoundsMax = Vector3.Zero
+                    });
+                    continue;
+                }
                 loaded++;
                 Vector3 partMin = new(float.PositiveInfinity), partMax = new(float.NegativeInfinity);
                 foreach (EnemyModelTriangle tri in local)
@@ -319,6 +328,7 @@ public static class Ps2EnemyDatReader
                         IndexComplement = BitConverter.ToUInt16(vertexData, o + 14),
                         WeightMapRawIndex = rawWeightIndex,
                         Skin = skin,
+                        SourceVertexOffset = checked((int)(s.Position - chunkBytes - start) + o),
                         // Enemy TPLs are decoded to the bitmap orientation used by the GL uploader.
                         Uv = new Vector2(textureU / 255f, 1f - (textureV / 255f))
                     });
@@ -370,12 +380,14 @@ public static class Ps2EnemyDatReader
                 Vector3 a = va.Position, b = vb.Position, c = vc.Position;
                 Vector2 uvA = va.Uv, uvB = vb.Uv, uvC = vc.Uv;
                 EnemyVertexSkin skinA = va.Skin, skinB = vb.Skin, skinC = vc.Skin;
-                if (invertFace) { (a, c) = (c, a); (uvA, uvC) = (uvC, uvA); (skinA, skinC) = (skinC, skinA); }
+                int sourceA = va.SourceVertexOffset, sourceB = vb.SourceVertexOffset, sourceC = vc.SourceVertexOffset;
+                if (invertFace) { (a, c) = (c, a); (uvA, uvC) = (uvC, uvA); (skinA, skinC) = (skinC, skinA); (sourceA, sourceC) = (sourceC, sourceA); }
                 invertFace = !invertFace;
                 if (Vector3.DistanceSquared(a, b) < 1e-10f || Vector3.DistanceSquared(b, c) < 1e-10f || Vector3.DistanceSquared(c, a) < 1e-10f) continue;
                 Vector3 cross = Vector3.Cross(b - a, c - a);
                 if (!float.IsFinite(cross.LengthSquared()) || cross.LengthSquared() < 1e-10f) continue;
-                output.Add(new EnemyModelTriangle(a, b, c, uvA, uvB, uvC, textureIndex, tplEntryIndex, skinA, skinB, skinC));
+                output.Add(new EnemyModelTriangle(a, b, c, uvA, uvB, uvC, textureIndex, tplEntryIndex, skinA, skinB, skinC)
+                { SourceVertexA = sourceA, SourceVertexB = sourceB, SourceVertexC = sourceC, StripFlagOffset = vc.SourceVertexOffset + 14 });
             }
             else invertFace = false;
         }

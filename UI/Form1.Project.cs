@@ -1,4 +1,4 @@
-namespace RE4_PS2_MOD_WORKSPACE;
+﻿namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
@@ -48,30 +48,19 @@ public partial class Form1
         _ = LoadIsoAfsAsync();
     }
 
-    private void btnBrowseDat_Click(object? sender, EventArgs e)
-    {
-        var path = BrowseFile("Arquivos DAT (*.dat)|*.dat|Todos os arquivos (*.*)|*.*");
-        if (path == null) return;
-        project.ActiveDatPath = path; txtDatPath.Text = path; SaveProject(); RefreshDashboard();
-    }
-
     private void txtIsoPath_Leave(object? sender, EventArgs e) { project.IsoPath = Clean(txtIsoPath.Text); SaveProject(); RefreshDashboard(); }
 
-    private void txtDatPath_Leave(object? sender, EventArgs e) { project.ActiveDatPath = Clean(txtDatPath.Text); SaveProject(); RefreshDashboard(); }
-
-    private void ApplyDataToUi()
+    private void ApplyDataToUi(bool refreshContent = true, bool refreshBuild = true)
     {
         txtWorkspacePath.Text = project.RootPath ?? "";
         txtIsoPath.Text = project.IsoPath ?? "";
-        if (txtDatPath != null) txtDatPath.Text = project.ActiveDatPath ?? "";
-        txtIsoAfs.Text = settings.IsoAfsPath ?? "";
         txtDatTool.Text = settings.DatToolPath ?? "";
         txtTplManager.Text = settings.TplManagerPath ?? "";
         txtPcsx2.Text = settings.Pcsx2Path ?? "";
         lblWorkspaceCurrent.Text = string.IsNullOrWhiteSpace(project.RootPath) ? "Nenhum workspace selecionado" : project.RootPath;
         RefreshDashboard();
-        RefreshExtractedContent();
-        UpdateBuildUi();
+        if (refreshContent) RefreshExtractedContent();
+        if (refreshBuild) UpdateBuildUi();
     }
 
     private void RefreshDashboard()
