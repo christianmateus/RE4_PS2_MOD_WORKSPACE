@@ -34,9 +34,9 @@
         private TrackBar trkAnimationFrame = null!;
         private AnimationSkeletonViewport animationSkeletonViewport = null!;
         private Label lblCardWorkspaceValue = null!, lblCardIsoValue = null!, lblCardDatValue = null!, lblCardStatusValue = null!;
-        private TextBox txtWorkspacePath = null!, txtIsoPath = null!, txtDatTool = null!, txtTplManager = null!, txtPcsx2 = null!;
+        private TextBox txtWorkspacePath = null!, txtIsoPath = null!, txtTplManager = null!, txtPcsx2 = null!;
         private Button btnBrowseWorkspace = null!, btnCreateWorkspace = null!, btnOpenWorkspace = null!, btnBrowseIso = null!, btnDashboardWorkspace = null!;
-        private Button btnBrowseDatTool = null!, btnBrowseTpl = null!, btnBrowsePcsx2 = null!, btnOpenDatTool = null!, btnOpenTpl = null!, btnOpenPcsx2 = null!;
+        private Button btnBrowseTpl = null!, btnBrowsePcsx2 = null!, btnOpenTpl = null!, btnOpenPcsx2 = null!;
         private ComboBox cmbAfsEntries = null!, cmbDatEntries = null!, cmbAssetType = null!, cmbTextureDat = null!, cmbTextureSmd = null!;
         private Button btnScanIso = null!, btnExtractScenario = null!, btnExtractAllScenarios = null!, btnRestoreDat = null!, btnRefreshContent = null!, btnOpenContentFolder = null!;
         private CheckBox chkShowAllAfsFiles = null!;
@@ -53,7 +53,7 @@
         private ContextMenuStrip ctxTexture = null!;
         private ContextMenuStrip ctxAssets = null!;
         private ToolStripMenuItem miTextureExport = null!, miTextureReplace = null!, miTextureIncrease = null!, miTextureDecrease = null!;
-        private Button btnBuildOneClick = null!, btnBuildRefreshChanges = null!, btnBuildRepackDat = null!, btnBuildInjectIso = null!, btnBuildRecreateIso = null!, btnBuildClean = null!, btnBuildResetWorkspace = null!, btnBuildOpenDat = null!, btnBuildOpenPcsx2 = null!, btnBuildFolder = null!, btnBuildAll = null!, btnBuildRefreshTracked = null!;
+        private Button btnBuildOneClick = null!, btnBuildRefreshChanges = null!, btnBuildRepackDat = null!, btnBuildInjectIso = null!, btnBuildRecreateIso = null!, btnBuildClean = null!, btnBuildResetWorkspace = null!, btnBuildOpenPcsx2 = null!, btnBuildFolder = null!, btnBuildAll = null!, btnBuildRefreshTracked = null!;
         private Label lblBuildActiveDat = null!, lblBuildDatStatus = null!, lblBuildIsoStatus = null!, lblBuildChangeStatus = null!, lblTrackedDatsSummary = null!, lblBuildBusy = null!;
         private Panel pnlBuildBusy = null!;
         private ProgressBar progressBuildBusy = null!;
@@ -555,8 +555,7 @@
             btnBuildRecreateIso = new Button { Left = 150, Top = 73 }; SetupSecondary(btnBuildRecreateIso, "RECRIAR LIMPA", 126); btnBuildRecreateIso.Click += btnBuildRecreateIso_Click; actions.Controls.Add(btnBuildRecreateIso);
             btnBuildClean = new Button { Left = 286, Top = 73 }; SetupSecondary(btnBuildClean, "LIMPAR BUILD", 120); btnBuildClean.Click += btnBuildClean_Click; actions.Controls.Add(btnBuildClean);
             btnBuildFolder = new Button { Left = 416, Top = 73 }; SetupSecondary(btnBuildFolder, "PASTA BUILD", 112); btnBuildFolder.Click += btnBuildFolder_Click; actions.Controls.Add(btnBuildFolder);
-            btnBuildOpenDat = new Button { Left = 538, Top = 73 }; SetupSecondary(btnBuildOpenDat, "DAT TOOL", 94); btnBuildOpenDat.Click += btnBuildOpenDat_Click; actions.Controls.Add(btnBuildOpenDat);
-            btnBuildResetWorkspace = new Button { Left = 642, Top = 73 }; SetupButton(btnBuildResetWorkspace, "LIMPAR TUDO", Accent, 220); btnBuildResetWorkspace.Click += btnBuildResetWorkspace_Click; actions.Controls.Add(btnBuildResetWorkspace);
+            btnBuildResetWorkspace = new Button { Left = 538, Top = 73 }; SetupButton(btnBuildResetWorkspace, "LIMPAR TUDO", Accent, 220); btnBuildResetWorkspace.Click += btnBuildResetWorkspace_Click; actions.Controls.Add(btnBuildResetWorkspace);
             lblBuildIsoStatus = new Label { UseMnemonic = false, Text = "Fast Build reutiliza a ISO existente.", Left = 0, Top = 554, Width = 850, Height = 22, ForeColor = TextMuted }; pnlBuild.Controls.Add(lblBuildIsoStatus);
         }
 
@@ -885,11 +884,10 @@
 
         private void BuildToolsDesigner()
         {
-            AddPageHeader(pnlTools, "Ferramentas", "Executáveis externos usados pelo pipeline. AFS/ISO são manipulados nativamente pelo Workspace.");
-            var box = Card(0, 76, 882, 282); pnlTools.Controls.Add(box);
-            txtDatTool = ToolRow(box, "DAT Tool", 16, out btnBrowseDatTool, out btnOpenDatTool); btnBrowseDatTool.Click += btnBrowseDatTool_Click; btnOpenDatTool.Click += btnOpenDatTool_Click;
-            txtTplManager = ToolRow(box, "TPL Manager (opcional)", 94, out btnBrowseTpl, out btnOpenTpl); btnBrowseTpl.Click += btnBrowseTpl_Click; btnOpenTpl.Click += btnOpenTpl_Click;
-            txtPcsx2 = ToolRow(box, "PCSX2", 172, out btnBrowsePcsx2, out btnOpenPcsx2); btnBrowsePcsx2.Click += btnBrowsePcsx2_Click; btnOpenPcsx2.Click += btnOpenPcsx2_Click;
+            AddPageHeader(pnlTools, "Ferramentas", "DAT, AFS e ISO são manipulados nativamente. Configure apenas as ferramentas opcionais.");
+            var box = Card(0, 76, 882, 204); pnlTools.Controls.Add(box);
+            txtTplManager = ToolRow(box, "TPL Manager (opcional)", 16, out btnBrowseTpl, out btnOpenTpl); btnBrowseTpl.Click += btnBrowseTpl_Click; btnOpenTpl.Click += btnOpenTpl_Click;
+            txtPcsx2 = ToolRow(box, "PCSX2", 94, out btnBrowsePcsx2, out btnOpenPcsx2); btnBrowsePcsx2.Click += btnBrowsePcsx2_Click; btnOpenPcsx2.Click += btnOpenPcsx2_Click;
         }
 
         private void BuildSettingsDesigner()

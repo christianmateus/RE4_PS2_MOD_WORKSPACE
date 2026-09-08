@@ -5,7 +5,6 @@ public partial class Form1
     private async void btnBuildAll_Click(object? sender, EventArgs e)
     {
         if (!RequireWorkspace()) return;
-        if (string.IsNullOrWhiteSpace(settings.DatToolPath) || !File.Exists(settings.DatToolPath)) { MessageBox.Show("Configure o RE4_UHD_DAT_Tool.exe em Tools.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path)) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
@@ -52,9 +51,7 @@ public partial class Form1
                     }
                     string stagingDir = Path.Combine(project.RootPath!, "Temp", "Repack", scenario);
                     string outputDat = Path.Combine(project.RootPath!, "Build", scenario, st.DatName);
-                    var repack = await DatToolService.RepackAsync(settings.DatToolPath!, st.ContentPath!, st.DatName, stagingDir, outputDat);
-                    if (!string.IsNullOrWhiteSpace(repack.Output)) foreach (string line in repack.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) WriteLog("DAT Tool: " + line);
-                    if (repack.ExitCode != 0) throw new InvalidOperationException($"{st.DatName}: DAT Tool terminou com código {repack.ExitCode}.");
+                    var repack = await NativeDatService.RepackAsync(st.ContentPath!, st.DatName, stagingDir, outputDat);
                     st.BuildDatPath = repack.OutputDatPath;
                 }
                 else WriteLog("Content já compilado; pulando repack e reinjetando o DAT de Build existente.");

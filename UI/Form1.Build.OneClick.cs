@@ -6,7 +6,6 @@ public partial class Form1
     {
         if (!RequireWorkspace()) return;
         if (string.IsNullOrWhiteSpace(project.ActiveDatName) || string.IsNullOrWhiteSpace(GetActiveContentPath())) { MessageBox.Show("Extraia um cenário primeiro.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (string.IsNullOrWhiteSpace(settings.DatToolPath) || !File.Exists(settings.DatToolPath)) { MessageBox.Show("Configure o RE4_UHD_DAT_Tool.exe em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path)) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
@@ -45,10 +44,8 @@ public partial class Form1
                 SetBuildBusy(true, $"Reconstruindo {project.ActiveDatName}...");
                 string stagingDir = Path.Combine(project.RootPath!, "Temp", "Repack", scenario);
                 string outputDat = Path.Combine(project.RootPath!, "Build", scenario, project.ActiveDatName);
-                WriteLog("Mudanças detectadas: executando REPACK DAT...");
-                var result = await DatToolService.RepackAsync(settings.DatToolPath!, contentDir, project.ActiveDatName, stagingDir, outputDat);
-                if (!string.IsNullOrWhiteSpace(result.Output)) foreach (string line in result.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) WriteLog("DAT Tool: " + line);
-                if (result.ExitCode != 0) throw new InvalidOperationException($"A DAT Tool terminou com código {result.ExitCode}.");
+                WriteLog("Mudanças detectadas: reconstruindo DAT com o parser nativo...");
+                var result = await NativeDatService.RepackAsync(contentDir, project.ActiveDatName, stagingDir, outputDat);
                 project.ActiveBuildDatPath = result.OutputDatPath;
                 var activeState = GetDatState(project.ActiveDatName!, true)!;
                 activeState.BuildDatPath = result.OutputDatPath;

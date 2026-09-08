@@ -34,9 +34,8 @@ O **RE4 PS2 MOD WORKSPACE** é uma ferramenta em desenvolvimento para facilitar 
 
 ### Dependências
 
-As seguintes ferramentas são necessárias:
+Ferramenta necessária para testar a ISO:
 
-- **DAT Tool** (dentro do toolset) — [Link](https://residentevilmodding.boards.net/thread/9780/2018-re4uhd-toolset-persia-updated/)
 - **PCSX2 2.7+** — [Download](https://pcsx2.net/downloads/)
 
 Ferramenta opcional:
@@ -73,9 +72,8 @@ Mais funcionalidades serão adicionadas futuramente.
 
 ### Dependencies
 
-The following tools are required:
+Required for testing the ISO:
 
-- **DAT Tool** (included in the toolset) — [Link](https://residentevilmodding.boards.net/thread/9780/2018-re4uhd-toolset-persia-updated/)
 - **PCSX2 2.7+** — [Download](https://pcsx2.net/downloads/)
 
 Optional tool:

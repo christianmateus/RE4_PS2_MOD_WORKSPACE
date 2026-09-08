@@ -54,7 +54,6 @@ public partial class Form1
     {
         txtWorkspacePath.Text = project.RootPath ?? "";
         txtIsoPath.Text = project.IsoPath ?? "";
-        txtDatTool.Text = settings.DatToolPath ?? "";
         txtTplManager.Text = settings.TplManagerPath ?? "";
         txtPcsx2.Text = settings.Pcsx2Path ?? "";
         lblWorkspaceCurrent.Text = string.IsNullOrWhiteSpace(project.RootPath) ? "Nenhum workspace selecionado" : project.RootPath;

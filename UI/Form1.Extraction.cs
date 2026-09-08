@@ -108,7 +108,6 @@ public partial class Form1
         if (!RequireWorkspace() || loadedAfs == null || cmbDatEntries.SelectedItem is not AfsEntry entry) return;
         if (entry.IsDummy) { MessageBox.Show("Este arquivo é um dummy file com tamanho real 0 e não pode ser extraído.", "Dummy file", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         bool isDat = entry.FileName.EndsWith(".DAT", StringComparison.OrdinalIgnoreCase);
-        if (isDat && (string.IsNullOrWhiteSpace(settings.DatToolPath) || !File.Exists(settings.DatToolPath))) { MessageBox.Show("Configure o RE4_UHD_DAT_Tool.exe na tela Tools primeiro.", "DAT Tool", MessageBoxButtons.OK, MessageBoxIcon.Information); btnNavTools_Click(null, EventArgs.Empty); return; }
         try
         {
             btnExtractScenario.Enabled = false;
@@ -166,7 +165,6 @@ public partial class Form1
     private async void btnRestoreDat_Click(object? sender, EventArgs e)
     {
         if (!RequireWorkspace() || loadedAfs == null || cmbDatEntries.SelectedItem is not AfsEntry entry || !entry.FileName.EndsWith(".DAT", StringComparison.OrdinalIgnoreCase)) return;
-        if (string.IsNullOrWhiteSpace(settings.DatToolPath) || !File.Exists(settings.DatToolPath)) { MessageBox.Show("Configure o RE4_UHD_DAT_Tool.exe na tela Tools primeiro.", "DAT Tool", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         string warning = $"Restaurar {entry.FileName} diretamente da ISO original?\n\nSerão descartados somente os dados derivados desse DAT em Extracted, Mods, Build e Temp. Os demais pacotes não serão alterados.";
         if (MessageBox.Show(warning, "RESTAURAR DAT DA ISO", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
 
@@ -232,10 +230,9 @@ public partial class Form1
                 File.Copy(datPath, enemyCache, true);
                 ExtractLog($"Cache de inimigo atualizado: {enemyCache}");
             }
-            ExtractLog("Executando RE4_UHD_DAT_Tool.exe -x...");
-            var result = await DatToolService.ExtractAsync(settings.DatToolPath!, datPath, contentDir);
-            if (!string.IsNullOrWhiteSpace(result.Output)) foreach (string line in result.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) ExtractLog("DAT Tool: " + line);
-            if (result.ExitCode != 0) throw new InvalidOperationException($"A DAT Tool terminou com código {result.ExitCode}.");
+            ExtractLog("Extraindo conteúdo com o parser DAT nativo...");
+            var result = await NativeDatService.ExtractAsync(datPath, contentDir);
+            ExtractLog($"Parser nativo: {result.EntryCount:N0} entrada(s) extraída(s).");
             if (updateActiveProject)
             {
                 project.ActiveDatPath = datPath; project.ActiveDatName = entry.FileName; project.ActiveContentPath = contentDir; project.ActiveBuildDatPath = null; project.LastBuildUtc = null;
@@ -271,13 +268,6 @@ public partial class Form1
     private async void btnExtractAllScenarios_Click(object? sender, EventArgs e)
     {
         if (!RequireWorkspace() || loadedAfs == null) return;
-        if (string.IsNullOrWhiteSpace(settings.DatToolPath) || !File.Exists(settings.DatToolPath))
-        {
-            MessageBox.Show("Configure o RE4_UHD_DAT_Tool.exe na tela Tools primeiro.", "DAT Tool", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            btnNavTools_Click(null, EventArgs.Empty);
-            return;
-        }
-
         List<AfsEntry> entries = GetBulkScenarioEntries();
         if (entries.Count == 0) { MessageBox.Show("Nenhum cenário entre r100.dat e r534.dat foi encontrado.", "Extrair todos", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (MessageBox.Show($"Extrair e abrir {entries.Count:N0} cenários, de r100.dat até r534.dat?\n\nArquivos com underline, como r100_01.dat, serão ignorados. Esse processo pode demorar.", "EXTRAIR TODOS OS CENÁRIOS", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;

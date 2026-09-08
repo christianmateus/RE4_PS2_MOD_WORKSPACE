@@ -33,6 +33,7 @@ bld/
 [Ll]og/
 [Ll]ogs/
 versions/
+_references/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
@@ -363,3 +364,26 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 /RE4_PS2_MOD_WORKSPACE.v0.1.0.zip
+
+# RE4 PS2 Mod Workspace - local project data
+/.workspace/
+/.re4workspace.json
+/Original/
+/Extracted/
+/Mods/
+/Build/
+/Temp/
+/tmp/
+
+# Game disc images and generated releases
+*.iso
+*.iso.gz
+*.chd
+*.cue
+/*.zip
+
+# Backups and crash dumps
+*.bak
+*.backup
+*.old
+*.dmp

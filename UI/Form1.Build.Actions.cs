@@ -5,12 +5,6 @@ public partial class Form1
     private async void btnBuildRepackDat_Click(object? sender, EventArgs e)
     {
         if (!RequireWorkspace()) return;
-        if (string.IsNullOrWhiteSpace(settings.DatToolPath) || !File.Exists(settings.DatToolPath))
-        {
-            MessageBox.Show("Configure o RE4_UHD_DAT_Tool.exe na tela Tools primeiro.", "DAT Tool", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            btnNavTools_Click(null, EventArgs.Empty);
-            return;
-        }
         if (string.IsNullOrWhiteSpace(project.ActiveDatName))
         {
             MessageBox.Show("Nenhum DAT ativo. Extraia um cenário primeiro.", "Repack DAT", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -35,10 +29,8 @@ public partial class Form1
             await SyncActiveCharacterDatToContentAsync();
             WriteLog($"Preparando repack de {project.ActiveDatName}...");
             WriteLog("Copiando Content para a área temporária de repack...");
-            WriteLog("Executando RE4_UHD_DAT_Tool.exe -p...");
-            var result = await DatToolService.RepackAsync(settings.DatToolPath!, contentDir, project.ActiveDatName, stagingDir, outputDat);
-            if (!string.IsNullOrWhiteSpace(result.Output)) foreach (string line in result.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) WriteLog("DAT Tool: " + line);
-            if (result.ExitCode != 0) throw new InvalidOperationException($"A DAT Tool terminou com código {result.ExitCode}.");
+            WriteLog("Reconstruindo DAT com o parser nativo...");
+            var result = await NativeDatService.RepackAsync(contentDir, project.ActiveDatName, stagingDir, outputDat);
 
             project.ActiveBuildDatPath = result.OutputDatPath;
             var activeState = GetDatState(project.ActiveDatName!, true)!; activeState.BuildDatPath = result.OutputDatPath;
@@ -193,8 +185,6 @@ string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
             await RefreshTrackedDatsAsync();
         }
     }
-
-    private void btnBuildOpenDat_Click(object? sender, EventArgs e) => Launch(settings.DatToolPath, "DAT Tool");
 
     private void btnBuildOpenPcsx2_Click(object? sender, EventArgs e)
     {

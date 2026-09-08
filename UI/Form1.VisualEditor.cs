@@ -1009,7 +1009,6 @@ public partial class Form1
         if(!RequireWorkspace())return;
         string? isoPath=!string.IsNullOrWhiteSpace(project.IsoPath)&&File.Exists(project.IsoPath)?project.IsoPath:Clean(txtIsoPath.Text);
         if(string.IsNullOrWhiteSpace(isoPath)||!File.Exists(isoPath)){MessageBox.Show("Selecione uma ISO base válida na tela Projeto primeiro.","Extrair Core.dat",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-        if(string.IsNullOrWhiteSpace(settings.DatToolPath)||!File.Exists(settings.DatToolPath)){MessageBox.Show("Configure o RE4_UHD_DAT_Tool.exe na tela Tools primeiro.","Extrair Core.dat",MessageBoxButtons.OK,MessageBoxIcon.Information);btnNavTools_Click(null,EventArgs.Empty);return;}
         try
         {
             btnVisualExtractCore.Enabled=false;btnVisualExtractCore.Text="EXTRAINDO...";UseWaitCursor=true;
@@ -1020,10 +1019,9 @@ public partial class Form1
                 AfsImage afs=AfsService.OpenDefaultAfsFromIso(isoPath,"BIO4DAT.AFS");
                 AfsEntry entry=AfsService.FindFirstValidEntryByName(afs,"Core.dat")??throw new FileNotFoundException("Core.dat não foi encontrado no BIO4DAT.AFS desta ISO.");
                 Directory.CreateDirectory(originalDir);AfsService.ExtractEntry(afs,entry,datPath);
-                return await RE4_PS2_MOD_WORKSPACE.Core.Dat.DatToolService.ExtractAsync(settings.DatToolPath!,datPath,contentDir);
+                return await NativeDatService.ExtractAsync(datPath,contentDir);
             });
-            if(!string.IsNullOrWhiteSpace(result.Output))foreach(string line in result.Output.Split(new[]{'\r','\n'},StringSplitOptions.RemoveEmptyEntries))ExtractLog("DAT Tool: "+line);
-            if(result.ExitCode!=0)throw new InvalidOperationException($"A DAT Tool terminou com código {result.ExitCode}.");
+            ExtractLog($"Parser DAT nativo: {result.EntryCount:N0} entrada(s) extraída(s).");
             string[] coreEffs=FindCoreEffFiles();if(coreEffs.Length==0)throw new InvalidDataException("Core.dat foi extraído, mas nenhum Core_*.EFF foi encontrado em Content.");
             if(!string.IsNullOrWhiteSpace(visualEffPath)&&File.Exists(visualEffPath))
             {

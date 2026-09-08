@@ -70,7 +70,7 @@ public partial class Form1
         string? temporaryDirectory = null;
         try
         {
-            // DatToolService first copies the source DAT into Content. If the
+            // The native extractor copies the source DAT into Content. If the
             // viewer edited Content/<name>.dat directly, copying onto itself is
             // reported by Windows as a sharing violation. Stage it elsewhere.
             if (string.Equals(Path.GetFullPath(datPath), Path.GetFullPath(contentDatPath), StringComparison.OrdinalIgnoreCase))
@@ -81,10 +81,8 @@ public partial class Form1
                 File.Copy(datPath, extractionSource, true);
             }
 
-            var extraction = await Core.Dat.DatToolService.ExtractAsync(settings.DatToolPath!, extractionSource, contentDir);
-            if (!string.IsNullOrWhiteSpace(extraction.Output))
-                foreach (string line in extraction.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)) WriteLog("DAT Tool: " + line);
-            if (extraction.ExitCode != 0) throw new InvalidOperationException($"{state.DatName}: a DAT Tool falhou ao sincronizar o DAT editado (código {extraction.ExitCode}).");
+            var extraction = await NativeDatService.ExtractAsync(extractionSource, contentDir);
+            WriteLog($"{state.DatName}: parser nativo extraiu {extraction.EntryCount:N0} entrada(s).");
         }
         finally
         {

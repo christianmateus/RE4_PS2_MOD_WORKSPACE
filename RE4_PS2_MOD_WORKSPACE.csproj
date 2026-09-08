@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <Compile Remove="_references\**" />
+    <Compile Remove="tmp\**" />
     <EmbeddedResource Remove="_references\**" />
     <None Remove="_references\**" />
   </ItemGroup>

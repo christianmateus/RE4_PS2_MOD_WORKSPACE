@@ -2,7 +2,6 @@
 
 public sealed class AppSettings
 {
-    public string? DatToolPath { get; set; }
     public string? TplManagerPath { get; set; }
     public string? Pcsx2Path { get; set; }
     public string? Ps2BinToolPath { get; set; }
