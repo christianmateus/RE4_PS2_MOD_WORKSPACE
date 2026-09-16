@@ -3,7 +3,7 @@ using NVector3=System.Numerics.Vector3;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
-public sealed class CamPreviewForm:Form
+public sealed class CamPreviewForm:AppForm
 {
     private readonly ScenarioViewport viewport;
     private readonly Func<CamEntry?> entryProvider;

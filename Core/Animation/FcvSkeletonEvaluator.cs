@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Animation;
 
@@ -16,6 +16,9 @@ public sealed class FcvSkeletonPose
 public static class FcvSkeletonEvaluator
 {
     public static FcvSkeletonPose Evaluate(Ps2BinSkeleton skeleton, FcvAnimation? animation, float frame, bool stabilizePlantedFeet = false)
+        => Evaluate(skeleton,animation,frame,stabilizePlantedFeet,true);
+
+    private static FcvSkeletonPose Evaluate(Ps2BinSkeleton skeleton, FcvAnimation? animation, float frame, bool stabilizePlantedFeet, bool applyTrackedFootIk)
     {
         int n=skeleton.Bones.Count; var wp=new Vector3[n]; var wr=new Quaternion[n];
         var localPos=new Vector3[n]; var localRot=new Quaternion[n];
@@ -39,7 +42,7 @@ public static class FcvSkeletonEvaluator
                     // the lower-body chain (hips/legs/feet), which made those bones inherit the
                     // parent's rotation and visually "follow the hip".
                     float rx=RotationValue(EvalOrZero(t.X,frame,enc),enc), ry=RotationValue(EvalOrZero(t.Y,frame,enc),enc), rz=RotationValue(EvalOrZero(t.Z,frame,enc),enc);
-                    localRot[bi]=t.NodeId is >=0x01 and <=0x10
+                    localRot[bi]=UsesEm12HumanoidRotationProfile(animation) && t.NodeId is >=0x01 and <=0x10
                         ? CreateUpperBodyRotation(t.NodeId,rx,ry,rz)
                         : Quaternion.CreateFromYawPitchRoll(ry,rx,rz);
                 }
@@ -54,36 +57,44 @@ public static class FcvSkeletonEvaluator
                     localRot[bi]=Quaternion.CreateFromYawPitchRoll(ry,rx,rz);
                     absoluteWorldRotation[bi]=true;
                 }
-                // Type 0x04 is documented/used as RELATIVE translation. The BIN bone position is the
-                // rest/base position, so the FCV values must be added as a delta. Replacing the BIN
-                // position with the FCV value made the root jump from Y ~= 1140 to Y ~= 0 and pushed
-                // the whole skeleton to the bottom/outside of the viewport during PLAY.
-                // Keep this conservative for now: only apply the root float translation.
-                else if(t.Type==0x04 && skeleton.Bones[bi].ParentIndex<0 && (enc==0x0 || enc==0x1 || enc==0x2))
+                else if(t.Type==0x01 && skeleton.Bones[bi].ParentIndex<0 && enc==0x0)
                 {
-                    // Keep only root translation active. Non-root 0x04 tracks are exposed
-                    // by the diagnostic UI but are not applied until their exact PS2 semantics
-                    // are confirmed. The previous guessed two-bone IK could stretch a leg across
-                    // the entire scene.
-                    Vector3 value = new((float)EvalOrZero(t.X,frame,enc),(float)EvalOrZero(t.Y,frame,enc),(float)EvalOrZero(t.Z,frame,enc));
+                    // Root Position is authored as actor displacement from the clip origin.
+                    // It normally starts at zero; the viewport may remove it when previewing an
+                    // animation in place, but the evaluated pose retains the actual motion.
+                    Vector3 value=new((float)EvalOrZero(t.X,frame,enc),(float)EvalOrZero(t.Y,frame,enc),(float)EvalOrZero(t.Z,frame,enc));
                     localPos[bi]=skeleton.Bones[bi].LocalPosition+value;
                 }
-                // 0x01 movement, 0x08 scale, 0x20 toe IK, 0x40 root rotation and 0x80/0xA0
+                else if(t.Type==0x04 && skeleton.Bones[bi].ParentIndex<0 && (enc==0x0 || enc==0x1 || enc==0x2))
+                {
+                    // Translation/IK handles store an absolute model-space target. Root tracks in
+                    // em22 and em36 contain their actual standing height, close to the BIN bind
+                    // height; adding the value as a delta doubles that height and breaks leg IK.
+                    Vector3 value = new((float)EvalOrZero(t.X,frame,enc),(float)EvalOrZero(t.Y,frame,enc),(float)EvalOrZero(t.Z,frame,enc));
+                    localPos[bi]=value;
+                }
+                else if(t.Type==0x40 && skeleton.Bones[bi].ParentIndex<0 && IsSupportedRotationEncoding(enc))
+                {
+                    float rx=RotationValue(EvalOrZero(t.X,frame,enc),enc),ry=RotationValue(EvalOrZero(t.Y,frame,enc),enc),rz=RotationValue(EvalOrZero(t.Z,frame,enc),enc);
+                    localRot[bi]=Quaternion.CreateFromYawPitchRoll(ry,rx,rz);
+                }
+                // 0x08 scale, 0x20 toe IK and 0x80/0xA0
                 // special tracks remain conservative until their exact semantics are validated.
             }
         }
         var resolveState=new byte[n];
         for(int i=0;i<n;i++) ResolveWorld(i,skeleton,localPos,localRot,absoluteWorldRotation,wp,wr,resolveState);
+        Vector3 authoredRootMotion=animation==null?Vector3.Zero:GetAuthoredRootMotion(skeleton,animation,frame);
+        if(animation!=null) ApplyTrackedHandIkChains(skeleton,animation,frame,authoredRootMotion,wp,wr);
         if(!stabilizePlantedFeet && animation!=null)
         {
-            ApplyTrackedFootIk(skeleton,animation,frame,0x12,0x13,0x14,wp,wr);
-            ApplyTrackedFootIk(skeleton,animation,frame,0x16,0x17,0x18,wp,wr);
+            if(applyTrackedFootIk)ApplyTrackedFootIkChains(skeleton,animation,frame,authoredRootMotion,wp,wr);
             if(IsAnimationNumber(animation,2)) PreventRightHandHeadPenetration(skeleton,wp,wr);
         }
         FcvSkeletonPose? plantedReference = stabilizePlantedFeet && animation!=null
             ? (MathF.Abs(frame)<0.0001f
                 ? new FcvSkeletonPose { WorldPositions=(Vector3[])wp.Clone(), WorldRotations=(Quaternion[])wr.Clone() }
-                : Evaluate(skeleton,animation,0f,false))
+                : Evaluate(skeleton,animation,0f,false,false))
             : null;
         if(stabilizePlantedFeet && animation!=null)
             StabilizePlantedLeg(skeleton, 0x12, 0x13, 0x14, wp, wr, plantedReference!);
@@ -95,8 +106,91 @@ public static class FcvSkeletonEvaluator
             ? Vector3.Zero
             : stabilizePlantedFeet && animation!=null
                 ? GetRootDelta(skeleton,plantedReference!.WorldPositions)
-                : GetRootDelta(skeleton,wp);
+                : authoredRootMotion;
         return new FcvSkeletonPose{LocalPositions=localPos,LocalRotations=localRot,WorldPositions=wp,WorldRotations=wr,RootMotionToRemove=rootMotionToRemove};
+    }
+
+    private static void ApplyTrackedHandIkChains(Ps2BinSkeleton skeleton,FcvAnimation animation,float frame,Vector3 rootMotion,Vector3[] worldPositions,Quaternion[] worldRotations)
+    {
+        // Weapon FCVs use an absolute target on the hand (type 04) and an A0 IK controller on
+        // the upper arm. Leon has an extra wrist joint, so this is a three-link hierarchy even
+        // though the actual bend is still the usual shoulder/elbow two-bone solve.
+        foreach(FcvTrack targetTrack in animation.Tracks.Where(t=>t.Type==0x04&&skeleton.FirstIndexById.ContainsKey(t.NodeId)))
+        {
+            int hand=FindBoneIndex(skeleton,targetTrack.NodeId);if(hand<0)continue;
+            int wrist=skeleton.Bones[hand].ParentIndex;if(wrist<0)continue;
+            int elbow=skeleton.Bones[wrist].ParentIndex;if(elbow<0)continue;
+            int upper=skeleton.Bones[elbow].ParentIndex;if(upper<0)continue;
+            byte upperId=skeleton.Bones[upper].Id;
+            FcvTrack? controller=animation.Tracks.FirstOrDefault(t=>t.NodeId==upperId&&t.Type==0xA0);
+            if(controller!=null)ApplyTrackedHandIk(skeleton,frame,upper,elbow,hand,targetTrack,controller,rootMotion,worldPositions,worldRotations);
+        }
+    }
+
+    private static void ApplyTrackedHandIk(Ps2BinSkeleton skeleton,float frame,int upper,int elbow,int hand,FcvTrack targetTrack,FcvTrack controllerTrack,Vector3 rootMotion,Vector3[] worldPositions,Quaternion[] worldRotations)
+    {
+        if((targetTrack.DataType>>4) is not (0x0 or 0x1 or 0x2))return;
+        int wrist=skeleton.Bones[hand].ParentIndex;if(wrist<0||skeleton.Bones[wrist].ParentIndex!=elbow)return;
+        Vector3 shoulder=worldPositions[upper];
+        Vector3 target=SampleTrackRaw(targetTrack,frame)+rootMotion;
+        Vector3 toTarget=target-shoulder;float distance=toTarget.Length();
+        float upperLength=skeleton.Bones[elbow].LocalPosition.Length();
+        float lowerLength=(GetBindWorldPosition(skeleton,hand)-GetBindWorldPosition(skeleton,elbow)).Length();
+        if(!float.IsFinite(distance)||distance<0.0001f||upperLength<0.0001f||lowerLength<0.0001f)return;
+        Vector3 direction=toTarget/distance;float reachable=Math.Clamp(distance,MathF.Abs(upperLength-lowerLength)+0.001f,upperLength+lowerLength-0.001f);target=shoulder+direction*reachable;
+
+        // A0 is an IK-control track, not an ordinary Euler rotation. Its low nibble only
+        // identifies the pole compass direction. More importantly, the accompanying 0x02 FK
+        // tracks have already authored the actual bend side for this frame. Project that
+        // animated elbow onto the shoulder/target plane so the IK retains Leon's intended arm
+        // silhouette instead of folding an arm over his chest.
+        Vector3 pole=worldPositions[elbow]-shoulder;
+        pole-=direction*Vector3.Dot(pole,direction);
+        if(pole.LengthSquared()<0.0001f)
+        {
+            Vector3 localPoleAxis=(controllerTrack.DataType&0x0F) switch
+            {
+                0x0 => -Vector3.UnitX, // left
+                0x4 => Vector3.UnitZ,  // forward
+                0x5 => -Vector3.UnitZ, // backward
+                0x6 => Vector3.UnitX,  // right
+                _ => Vector3.UnitZ
+            };
+            int parent=skeleton.Bones[upper].ParentIndex;
+            Quaternion parentRotation=parent>=0?worldRotations[parent]:Quaternion.Identity;
+            pole=Vector3.Transform(localPoleAxis,parentRotation);
+            pole-=direction*Vector3.Dot(pole,direction);
+        }
+        if(pole.LengthSquared()<0.0001f)return;pole=Vector3.Normalize(pole);
+
+        float along=(upperLength*upperLength-lowerLength*lowerLength+reachable*reachable)/(2f*reachable);
+        float bend=MathF.Sqrt(MathF.Max(0f,upperLength*upperLength-along*along));
+        Vector3 elbowTarget=shoulder+direction*along+pole*bend;
+        Quaternion[] before=(Quaternion[])worldRotations.Clone();Vector3 oldElbow=worldPositions[elbow],oldHand=worldPositions[hand];
+        Quaternion upperCorrection=RotationBetween(Vector3.Transform(skeleton.Bones[elbow].LocalPosition,worldRotations[upper]),elbowTarget-shoulder);
+        worldRotations[upper]=Quaternion.Normalize(upperCorrection*worldRotations[upper]);worldRotations[elbow]=Quaternion.Normalize(upperCorrection*worldRotations[elbow]);worldPositions[elbow]=elbowTarget;
+        Vector3 oldLower=Vector3.Transform(oldHand-oldElbow,upperCorrection);
+        Quaternion lowerCorrection=RotationBetween(oldLower,target-elbowTarget);
+        worldRotations[elbow]=Quaternion.Normalize(lowerCorrection*worldRotations[elbow]);
+        worldRotations[wrist]=Quaternion.Normalize(lowerCorrection*upperCorrection*before[wrist]);
+        // Hand R (0x0A) carries the handgun's authored high-ready roll. Earlier it looked wrong
+        // because the weapon itself was mistakenly attached to Hand L; discarding this rotation
+        // then left the correctly attached pistol horizontal. Reapply the animated local grip on
+        // the dominant hand. The supporting Hand L remains aligned with its solved wrist because
+        // its terminal IK rotation rolls the loose palm down instead of around the weapon.
+        if(skeleton.Bones[hand].Id==0x0A)
+        {
+            Quaternion animatedGripLocal=Quaternion.Normalize(Quaternion.Inverse(before[wrist])*before[hand]);
+            worldRotations[hand]=Quaternion.Normalize(worldRotations[wrist]*animatedGripLocal);
+        }
+        else worldRotations[hand]=worldRotations[wrist];
+        Vector3 lowerDirection=Vector3.Normalize(target-elbowTarget);
+        worldPositions[wrist]=elbowTarget+lowerDirection*skeleton.Bones[wrist].LocalPosition.Length();
+        worldPositions[hand]=target;
+        UpdateDescendantsExcept(skeleton,upper,elbow,worldPositions,worldRotations,before);
+        UpdateDescendantsExcept(skeleton,elbow,wrist,worldPositions,worldRotations,before);
+        UpdateDescendantsExcept(skeleton,wrist,hand,worldPositions,worldRotations,before);
+        UpdateDescendants(skeleton,hand,worldPositions,worldRotations,before);
     }
 
     private static void StabilizePlantedLeg(Ps2BinSkeleton skeleton, byte thighId, byte calfId, byte footId, Vector3[] worldPositions, Quaternion[] worldRotations, FcvSkeletonPose reference)
@@ -179,20 +273,33 @@ public static class FcvSkeletonEvaluator
         UpdateDescendants(skeleton,foot,worldPositions,worldRotations,reference.WorldRotations);
     }
 
-    private static void ApplyTrackedFootIk(Ps2BinSkeleton skeleton,FcvAnimation animation,float frame,byte thighId,byte calfId,byte footId,Vector3[] worldPositions,Quaternion[] worldRotations)
+    private static void ApplyTrackedFootIkChains(Ps2BinSkeleton skeleton,FcvAnimation animation,float frame,Vector3 rootMotion,Vector3[] worldPositions,Quaternion[] worldRotations)
     {
-        int thigh=FindBoneIndex(skeleton,thighId),calf=FindBoneIndex(skeleton,calfId),foot=FindBoneIndex(skeleton,footId);
+        // Discover two-bone IK chains from the data itself: an absolute translation target on
+        // the end joint and an IK/IK-toe controller on its grandparent. This covers humanoid
+        // legs without relying on fixed joint IDs or enemy-specific profiles.
+        foreach(FcvTrack targetTrack in animation.Tracks.Where(t=>t.Type==0x04&&skeleton.FirstIndexById.ContainsKey(t.NodeId)))
+        {
+            int foot=FindBoneIndex(skeleton,targetTrack.NodeId);if(foot<0)continue;
+            int calf=skeleton.Bones[foot].ParentIndex;if(calf<0)continue;
+            int thigh=skeleton.Bones[calf].ParentIndex;if(thigh<0)continue;
+            byte thighId=skeleton.Bones[thigh].Id;
+            FcvTrack? controller=animation.Tracks.FirstOrDefault(t=>t.NodeId==thighId&&(t.Type==0x10||t.Type==0x20));
+            if(controller!=null)ApplyTrackedFootIk(skeleton,animation,frame,thigh,calf,foot,targetTrack,controller,rootMotion,worldPositions,worldRotations);
+        }
+    }
+
+    private static void ApplyTrackedFootIk(Ps2BinSkeleton skeleton,FcvAnimation animation,float frame,int thigh,int calf,int foot,FcvTrack targetTrack,FcvTrack controllerTrack,Vector3 rootMotion,Vector3[] worldPositions,Quaternion[] worldRotations)
+    {
         if(thigh<0 || calf<0 || foot<0 || skeleton.Bones[calf].ParentIndex!=thigh || skeleton.Bones[foot].ParentIndex!=calf) return;
-        FcvTrack? targetTrack=animation.Tracks.FirstOrDefault(t => t.NodeId==footId && t.Type==0x04 && (t.DataType>>4) is 0x0 or 0x1);
-        FcvTrack? thighTrack=animation.Tracks.FirstOrDefault(t => t.NodeId==thighId && t.Type==0x10);
-        if(targetTrack==null || thighTrack==null) return;
+        if((targetTrack.DataType>>4) is not (0x0 or 0x1 or 0x2))return;
 
         // Type 0x04 on the ankle is an absolute model-space IK target. The evaluator stores root
         // translation as a delta over the BIN root, so add that delta here; the viewport removes
         // it again when anchoring the enemy to its ESL position. The visible ankle consequently
         // lands on the FCV coordinates while the hip remains in the same coordinate space.
         Vector3 rawTarget=SampleTrackRaw(targetTrack,frame);
-        Vector3 target=rawTarget+GetRootDelta(skeleton,worldPositions);
+        Vector3 target=rawTarget+rootMotion;
         Vector3 hip=worldPositions[thigh];
         Vector3 toTarget=target-hip;
         float distance=toTarget.Length();
@@ -209,7 +316,7 @@ public static class FcvSkeletonEvaluator
         // animated IK parent: using the calf direction instead effectively asked the knee to
         // follow the upper leg itself, which is nearly invisible in walks but folds/crosses the
         // legs during large motions such as em12_027's vault.
-        Vector3 localPoleAxis=(thighTrack.DataType&0x0F) switch
+        Vector3 localPoleAxis=(controllerTrack.DataType&0x0F) switch
         {
             0x0 => Vector3.UnitY,
             0x1 => -Vector3.UnitY,
@@ -219,8 +326,36 @@ public static class FcvSkeletonEvaluator
             0x5 => -Vector3.UnitZ,
             _ => Vector3.UnitZ
         };
-        Vector3 pole=Vector3.Transform(localPoleAxis,worldRotations[thigh]);
+
+        // Keep the knee on the anatomical side authored by the BIN skeleton. Deriving the pole
+        // from the current FK calf is unstable: whenever the ankle passes the hip during a turn,
+        // that projection can cross zero and select the mirrored two-bone IK solution. Build the
+        // reference bend in bind/model space instead, carry it with the thigh's current parent
+        // (normally the pelvis or an auxiliary hip bone), and only then project it onto the
+        // current hip-to-ankle plane. This is deterministic when scrubbing and works for chains
+        // with helper bones without relying on enemy or joint IDs.
+        Vector3 bindHip=GetBindWorldPosition(skeleton,thigh);
+        Vector3 bindKnee=GetBindWorldPosition(skeleton,calf);
+        Vector3 bindAnkle=GetBindWorldPosition(skeleton,foot);
+        Vector3 bindDirection=bindAnkle-bindHip;
+        Vector3 bindPole=bindKnee-bindHip;
+        if(bindDirection.LengthSquared()>0.0001f)
+        {
+            bindDirection=Vector3.Normalize(bindDirection);
+            bindPole-=bindDirection*Vector3.Dot(bindPole,bindDirection);
+        }
+
+        int poleParent=skeleton.Bones[thigh].ParentIndex;
+        Quaternion poleFrame=poleParent>=0?worldRotations[poleParent]:Quaternion.Identity;
+        Vector3 pole=Vector3.Transform(bindPole,poleFrame);
         pole-=direction*Vector3.Dot(pole,direction);
+        if(pole.LengthSquared()<0.0001f)
+        {
+            // A perfectly straight bind chain has no anatomical bend plane. In that case the
+            // FCV controller's signed compass axis supplies the format-defined pole direction.
+            pole=Vector3.Transform(localPoleAxis,worldRotations[thigh]);
+            pole-=direction*Vector3.Dot(pole,direction);
+        }
         if(pole.LengthSquared()<0.0001f) pole=Vector3.UnitX-direction*Vector3.Dot(Vector3.UnitX,direction);
         if(pole.LengthSquared()<0.0001f) return;
         pole=Vector3.Normalize(pole);
@@ -242,7 +377,21 @@ public static class FcvSkeletonEvaluator
         worldRotations[calf]=Quaternion.Normalize(lowerCorrection*worldRotations[calf]);
         worldRotations[foot]=animatedFootRotation;
         worldPositions[foot]=target;
+        UpdateDescendantsExcept(skeleton,thigh,calf,worldPositions,worldRotations,rotationsBeforeIk);
+        UpdateDescendantsExcept(skeleton,calf,foot,worldPositions,worldRotations,rotationsBeforeIk);
         UpdateDescendants(skeleton,foot,worldPositions,worldRotations,rotationsBeforeIk);
+    }
+
+    private static void UpdateDescendantsExcept(Ps2BinSkeleton skeleton,int parent,int excludedChild,Vector3[] worldPositions,Quaternion[] worldRotations,Quaternion[] referenceRotations)
+    {
+        for(int i=0;i<skeleton.Bones.Count;i++)
+        {
+            if(i==excludedChild||skeleton.Bones[i].ParentIndex!=parent)continue;
+            Quaternion localRotation=Quaternion.Normalize(Quaternion.Inverse(referenceRotations[parent])*referenceRotations[i]);
+            worldPositions[i]=worldPositions[parent]+Vector3.Transform(skeleton.Bones[i].LocalPosition,worldRotations[parent]);
+            worldRotations[i]=Quaternion.Normalize(worldRotations[parent]*localRotation);
+            UpdateDescendants(skeleton,i,worldPositions,worldRotations,referenceRotations);
+        }
     }
 
     private static Vector3 GetBindWorldPosition(Ps2BinSkeleton skeleton,int index)
@@ -262,6 +411,17 @@ public static class FcvSkeletonEvaluator
         for(int i=0;i<skeleton.Bones.Count;i++)
             if(skeleton.Bones[i].ParentIndex<0)
                 return worldPositions[i]-GetBindWorldPosition(skeleton,i);
+        return Vector3.Zero;
+    }
+
+    private static Vector3 GetAuthoredRootMotion(Ps2BinSkeleton skeleton,FcvAnimation animation,float frame)
+    {
+        foreach(FcvTrack track in animation.Tracks)
+        {
+            if(track.Type!=0x01)continue;
+            int index=FindBoneIndex(skeleton,track.NodeId);
+            if(index>=0&&skeleton.Bones[index].ParentIndex<0)return SampleTrackRaw(track,frame);
+        }
         return Vector3.Zero;
     }
 
@@ -300,6 +460,14 @@ public static class FcvSkeletonEvaluator
         int separator=stem.LastIndexOf('_');
         return separator>=0 && int.TryParse(stem[(separator+1)..],out int parsed) && parsed==number;
     }
+
+    private static bool UsesEm12HumanoidRotationProfile(FcvAnimation animation)
+    {
+        string name=Path.GetFileName(animation.FilePath);
+        return name.StartsWith("em12_",StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("em12.dat#",StringComparison.OrdinalIgnoreCase);
+    }
+
 
     private static void PreventRightHandHeadPenetration(Ps2BinSkeleton skeleton,Vector3[] worldPositions,Quaternion[] worldRotations)
     {
@@ -386,7 +554,7 @@ public static class FcvSkeletonEvaluator
         state[i]=2;
     }
     private static bool IsSupportedRotationEncoding(int encoding)
-        => encoding is 0x0 or 0x1 or 0x5 or 0x6 or 0x8 or 0x9 or 0xA;
+        => encoding is 0x0 or 0x1 or 0x4 or 0x5 or 0x6 or 0x8 or 0x9 or 0xA;
 
     private static float RotationValue(double value,int encoding)
     {
@@ -397,7 +565,7 @@ public static class FcvSkeletonEvaluator
         return encoding switch
         {
             0x0 or 0x1 => (float)value,
-            0x5 or 0x6 => (float)(value / 32767.0 * Math.PI),
+            0x4 or 0x5 or 0x6 => (float)(value / 32767.0 * Math.PI),
             0x8 or 0x9 or 0xA => (float)(value / 127.0 * Math.PI),
             _ => 0f
         };
@@ -433,6 +601,10 @@ public static class FcvSkeletonEvaluator
 
     private static double DecodeTangent(double value,int encoding,bool outgoing)
     {
+        // Encoding 1 stores float values but packs each tangent into a signed normalized int16.
+        // Treating that packed integer as a direct Hermite slope made subtle weapon idles jump
+        // thousands of model units between keys (for example wep02 FCV 07's root-height track).
+        if(encoding==0x1)return value/32767.0;
         // Encoding 0x5 stores the outgoing 16-bit handle as unsigned even though its bit pattern
         // represents a signed slope. Reinterpret it before Hermite interpolation.
         if(outgoing && encoding==0x5 && value>32767.0) return value-65536.0;

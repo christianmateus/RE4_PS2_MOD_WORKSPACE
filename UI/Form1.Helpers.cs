@@ -6,13 +6,13 @@ public partial class Form1
     {
         using var dialog = new FolderBrowserDialog { Description = "Selecione a pasta do RE4 PS2 Mod Workspace", ShowNewFolderButton = true };
         if (!string.IsNullOrWhiteSpace(initial) && Directory.Exists(initial)) dialog.SelectedPath = initial;
-        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.SelectedPath : null;
+        return dialog.ShowLocalizedDialog(this) == DialogResult.OK ? dialog.SelectedPath : null;
     }
 
     private string? BrowseFile(string filter)
     {
         using var dialog = new OpenFileDialog { Filter = filter, CheckFileExists = true };
-        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+        return dialog.ShowLocalizedDialog(this) == DialogResult.OK ? dialog.FileName : null;
     }
 
     private void OpenFolder(string? path)

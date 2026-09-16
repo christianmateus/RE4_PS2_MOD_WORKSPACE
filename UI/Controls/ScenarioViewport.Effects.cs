@@ -87,6 +87,7 @@ public sealed partial class ScenarioViewport
         if(effVertexCount>0){GL.UseProgram(effShader);var mvp=BuildMvp();GL.UniformMatrix4(effMvp,true,ref mvp);GL.Disable(EnableCap.CullFace);GL.Disable(EnableCap.Blend);
         GL.BindVertexArray(effVao);GL.LineWidth(2f);GL.DrawArrays(PrimitiveType.Lines,0,effVertexCount);GL.LineWidth(1f);GL.Enable(EnableCap.CullFace);}
         DrawSelectedEffTexture();
+        GL.UseProgram(shaderProgram);
     }
 
     private void UploadEffTexture()

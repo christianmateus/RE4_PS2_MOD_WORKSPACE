@@ -1,14 +1,19 @@
-﻿namespace RE4_PS2_MOD_WORKSPACE
+namespace RE4_PS2_MOD_WORKSPACE
 {
     partial class Form1
     {
         private System.ComponentModel.IContainer? components = null;
         private Panel pnlSidebar = null!, pnlTop = null!, pnlContent = null!;
-        private Panel pnlDashboard = null!, pnlWorkspace = null!, pnlAssets = null!, pnlTextures = null!, pnlMessages = null!, pnlVisualEditor = null!, pnlCharacters = null!, pnlEnemies = null!, pnlAnimations = null!, pnlBuild = null!, pnlTools = null!, pnlSettings = null!, pnlLogs = null!;
+        private Panel pnlDashboard = null!, pnlWorkspace = null!, pnlAssets = null!, pnlTextures = null!, pnlMessages = null!, pnlVisualEditor = null!, pnlCharacters = null!, pnlEnemies = null!, pnlAnimations = null!, pnlSounds = null!, pnlBuild = null!, pnlTools = null!, pnlSettings = null!, pnlLogs = null!;
         private Label lblLogo = null!, lblLogoSub = null!, lblVersion = null!, lblTopTitle = null!, lblWorkspaceCurrent = null!, lblTopVisualModified = null!;
-        private Button btnNavDashboard = null!, btnNavWorkspace = null!, btnNavAssets = null!, btnNavTextures = null!, btnNavMessages = null!, btnNavVisualEditor = null!, btnNavCharacters = null!, btnNavEnemies = null!, btnNavAnimations = null!, btnNavBuild = null!, btnNavTools = null!, btnNavSettings = null!, btnNavLogs = null!, btnSidebarToggle = null!, btnTopBuild = null!, btnTopSaveScenario = null!;
-        private CheckBox chkSettingsSmdProtectIndices = null!, chkSettingsAutoSave = null!, chkSettingsShowFps = null!, chkSettingsCamTimeline = null!, chkSettingsCamProtectMotion = null!;
-        private ComboBox cmbSettingsAutoSaveInterval = null!;
+        private Button btnNavDashboard = null!, btnNavWorkspace = null!, btnNavAssets = null!, btnNavTextures = null!, btnNavMessages = null!, btnNavVisualEditor = null!, btnNavCharacters = null!, btnNavEnemies = null!, btnNavAnimations = null!, btnNavSounds = null!, btnNavBuild = null!, btnNavTools = null!, btnNavSettings = null!, btnNavLogs = null!, btnSidebarToggle = null!, btnTopBuild = null!, btnTopSaveScenario = null!;
+        private ComboBox cmbSoundFiles = null!, cmbSoundGroups = null!;
+        private DataGridView gridSoundSamples = null!;
+        private Button btnSoundBrowse = null!, btnSoundRefresh = null!, btnSoundPlay = null!, btnSoundStop = null!, btnSoundExportVag = null!, btnSoundExportWav = null!, btnSoundReplace = null!, btnSoundSave = null!, btnSoundRestore = null!, btnSoundExportAllWav = null!, btnSoundExportAllVag = null!, btnSoundImportFolder = null!, btnSoundZeroSelected = null!;
+        private Label lblSoundFile = null!, lblSoundSummary = null!, lblSoundSelection = null!, lblSoundStatus = null!;
+        private TrackBar trkSoundPosition = null!;
+        private CheckBox chkSettingsSmdProtectIndices = null!, chkSettingsAutoSave = null!, chkSettingsShowFps = null!, chkSettingsStartMaximized = null!, chkSettingsCamTimeline = null!, chkSettingsCamProtectMotion = null!, chkSettingsCreateIsoBackup = null!;
+        private ComboBox cmbSettingsAutoSaveInterval = null!, cmbSettingsLanguage = null!;
         private ComboBox cmbMessageLanguage = null!;
         private TextBox txtMessageSearch = null!;
         private CheckBox chkMessageFriendly = null!;
@@ -25,18 +30,20 @@
         private PropertyGrid pgEnemyProperties = null!;
         private Label lblEnemyFileInfo = null!, lblEnemyEntryCount = null!, lblEnemyStatus = null!;
         private ComboBox cmbAnimationFiles = null!;
-        private Button btnAnimationBrowse = null!, btnAnimationRefresh = null!, btnAnimationBinBrowse = null!, btnAnimationAutoBin = null!, btnAnimationPlay = null!, btnAnimationStop = null!, btnAnimationFit = null!;
-        private CheckBox chkAnimationBoneIds = null!, chkAnimationRestPose = null!;
-        private ComboBox cmbAnimationBones = null!;
-        private Label lblAnimationFile = null!, lblAnimationSummary = null!, lblAnimationStatus = null!, lblAnimationTrackDetail = null!, lblAnimationSkeleton = null!, lblAnimationFrame = null!, lblAnimationBoneDebug = null!;
+        private Button btnAnimationBrowse = null!, btnAnimationRefresh = null!, btnAnimationExportSmd = null!, btnAnimationImportSmd = null!;
+        private Button btnAnimationLabOpenDat = null!, btnAnimationLabAutoDat = null!, btnAnimationLabFit = null!, btnAnimationLabPlay = null!, btnAnimationLabStop = null!;
+        private Button btnAnimationCatalogSave = null!;
+        private CheckBox chkAnimationLabSkeleton = null!, chkAnimationLabRestPose = null!;
+        private Label lblAnimationFile = null!, lblAnimationSummary = null!, lblAnimationStatus = null!, lblAnimationTrackDetail = null!, lblAnimationLabModel = null!, lblAnimationLabFrame = null!;
         private DataGridView gridAnimationTracks = null!, gridAnimationKeys = null!;
         private TabControl tabAnimationAxis = null!, tabAnimationView = null!;
-        private TrackBar trkAnimationFrame = null!;
-        private AnimationSkeletonViewport animationSkeletonViewport = null!;
+        private TrackBar trkAnimationLabFrame = null!, trkAnimationLabBackground = null!;
+        private TextBox txtAnimationCatalogName = null!;
+        private ScenarioViewport animationLabViewport = null!;
         private Label lblCardWorkspaceValue = null!, lblCardIsoValue = null!, lblCardDatValue = null!, lblCardStatusValue = null!;
         private TextBox txtWorkspacePath = null!, txtIsoPath = null!, txtTplManager = null!, txtPcsx2 = null!;
         private Button btnBrowseWorkspace = null!, btnCreateWorkspace = null!, btnOpenWorkspace = null!, btnBrowseIso = null!, btnDashboardWorkspace = null!;
-        private Button btnBrowseTpl = null!, btnBrowsePcsx2 = null!, btnOpenTpl = null!, btnOpenPcsx2 = null!;
+        private Button btnBrowseTpl = null!, btnBrowsePcsx2 = null!, btnOpenTpl = null!, btnOpenPcsx2 = null!, btnSettingsRunSetup = null!;
         private ComboBox cmbAfsEntries = null!, cmbDatEntries = null!, cmbAssetType = null!, cmbTextureDat = null!, cmbTextureSmd = null!;
         private Button btnScanIso = null!, btnExtractScenario = null!, btnExtractAllScenarios = null!, btnRestoreDat = null!, btnRefreshContent = null!, btnOpenContentFolder = null!;
         private CheckBox chkShowAllAfsFiles = null!;
@@ -57,23 +64,23 @@
         private Label lblBuildActiveDat = null!, lblBuildDatStatus = null!, lblBuildIsoStatus = null!, lblBuildChangeStatus = null!, lblTrackedDatsSummary = null!, lblBuildBusy = null!;
         private Panel pnlBuildBusy = null!;
         private ProgressBar progressBuildBusy = null!;
-        private Button btnVisualOpenScenario = null!, btnVisualOpenAev = null!, btnVisualFit = null!;
+        private Button btnVisualOpenScenario = null!, btnVisualOpenAev = null!, btnVisualFit = null!, btnVisualEditCns = null!;
         private Button btnVisualLayersToggle = null!, btnVisualPropertiesToggle = null!;
         private ComboBox cmbVisualDat = null!, cmbVisualEnemyAnimation = null!;
         private Button btnVisualSaveAev = null!, btnVisualSaveEsl = null!, btnVisualSaveEts = null!, btnVisualSaveSmd = null!, btnVisualSaveLit = null!, btnVisualExtractCore = null!, btnVisualAddCam = null!, btnVisualCamMove = null!, btnVisualCamScale = null!, btnVisualCamVertex = null!, btnVisualCamFace = null!, btnVisualCamFrame = null!, btnVisualCamPreview = null!, btnVisualCamCapture = null!, btnVisualCamPosition = null!, btnVisualCamTarget = null!;
-        private Button btnVisualCollisionMoveXZ = null!, btnVisualCollisionMoveY = null!, btnVisualCollisionMoveFace = null!, btnVisualCollisionMoveSide = null!, btnVisualCollisionObject = null!, btnVisualCollisionRotateLeft = null!, btnVisualCollisionRotateRight = null!, btnVisualCollisionDuplicate = null!, btnVisualCollisionRemove = null!, btnVisualCollisionFlip = null!, btnVisualCollisionCube = null!, btnVisualCollisionSave = null!;
+        private Button btnVisualCollisionMoveXZ = null!, btnVisualCollisionMoveY = null!, btnVisualCollisionEdge = null!, btnVisualCollisionMoveFace = null!, btnVisualCollisionMoveSide = null!, btnVisualCollisionObject = null!, btnVisualCollisionRotateLeft = null!, btnVisualCollisionRotateRight = null!, btnVisualCollisionDuplicate = null!, btnVisualCollisionRemove = null!, btnVisualCollisionFlip = null!, btnVisualCollisionCube = null!, btnVisualCollisionSave = null!;
         private TrackBar trkVisualMoveSpeed = null!, trkVisualLookSpeed = null!;
         private Label lblVisualMoveSpeed = null!, lblVisualLookSpeed = null!;
         private CheckBox chkVisualAevLabels = null!, chkVisualEnemyLabels = null!, chkVisualEnemyInactive = null!, chkVisualEnemyModelParts = null!, chkVisualEnemySnap = null!, chkVisualEnemyAnimated = null!;
         private CheckBox chkVisualCollisionSat = null!, chkVisualCollisionEat = null!, chkVisualCollisionFloor = null!, chkVisualCollisionSlope = null!, chkVisualCollisionWall = null!;
-        private ComboBox cmbVisualRenderMode = null!, cmbVisualCollisionStyle = null!, cmbVisualCollisionMesh = null!, cmbVisualCollisionVertex = null!, cmbVisualCollisionPrimitive = null!, cmbVisualCollisionPrimitiveSize = null!;
+        private ComboBox cmbVisualRenderMode = null!, cmbVisualCollisionStyle = null!, cmbVisualCollisionMesh = null!, cmbVisualCollisionVertex = null!;
         private TrackBar trkVisualCollisionOpacity = null!;
         private Panel pnlVisualContextActions = null!;
         private readonly Dictionary<int, Control> visualContextActionBars = new();
         private Label lblVisualCollisionInfo = null!;
         private Label lblVisualStage = null!, lblVisualStatus = null!, lblVisualFps = null!;
         private CheckedListBox clbVisualLayers = null!;
-        private ListBox lstVisualAevEntries = null!, lstVisualEnemyEntries = null!, lstVisualObjectEntries = null!, lstVisualSmdEntries = null!, lstVisualLitEntries = null!, lstVisualEffEntries = null!, lstVisualRtpNodes = null!, lstVisualCamEntries = null!, lstVisualCamParts = null!;
+        private ListBox lstVisualAevEntries = null!, lstVisualEnemyEntries = null!, lstVisualObjectEntries = null!, lstVisualItaEntries = null!, lstVisualEseEntries = null!, lstVisualFseEntries = null!, lstVisualDseEntries = null!, lstVisualSmdEntries = null!, lstVisualLitEntries = null!, lstVisualEffEntries = null!, lstVisualRtpNodes = null!, lstVisualCamEntries = null!, lstVisualCamParts = null!;
         private PictureBox picVisualEffTexture = null!;
         private Label lblVisualEffTexture = null!;
         private NumericUpDown nudVisualEffFrame = null!;
@@ -82,9 +89,10 @@
         private Panel pnlVisualEnemyModelParts = null!;
         private Button btnVisualEnemyPartsSolo = null!, btnVisualEnemyPartsAll = null!, btnVisualEnemyPartsAuto = null!, btnVisualEnemyGizmoMove = null!, btnVisualEnemyGizmoRotate = null!;
         private Button btnVisualObjectMove = null!, btnVisualObjectRotate = null!;
-        private Button btnVisualSmdMove = null!, btnVisualSmdRotate = null!, btnVisualSmdScale = null!, btnVisualSmdImport = null!, btnVisualSmdNew = null!;
+        private Button btnVisualFseMove = null!, btnVisualFseVertex = null!, btnVisualFseFace = null!;
+        private Button btnVisualSmdMove = null!, btnVisualSmdRotate = null!, btnVisualSmdScale = null!, btnVisualSmdImport = null!, btnVisualSmdDuplicate = null!, btnVisualSmdCatalog = null!;
         private CheckBox chkVisualSmdSnap = null!, chkVisualSmdEditMode = null!;
-        private ComboBox cmbVisualSmdTransformSpeed = null!;
+        private ComboBox cmbVisualSmdTransformSpeed = null!, cmbVisualSmdTransformSpace = null!;
         private CheckBox chkVisualObjectSnap = null!;
         private FlowLayoutPanel flpVisualObjectTextures = null!;
         private Label lblVisualObjectTextureDebug = null!;
@@ -93,7 +101,7 @@
         private Label lblVisualSmdTextures = null!;
         private Label lblVisualEnemyParts = null!, lblVisualEnemyAttachment = null!;
         private NumericUpDown nudVisualEnemyAttachX = null!, nudVisualEnemyAttachY = null!, nudVisualEnemyAttachZ = null!, nudVisualEnemyAttachRX = null!, nudVisualEnemyAttachRY = null!, nudVisualEnemyAttachRZ = null!;
-        private TabControl tabVisualEntities = null!;
+        private TabControl tabVisualEntities = null!, tabVisualSound = null!;
         private TabPage tabVisualRtp = null!;
         private CamTimelineControl visualCamTimeline = null!;
         private Label lblVisualPropertiesTitle = null!;
@@ -121,9 +129,9 @@
             components = new System.ComponentModel.Container();
             textureImages = new ImageList(components) { ImageSize = new Size(104, 104), ColorDepth = ColorDepth.Depth32Bit };
             pnlSidebar = new Panel(); pnlTop = new Panel(); pnlContent = new Panel();
-            pnlDashboard = new Panel(); pnlWorkspace = new Panel(); pnlAssets = new Panel(); pnlTextures = new Panel(); pnlMessages = new Panel(); pnlVisualEditor = new Panel(); pnlCharacters = new Panel(); pnlEnemies = new Panel(); pnlAnimations = new Panel(); pnlBuild = new Panel(); pnlTools = new Panel(); pnlSettings = new Panel(); pnlLogs = new Panel();
+            pnlDashboard = new Panel(); pnlWorkspace = new Panel(); pnlAssets = new Panel(); pnlTextures = new Panel(); pnlMessages = new Panel(); pnlVisualEditor = new Panel(); pnlCharacters = new Panel(); pnlEnemies = new Panel(); pnlAnimations = new Panel(); pnlSounds = new Panel(); pnlBuild = new Panel(); pnlTools = new Panel(); pnlSettings = new Panel(); pnlLogs = new Panel();
             lblLogo = new Label(); lblLogoSub = new Label(); lblVersion = new Label(); lblTopTitle = new Label();
-            btnNavDashboard = new Button(); btnNavWorkspace = new Button(); btnNavAssets = new Button(); btnNavTextures = new Button(); btnNavMessages = new Button(); btnNavVisualEditor = new Button(); btnNavCharacters = new Button(); btnNavEnemies = new Button(); btnNavAnimations = new Button(); btnNavBuild = new Button(); btnNavTools = new Button(); btnNavSettings = new Button(); btnNavLogs = new Button(); btnSidebarToggle = new Button(); btnTopBuild = new Button(); btnTopSaveScenario = new Button();
+            btnNavDashboard = new Button(); btnNavWorkspace = new Button(); btnNavAssets = new Button(); btnNavTextures = new Button(); btnNavMessages = new Button(); btnNavVisualEditor = new Button(); btnNavCharacters = new Button(); btnNavEnemies = new Button(); btnNavAnimations = new Button(); btnNavSounds = new Button(); btnNavBuild = new Button(); btnNavTools = new Button(); btnNavSettings = new Button(); btnNavLogs = new Button(); btnSidebarToggle = new Button(); btnTopBuild = new Button(); btnTopSaveScenario = new Button();
             SuspendLayout();
 
             AutoScaleMode = AutoScaleMode.Dpi;
@@ -152,13 +160,14 @@
             SetupNav(btnNavCharacters, "Personagens", btnNavCharacters_Click);
             SetupNav(btnNavEnemies, "Inimigos", btnNavEnemies_Click);
             SetupNav(btnNavAnimations, "Animações", btnNavAnimations_Click);
+            SetupNav(btnNavSounds, "Sons", btnNavSounds_Click);
             SetupNav(btnNavBuild, "Build & Test", btnNavBuild_Click);
             SetupNav(btnNavTools, "Ferramentas", btnNavTools_Click);
             SetupNav(btnNavSettings, "Configurações", btnNavSettings_Click);
             SetupNav(btnNavLogs, "Console", btnNavLogs_Click);
             btnSidebarToggle.Text = "RETRAIR  ‹"; btnSidebarToggle.Dock = DockStyle.Top; btnSidebarToggle.Height = 34; btnSidebarToggle.FlatStyle = FlatStyle.Flat; btnSidebarToggle.FlatAppearance.BorderSize = 0; btnSidebarToggle.BackColor = Sidebar; btnSidebarToggle.ForeColor = TextMuted; btnSidebarToggle.Font = new Font("Segoe UI Semibold", 8F); btnSidebarToggle.TextAlign = ContentAlignment.MiddleRight; btnSidebarToggle.Cursor = Cursors.Hand; btnSidebarToggle.Click += btnSidebarToggle_Click;
-            lblVersion.Text = "v0.6.0"; lblVersion.Dock = DockStyle.Bottom; lblVersion.Height = 26; lblVersion.ForeColor = TextMuted; lblVersion.TextAlign = ContentAlignment.MiddleLeft;
-            pnlSidebar.Controls.Add(btnNavLogs); pnlSidebar.Controls.Add(btnNavSettings); pnlSidebar.Controls.Add(btnNavTools); pnlSidebar.Controls.Add(btnNavBuild); pnlSidebar.Controls.Add(btnNavAnimations); pnlSidebar.Controls.Add(btnNavEnemies); pnlSidebar.Controls.Add(btnNavCharacters); pnlSidebar.Controls.Add(btnNavVisualEditor); pnlSidebar.Controls.Add(btnNavMessages); pnlSidebar.Controls.Add(btnNavTextures); pnlSidebar.Controls.Add(btnNavAssets); pnlSidebar.Controls.Add(btnNavWorkspace); pnlSidebar.Controls.Add(btnNavDashboard); pnlSidebar.Controls.Add(btnSidebarToggle); pnlSidebar.Controls.Add(lblLogoSub); pnlSidebar.Controls.Add(lblLogo); pnlSidebar.Controls.Add(lblVersion);
+            lblVersion.Text = "v0.7.0"; lblVersion.Dock = DockStyle.Bottom; lblVersion.Height = 26; lblVersion.ForeColor = TextMuted; lblVersion.TextAlign = ContentAlignment.MiddleLeft;
+            pnlSidebar.Controls.Add(btnNavLogs); pnlSidebar.Controls.Add(btnNavSettings); pnlSidebar.Controls.Add(btnNavTools); pnlSidebar.Controls.Add(btnNavBuild); pnlSidebar.Controls.Add(btnNavSounds); pnlSidebar.Controls.Add(btnNavAnimations); pnlSidebar.Controls.Add(btnNavEnemies); pnlSidebar.Controls.Add(btnNavCharacters); pnlSidebar.Controls.Add(btnNavVisualEditor); pnlSidebar.Controls.Add(btnNavMessages); pnlSidebar.Controls.Add(btnNavTextures); pnlSidebar.Controls.Add(btnNavAssets); pnlSidebar.Controls.Add(btnNavWorkspace); pnlSidebar.Controls.Add(btnNavDashboard); pnlSidebar.Controls.Add(btnSidebarToggle); pnlSidebar.Controls.Add(lblLogoSub); pnlSidebar.Controls.Add(lblLogo); pnlSidebar.Controls.Add(lblVersion);
 
             pnlTop.BackColor = Bg;
             pnlTop.Dock = DockStyle.Top;
@@ -175,9 +184,9 @@
             pnlContent.BackColor = Bg;
             pnlContent.Dock = DockStyle.Fill;
             pnlContent.Padding = new Padding(24, 10, 24, 20);
-            foreach (Panel page in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlMessages, pnlVisualEditor, pnlCharacters, pnlEnemies, pnlAnimations, pnlBuild, pnlTools, pnlSettings, pnlLogs }) SetupPage(page);
-            BuildDashboardDesigner(); BuildProjectDesigner(); BuildAssetsDesigner(); BuildTexturesDesigner(); BuildMessagesDesigner(); BuildVisualEditorDesigner(); BuildEnemiesDesigner(); BuildAnimationsDesigner(); BuildBuildDesigner(); BuildToolsDesigner(); BuildSettingsDesigner(); BuildLogsDesigner();
-            pnlContent.Controls.Add(pnlLogs); pnlContent.Controls.Add(pnlSettings); pnlContent.Controls.Add(pnlTools); pnlContent.Controls.Add(pnlBuild); pnlContent.Controls.Add(pnlAnimations); pnlContent.Controls.Add(pnlEnemies); pnlContent.Controls.Add(pnlCharacters); pnlContent.Controls.Add(pnlVisualEditor); pnlContent.Controls.Add(pnlMessages); pnlContent.Controls.Add(pnlTextures); pnlContent.Controls.Add(pnlAssets); pnlContent.Controls.Add(pnlWorkspace); pnlContent.Controls.Add(pnlDashboard);
+            foreach (Panel page in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlMessages, pnlVisualEditor, pnlCharacters, pnlEnemies, pnlAnimations, pnlSounds, pnlBuild, pnlTools, pnlSettings, pnlLogs }) SetupPage(page);
+            BuildDashboardDesigner(); BuildProjectDesigner(); BuildAssetsDesigner(); BuildTexturesDesigner(); BuildMessagesDesigner(); BuildVisualEditorDesigner(); BuildEnemiesDesigner(); BuildAnimationsDesigner(); BuildSoundsDesigner(); BuildBuildDesigner(); BuildToolsDesigner(); BuildSettingsDesigner(); BuildLogsDesigner();
+            pnlContent.Controls.Add(pnlLogs); pnlContent.Controls.Add(pnlSettings); pnlContent.Controls.Add(pnlTools); pnlContent.Controls.Add(pnlBuild); pnlContent.Controls.Add(pnlSounds); pnlContent.Controls.Add(pnlAnimations); pnlContent.Controls.Add(pnlEnemies); pnlContent.Controls.Add(pnlCharacters); pnlContent.Controls.Add(pnlVisualEditor); pnlContent.Controls.Add(pnlMessages); pnlContent.Controls.Add(pnlTextures); pnlContent.Controls.Add(pnlAssets); pnlContent.Controls.Add(pnlWorkspace); pnlContent.Controls.Add(pnlDashboard);
 
             Controls.Add(pnlContent); Controls.Add(pnlTop); Controls.Add(pnlSidebar);
             ResumeLayout(false);
@@ -281,7 +290,7 @@
             {
                 string selected = GetSelectedContentFile() ?? string.Empty;
                 replaceAsset.Enabled = !string.IsNullOrWhiteSpace(selected) && File.Exists(selected);
-                restoreAsset.Enabled = !string.IsNullOrWhiteSpace(selected) && File.Exists(GetAssetBackupPathSafe(selected));
+                var originalDat = GetActiveOriginalDatPath(); restoreAsset.Enabled = !string.IsNullOrWhiteSpace(selected) && !string.IsNullOrWhiteSpace(originalDat) && File.Exists(originalDat);
             };
             gridAssets.ContextMenuStrip = ctxAssets;
         }
@@ -295,12 +304,12 @@
             cmbTextureSmd = new ComboBox { Visible = false, DropDownStyle = ComboBoxStyle.DropDownList }; cmbTextureSmd.SelectedIndexChanged += cmbTextureSmd_SelectedIndexChanged; top.Controls.Add(cmbTextureSmd);
             lblTextureCount = new Label { Text = "0 texturas", Left = 720, Top = 10, Width = 142, Height = 20, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right }; top.Controls.Add(lblTextureCount);
             btnTextureLoad = new Button { Left = 14, Top = 68 }; SetupButton(btnTextureLoad, "ATUALIZAR", Accent, 104); btnTextureLoad.Click += btnTextureLoad_Click; top.Controls.Add(btnTextureLoad);
-            btnTextureReload = new Button { Left = 128, Top = 68 }; SetupSecondary(btnTextureReload, "RELER DO SMD", 116); btnTextureReload.Click += btnTextureReload_Click; top.Controls.Add(btnTextureReload);
+            btnTextureReload = new Button { Left = 128, Top = 68 }; SetupSecondary(btnTextureReload, "RELER FONTE", 116); btnTextureReload.Click += btnTextureReload_Click; top.Controls.Add(btnTextureReload);
             btnTextureOpenExternal = new Button { Left = 254, Top = 68 }; SetupSecondary(btnTextureOpenExternal, "TPL MANAGER", 112); btnTextureOpenExternal.Click += btnTextureOpenExternal_Click; top.Controls.Add(btnTextureOpenExternal);
             top.Controls.Add(new Label { Text = "THUMB", Left = 392, Top = 12, Width = 58, Height = 18, ForeColor = TextMuted });
             trackTextureThumb = new TrackBar { Left = 448, Top = 3, Width = 180, Height = 38, Minimum = 64, Maximum = 160, TickFrequency = 16, Value = 104, AutoSize = false }; trackTextureThumb.ValueChanged += trackTextureThumb_ValueChanged; top.Controls.Add(trackTextureThumb);
             lblTextureThumbSize = new Label { Text = "104px", Left = 632, Top = 12, Width = 55, Height = 18, ForeColor = TextMuted }; top.Controls.Add(lblTextureThumbSize);
-            top.Controls.Add(new Label { Text = "ZOOM DO PREVIEW: use a roda do mouse sobre a imagem", Left = 392, Top = 54, Width = 320, Height = 18, ForeColor = TextMuted });
+            top.Controls.Add(new Label { Text = "Todas as texturas SMD e EFF são exibidas juntas", Left = 392, Top = 54, Width = 330, Height = 18, ForeColor = TextMuted });
 
             var left = Card(0, 194, 552, 508); left.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; pnlTextures.Controls.Add(left);
             lvTextures = new ListView { Dock = DockStyle.Fill, View = View.LargeIcon, LargeImageList = textureImages, BackColor = Surface, ForeColor = TextPrimary, BorderStyle = BorderStyle.None, MultiSelect = false, HideSelection = false, TileSize = new Size(128, 142), AllowDrop = true }; lvTextures.SelectedIndexChanged += lvTextures_SelectedIndexChanged; lvTextures.DoubleClick += lvTextures_DoubleClick; lvTextures.DragEnter += lvTextures_DragEnter; lvTextures.DragDrop += lvTextures_DragDrop; lvTextures.MouseDown += lvTextures_MouseDown; left.Controls.Add(lvTextures);
@@ -453,12 +462,14 @@
 
         private void BuildAnimationsDesigner()
         {
-            AddPageHeader(pnlAnimations, "Animações", "FCV Inspector + Skeleton Viewer experimental para Resident Evil 4 PS2.");
+            AddPageHeader(pnlAnimations, "Animações", "Inspector FCV e Laboratório 3D para animações de inimigos do Resident Evil 4 PS2.");
             var top = Card(0, 70, 882, 112); top.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; pnlAnimations.Controls.Add(top);
             top.Controls.Add(new Label { Text = "ARQUIVO FCV", Left = 14, Top = 10, Width = 120, Height = 18, ForeColor = TextMuted });
             cmbAnimationFiles = new ComboBox { Left = 14, Top = 31, Width = 420, Height = 30, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextPrimary, FlatStyle = FlatStyle.Flat }; cmbAnimationFiles.SelectedIndexChanged += cmbAnimationFiles_SelectedIndexChanged; top.Controls.Add(cmbAnimationFiles);
             btnAnimationRefresh = new Button { Left = 446, Top = 29 }; SetupSecondary(btnAnimationRefresh, "ATUALIZAR", 104); btnAnimationRefresh.Click += btnAnimationRefresh_Click; top.Controls.Add(btnAnimationRefresh);
             btnAnimationBrowse = new Button { Left = 562, Top = 29 }; SetupButton(btnAnimationBrowse, "ABRIR FCV", Accent, 112); btnAnimationBrowse.Click += btnAnimationBrowse_Click; top.Controls.Add(btnAnimationBrowse);
+            btnAnimationExportSmd = new Button { Left = 686, Top = 29 }; SetupSecondary(btnAnimationExportSmd, "EXPORTAR SMD", 92); btnAnimationExportSmd.Click += btnAnimationExportSmd_Click; top.Controls.Add(btnAnimationExportSmd);
+            btnAnimationImportSmd = new Button { Left = 786, Top = 29 }; SetupButton(btnAnimationImportSmd, "IMPORTAR SMD", Accent, 92); btnAnimationImportSmd.Click += btnAnimationImportSmd_Click; top.Controls.Add(btnAnimationImportSmd);
             lblAnimationFile = new Label { Text = "Nenhum FCV aberto", Left = 14, Top = 72, Width = 250, Height = 20, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 9F) }; top.Controls.Add(lblAnimationFile);
             lblAnimationSummary = new Label { Text = "Frames: —    Tracks: —", Left = 270, Top = 72, Width = 590, Height = 20, ForeColor = TextMuted, AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; top.Controls.Add(lblAnimationSummary);
 
@@ -473,42 +484,49 @@
             var right = Card(492, 194, 390, 508); right.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; pnlAnimations.Controls.Add(right);
             tabAnimationView = new TabControl { Left=10, Top=10, Width=370, Height=488, Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right }; right.Controls.Add(tabAnimationView);
             var tabInspector = new TabPage("Inspector") { BackColor=Surface, ForeColor=TextPrimary };
-            var tabSkeleton = new TabPage("Skeleton 3D") { BackColor=Surface, ForeColor=TextPrimary }; tabAnimationView.TabPages.Add(tabInspector); tabAnimationView.TabPages.Add(tabSkeleton);
+            var tabLaboratory = new TabPage("Laboratório 3D") { BackColor=Surface, ForeColor=TextPrimary };
+            tabAnimationView.TabPages.Add(tabInspector); tabAnimationView.TabPages.Add(tabLaboratory);
             lblAnimationTrackDetail = new Label { Text = "Selecione um track", Left = 8, Top = 8, Width = 334, Height = 22, ForeColor = TextPrimary, AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; tabInspector.Controls.Add(lblAnimationTrackDetail);
             tabAnimationAxis = new TabControl { Left = 8, Top = 36, Width = 334, Height = 30, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; tabAnimationAxis.TabPages.Add("X"); tabAnimationAxis.TabPages.Add("Y"); tabAnimationAxis.TabPages.Add("Z"); tabAnimationAxis.SelectedIndexChanged += tabAnimationAxis_SelectedIndexChanged; tabInspector.Controls.Add(tabAnimationAxis);
             gridAnimationKeys = new DataGridView { Left = 8, Top = 72, Width = 334, Height = 348, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, BackgroundColor = Surface, ForeColor = TextPrimary, GridColor = Border, BorderStyle = BorderStyle.None, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill };
             gridAnimationKeys.ColumnHeadersDefaultCellStyle.BackColor = Surface2; gridAnimationKeys.ColumnHeadersDefaultCellStyle.ForeColor = TextPrimary; gridAnimationKeys.EnableHeadersVisualStyles = false; gridAnimationKeys.DefaultCellStyle.BackColor = Surface; gridAnimationKeys.DefaultCellStyle.ForeColor = TextPrimary; gridAnimationKeys.Columns.Add("Key", "#"); gridAnimationKeys.Columns.Add("Frame", "Frame"); gridAnimationKeys.Columns.Add("Value", "Value"); gridAnimationKeys.Columns.Add("In", "Tangent In"); gridAnimationKeys.Columns.Add("Out", "Tangent Out"); gridAnimationKeys.Columns.Add("Extra", "Extra"); tabInspector.Controls.Add(gridAnimationKeys);
             lblAnimationStatus = new Label { Text = "Abra um FCV para iniciar a análise.", Left = 8, Top = 428, Width = 334, Height = 28, ForeColor = TextMuted, AutoEllipsis = true, Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right }; tabInspector.Controls.Add(lblAnimationStatus);
 
-            btnAnimationBinBrowse = new Button { Left=8,Top=8 }; SetupSecondary(btnAnimationBinBrowse,"ABRIR BIN",96); btnAnimationBinBrowse.Click += btnAnimationBinBrowse_Click; tabSkeleton.Controls.Add(btnAnimationBinBrowse);
-            btnAnimationAutoBin = new Button { Left=112,Top=8 }; SetupSecondary(btnAnimationAutoBin,"AUTO 440",96); btnAnimationAutoBin.Click += btnAnimationAutoBin_Click; tabSkeleton.Controls.Add(btnAnimationAutoBin);
-            btnAnimationFit = new Button { Left=216,Top=8 }; SetupSecondary(btnAnimationFit,"ENQUADRAR",104); btnAnimationFit.Click += btnAnimationFit_Click; tabSkeleton.Controls.Add(btnAnimationFit);
 
-            // Playback fica sempre visível no topo do viewer para facilitar os primeiros testes FCV.
-            btnAnimationPlay = new Button { Left=8,Top=44 }; SetupButton(btnAnimationPlay,"PLAY",Accent,72); btnAnimationPlay.Click += btnAnimationPlay_Click; tabSkeleton.Controls.Add(btnAnimationPlay);
-            btnAnimationStop = new Button { Left=86,Top=44 }; SetupSecondary(btnAnimationStop,"STOP",72); btnAnimationStop.Click += btnAnimationStop_Click; tabSkeleton.Controls.Add(btnAnimationStop);
-            lblAnimationFrame = new Label { Text="Frame 0 / —",Left=168,Top=52,Width=174,Height=20,TextAlign=ContentAlignment.MiddleRight,ForeColor=TextPrimary,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right }; tabSkeleton.Controls.Add(lblAnimationFrame);
-            trkAnimationFrame = new TrackBar { Left=8,Top=78,Width=334,Height=30,Minimum=0,Maximum=1,TickStyle=TickStyle.None,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right }; trkAnimationFrame.Scroll += trkAnimationFrame_Scroll; tabSkeleton.Controls.Add(trkAnimationFrame);
+            var labToolbar = new FlowLayoutPanel { Dock=DockStyle.Top,Height=39,Padding=new Padding(7,4,4,3),BackColor=Surface,WrapContents=false };
+            btnAnimationLabOpenDat = new Button(); SetupButton(btnAnimationLabOpenDat,"ABRIR DAT",Accent,104); btnAnimationLabOpenDat.Click += btnAnimationLabOpenDat_Click; labToolbar.Controls.Add(btnAnimationLabOpenDat);
+            btnAnimationLabAutoDat = new Button(); SetupSecondary(btnAnimationLabAutoDat,"ÚLTIMO / AUTO",116); btnAnimationLabAutoDat.Click += btnAnimationLabAutoDat_Click; labToolbar.Controls.Add(btnAnimationLabAutoDat);
+            btnAnimationLabFit = new Button(); SetupSecondary(btnAnimationLabFit,"ENQUADRAR",106); btnAnimationLabFit.Click += btnAnimationLabFit_Click; labToolbar.Controls.Add(btnAnimationLabFit);
+            chkAnimationLabSkeleton = new CheckBox { Text="Esqueleto + bones",Checked=true,AutoSize=true,Margin=new Padding(12,5,3,0),ForeColor=TextPrimary,BackColor=Color.Transparent }; chkAnimationLabSkeleton.CheckedChanged += chkAnimationLabSkeleton_CheckedChanged; labToolbar.Controls.Add(chkAnimationLabSkeleton);
+            chkAnimationLabRestPose = new CheckBox { Text="Pose base",Checked=false,AutoSize=true,Margin=new Padding(12,5,3,0),ForeColor=TextPrimary,BackColor=Color.Transparent }; chkAnimationLabRestPose.CheckedChanged += chkAnimationLabRestPose_CheckedChanged; labToolbar.Controls.Add(chkAnimationLabRestPose);
+            labToolbar.Controls.Add(new Label { Text="FUNDO",AutoSize=true,Margin=new Padding(14,8,2,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",7.5F) });
+            trkAnimationLabBackground = new TrackBar { Width=110,Height=28,Minimum=0,Maximum=100,Value=24,TickStyle=TickStyle.None,Margin=new Padding(0,1,3,0) }; trkAnimationLabBackground.Scroll += trkAnimationLabBackground_Scroll; labToolbar.Controls.Add(trkAnimationLabBackground);
+            tabLaboratory.Controls.Add(labToolbar);
 
-            lblAnimationSkeleton = new Label { Text="BIN: nenhum skeleton carregado",Left=8,Top=108,Width=334,Height=20,ForeColor=TextMuted,AutoEllipsis=true,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right }; tabSkeleton.Controls.Add(lblAnimationSkeleton);
-            animationSkeletonViewport = new AnimationSkeletonViewport { Left=8,Top=130,Width=334,Height=198,Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right }; animationSkeletonViewport.SelectedBoneChanged += animationSkeletonViewport_SelectedBoneChanged; tabSkeleton.Controls.Add(animationSkeletonViewport);
+            lblAnimationLabModel = new Label { Text="Modelo: carregue o em22.dat do Colmillo",Dock=DockStyle.Top,Height=25,Padding=new Padding(9,4,4,0),ForeColor=TextMuted,AutoEllipsis=true }; tabLaboratory.Controls.Add(lblAnimationLabModel); lblAnimationLabModel.BringToFront(); labToolbar.BringToFront();
+            var catalogBar = new Panel { Dock=DockStyle.Top,Height=38,BackColor=Surface2,Padding=new Padding(8,5,8,5) };
+            catalogBar.Controls.Add(new Label { Text="NOME",Left=8,Top=10,Width=48,Height=18,ForeColor=TextMuted });
+            txtAnimationCatalogName = new TextBox { Left=58,Top=6,Width=190,Height=25,BackColor=Surface,ForeColor=TextPrimary,BorderStyle=BorderStyle.FixedSingle,PlaceholderText="Ex.: Caminhando" }; txtAnimationCatalogName.KeyDown += txtAnimationCatalogName_KeyDown; catalogBar.Controls.Add(txtAnimationCatalogName);
+            btnAnimationCatalogSave = new Button { Left=254,Top=4 }; SetupButton(btnAnimationCatalogSave,"SALVAR NOME",Accent,108); btnAnimationCatalogSave.Click += btnAnimationCatalogSave_Click; catalogBar.Controls.Add(btnAnimationCatalogSave);
+            void ResizeAnimationCatalogBar(){int buttonWidth=108;btnAnimationCatalogSave.SetBounds(Math.Max(154,catalogBar.ClientSize.Width-buttonWidth-8),4,buttonWidth,29);txtAnimationCatalogName.Width=Math.Max(80,btnAnimationCatalogSave.Left-txtAnimationCatalogName.Left-7);}
+            catalogBar.Resize += (_,_) => ResizeAnimationCatalogBar(); ResizeAnimationCatalogBar();
+            tabLaboratory.Controls.Add(catalogBar);
+            var labPlayback = new Panel { Dock=DockStyle.Bottom,Height=72,BackColor=Surface2,Padding=new Padding(8,5,8,4) }; tabLaboratory.Controls.Add(labPlayback);
+            btnAnimationLabPlay = new Button { Left=8,Top=5 }; SetupButton(btnAnimationLabPlay,"PLAY",Accent,72); btnAnimationLabPlay.Click += btnAnimationPlay_Click; labPlayback.Controls.Add(btnAnimationLabPlay);
+            btnAnimationLabStop = new Button { Left=86,Top=5 }; SetupSecondary(btnAnimationLabStop,"STOP",72); btnAnimationLabStop.Click += btnAnimationStop_Click; labPlayback.Controls.Add(btnAnimationLabStop);
+            lblAnimationLabFrame = new Label { Text="Frame 0 / —",Left=168,Top=12,Width=174,Height=20,TextAlign=ContentAlignment.MiddleRight,ForeColor=TextPrimary,Anchor=AnchorStyles.Top|AnchorStyles.Right }; labPlayback.Controls.Add(lblAnimationLabFrame);
+            trkAnimationLabFrame = new TrackBar { Left=8,Top=36,Width=334,Height=30,Minimum=0,Maximum=1,TickStyle=TickStyle.None,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right }; trkAnimationLabFrame.Scroll += trkAnimationLabFrame_Scroll; labPlayback.Controls.Add(trkAnimationLabFrame);
+            animationLabViewport = new ScenarioViewport { Dock=DockStyle.Fill,ScenarioVisible=false,AevVisible=false,ObjectsVisible=false,EnemiesVisible=true,ShowEnemyLabels=false,RenderMode=ScenarioRenderMode.Solid,BackgroundBrightness=24 }; tabLaboratory.Controls.Add(animationLabViewport); animationLabViewport.BringToFront(); catalogBar.BringToFront(); lblAnimationLabModel.BringToFront(); labToolbar.BringToFront(); labPlayback.BringToFront();
 
-            var boneDebugPanel = new Panel { Left=8,Top=334,Width=334,Height=116,BackColor=Surface2,Anchor=AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right }; tabSkeleton.Controls.Add(boneDebugPanel);
-            chkAnimationBoneIds = new CheckBox { Text="IDs",Left=8,Top=6,Width=48,Height=22,ForeColor=TextPrimary,BackColor=Color.Transparent }; chkAnimationBoneIds.CheckedChanged += chkAnimationBoneIds_CheckedChanged; boneDebugPanel.Controls.Add(chkAnimationBoneIds);
-            chkAnimationRestPose = new CheckBox { Text="Pose base",Left=58,Top=6,Width=82,Height=22,ForeColor=TextPrimary,BackColor=Color.Transparent }; chkAnimationRestPose.CheckedChanged += chkAnimationRestPose_CheckedChanged; boneDebugPanel.Controls.Add(chkAnimationRestPose);
-            cmbAnimationBones = new ComboBox { Left=146,Top=4,Width=180,Height=25,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right }; cmbAnimationBones.SelectedIndexChanged += cmbAnimationBones_SelectedIndexChanged; boneDebugPanel.Controls.Add(cmbAnimationBones);
-            lblAnimationBoneDebug = new Label { Text="Clique em um joint ou selecione um bone acima.",Left=8,Top=32,Width=318,Height=80,ForeColor=TextMuted,AutoEllipsis=true,Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right }; boneDebugPanel.Controls.Add(lblAnimationBoneDebug);
-            tabSkeleton.Controls.Add(new Label { Text="PLAY: 30 FPS • loop automático • LMB: bone • RMB: orbitar • Scroll: zoom",Left=8,Top=454,Width=334,Height=20,ForeColor=TextMuted,Anchor=AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right });
-
-            // O Skeleton 3D usa toda a largura disponível. A grade de tracks continua no layout
+            // O Laboratório 3D usa toda a largura disponível. A grade de tracks continua no layout
             // dividido apenas enquanto o Inspector está selecionado. Isso deixa o GL viewport
             // realmente grande, em vez de espremido na coluna da direita.
             void ResizeAnimationLayout()
             {
                 int width = Math.Max(760, pnlAnimations.ClientSize.Width);
                 int height = Math.Max(300, pnlAnimations.ClientSize.Height - 194);
-                bool skeletonMode = tabAnimationView != null && tabAnimationView.SelectedIndex == 1;
-                if (skeletonMode)
+                bool viewerMode = tabAnimationView != null && tabAnimationView.SelectedIndex != 0;
+                if (viewerMode)
                 {
                     left.Visible = false;
                     right.SetBounds(0, 194, width, height);
@@ -526,25 +544,81 @@
             ResizeAnimationLayout();
         }
 
+        private void BuildSoundsDesigner()
+        {
+            AddPageHeader(pnlSounds, "Sons", "Explore, ouça, exporte e substitua bancos SND e áudio VAG do PlayStation 2.");
+            var source = Card(0, 70, 980, 112); source.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; pnlSounds.Controls.Add(source);
+            source.Controls.Add(new Label { Text = "BANCO SND", Left = 14, Top = 10, Width = 120, Height = 18, ForeColor = TextMuted });
+            cmbSoundFiles = new ComboBox { Left = 14, Top = 31, Width = 438, Height = 30, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextPrimary, FlatStyle = FlatStyle.Flat }; cmbSoundFiles.SelectedIndexChanged += cmbSoundFiles_SelectedIndexChanged; source.Controls.Add(cmbSoundFiles);
+            btnSoundRefresh = new Button { Left = 464, Top = 29 }; SetupSecondary(btnSoundRefresh, "ATUALIZAR", 104); btnSoundRefresh.Click += btnSoundRefresh_Click; source.Controls.Add(btnSoundRefresh);
+            btnSoundBrowse = new Button { Left = 580, Top = 29 }; SetupButton(btnSoundBrowse, "ABRIR SND", Accent, 112); btnSoundBrowse.Click += btnSoundBrowse_Click; source.Controls.Add(btnSoundBrowse);
+            btnSoundSave = new Button { Left = 704, Top = 29, Enabled = false }; SetupButton(btnSoundSave, "SALVAR SND", Color.FromArgb(36, 130, 92), 120); btnSoundSave.Click += btnSoundSave_Click; source.Controls.Add(btnSoundSave);
+            btnSoundRestore = new Button { Left = 836, Top = 29, Enabled = false }; SetupSecondary(btnSoundRestore, "RESTAURAR ORIGINAL", 144); btnSoundRestore.Click += btnSoundRestore_Click; source.Controls.Add(btnSoundRestore);
+            lblSoundFile = new Label { Text = "Nenhum banco aberto", Left = 14, Top = 72, Width = 260, Height = 20, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 9F) }; source.Controls.Add(lblSoundFile);
+            lblSoundSummary = new Label { Text = "Grupos: —    Áudios: —", Left = 280, Top = 72, Width = 680, Height = 20, ForeColor = TextMuted, AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; source.Controls.Add(lblSoundSummary);
+
+            var body = new SplitContainer { Left = 0, Top = 194, Width = 980, Height = 508, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, SplitterDistance = 625, SplitterWidth = 12, BackColor = Bg, FixedPanel = FixedPanel.Panel2 }; pnlSounds.Controls.Add(body);
+            body.Panel1.BackColor = Surface; body.Panel1.Padding = new Padding(14); body.Panel2.BackColor = Surface; body.Panel2.Padding = new Padding(14);
+            var groupBar = new Panel { Left = 14, Top = 14, Width = 583, Height = 82, BackColor = Surface, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; body.Panel1.Controls.Add(groupBar);
+            groupBar.Controls.Add(new Label { Text = "GRUPO", Left = 0, Top = 9, Width = 52, Height = 20, ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8F) });
+            cmbSoundGroups = new ComboBox { Left = 58, Top = 5, Width = 220, Height = 28, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextPrimary, FlatStyle = FlatStyle.Flat }; cmbSoundGroups.SelectedIndexChanged += cmbSoundGroups_SelectedIndexChanged; groupBar.Controls.Add(cmbSoundGroups);
+            btnSoundExportAllWav = new Button { Left = 0, Top = 43 }; SetupSecondary(btnSoundExportAllWav, "TODAS WAV", 102); btnSoundExportAllWav.Height = 30; btnSoundExportAllWav.Click += btnSoundExportAllWav_Click; groupBar.Controls.Add(btnSoundExportAllWav);
+            btnSoundExportAllVag = new Button { Left = 110, Top = 43 }; SetupSecondary(btnSoundExportAllVag, "TODAS VAG", 102); btnSoundExportAllVag.Height = 30; btnSoundExportAllVag.Click += btnSoundExportAllVag_Click; groupBar.Controls.Add(btnSoundExportAllVag);
+            btnSoundImportFolder = new Button { Left = 220, Top = 43 }; SetupSecondary(btnSoundImportFolder, "IMPORTAR PASTA", 134); btnSoundImportFolder.Height = 30; btnSoundImportFolder.Click += btnSoundImportFolder_Click; groupBar.Controls.Add(btnSoundImportFolder);
+            btnSoundZeroSelected = new Button { Left = 362, Top = 43 }; SetupSecondary(btnSoundZeroSelected, "ZERAR SELEÇÃO", 126); btnSoundZeroSelected.Height = 30; btnSoundZeroSelected.Click += soundZeroMenu_Click; groupBar.Controls.Add(btnSoundZeroSelected);
+            gridSoundSamples = new DataGridView { Left = 14, Top = 96, Width = 583, Height = 384, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, BackgroundColor = Surface, ForeColor = TextPrimary, GridColor = Border, BorderStyle = BorderStyle.None, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToResizeRows = false, RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill };
+            gridSoundSamples.ColumnHeadersDefaultCellStyle.BackColor = Surface2; gridSoundSamples.ColumnHeadersDefaultCellStyle.ForeColor = TextPrimary; gridSoundSamples.EnableHeadersVisualStyles = false; gridSoundSamples.DefaultCellStyle.BackColor = Surface; gridSoundSamples.DefaultCellStyle.ForeColor = TextPrimary; gridSoundSamples.DefaultCellStyle.SelectionBackColor = Color.FromArgb(55, 38, 41); gridSoundSamples.DefaultCellStyle.SelectionForeColor = TextPrimary;
+            var favoriteColumn = new DataGridViewButtonColumn { Name = "Favorite", HeaderText = "★", Width = 38, AutoSizeMode = DataGridViewAutoSizeColumnMode.None, FlatStyle = FlatStyle.Flat, SortMode = DataGridViewColumnSortMode.Automatic, ToolTipText = "Ordenar por favoritos" }; gridSoundSamples.Columns.Add(favoriteColumn);
+            var playColumn = new DataGridViewButtonColumn { Name = "Play", HeaderText = "", Text = "▶", UseColumnTextForButtonValue = true, Width = 38, AutoSizeMode = DataGridViewAutoSizeColumnMode.None, FlatStyle = FlatStyle.Flat }; gridSoundSamples.Columns.Add(playColumn);
+            gridSoundSamples.Columns.Add("Index", "Faixa"); gridSoundSamples.Columns.Add("Duration", "Duração"); gridSoundSamples.Columns.Add("Rate", "Frequência"); gridSoundSamples.Columns.Add("Size", "Tamanho"); gridSoundSamples.Columns.Add("Loop", "Loop"); gridSoundSamples.Columns.Add("Note", "Anotação"); gridSoundSamples.Columns.Add("State", "Estado"); gridSoundSamples.SelectionChanged += gridSoundSamples_SelectionChanged; gridSoundSamples.CellContentClick += gridSoundSamples_CellContentClick; gridSoundSamples.CellDoubleClick += gridSoundSamples_CellDoubleClick; gridSoundSamples.SortCompare += gridSoundSamples_SortCompare; body.Panel1.Controls.Add(gridSoundSamples);
+            var soundMenu = new ContextMenuStrip(components) { BackColor = Surface2, ForeColor = TextPrimary, ShowImageMargin = false };
+            var soundReplaceMenu = new ToolStripMenuItem("Substituir por WAV/VAG") { ForeColor = TextPrimary }; soundReplaceMenu.Click += btnSoundReplace_Click;
+            var soundExportWavMenu = new ToolStripMenuItem("Exportar WAV") { ForeColor = TextPrimary }; soundExportWavMenu.Click += btnSoundExportWav_Click;
+            var soundExportVagMenu = new ToolStripMenuItem("Exportar VAG") { ForeColor = TextPrimary }; soundExportVagMenu.Click += btnSoundExportVag_Click;
+            var soundFavoriteMenu = new ToolStripMenuItem("Alternar favorito") { ForeColor = TextPrimary }; soundFavoriteMenu.Click += soundFavoriteMenu_Click;
+            var soundNoteMenu = new ToolStripMenuItem("Editar anotação...") { ForeColor = TextPrimary }; soundNoteMenu.Click += soundNoteMenu_Click;
+            var soundZeroMenu = new ToolStripMenuItem("Zerar") { ForeColor = TextPrimary }; soundZeroMenu.Click += soundZeroMenu_Click;
+            soundMenu.Items.Add(soundReplaceMenu); soundMenu.Items.Add(new ToolStripSeparator()); soundMenu.Items.Add(soundExportWavMenu); soundMenu.Items.Add(soundExportVagMenu); soundMenu.Items.Add(new ToolStripSeparator()); soundMenu.Items.Add(soundFavoriteMenu); soundMenu.Items.Add(soundNoteMenu); soundMenu.Items.Add(new ToolStripSeparator()); soundMenu.Items.Add(soundZeroMenu); gridSoundSamples.ContextMenuStrip = soundMenu;
+            soundMenu.Opening += (_, e) => e.Cancel = gridSoundSamples.SelectedRows.Count == 0;
+            gridSoundSamples.MouseDown += gridSoundSamples_MouseDown;
+
+            var right = body.Panel2;
+            right.Controls.Add(new Label { Text = "FAIXA SELECIONADA", Left = 14, Top = 14, Width = 220, Height = 20, ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8.5F) });
+            lblSoundSelection = new Label { Text = "Selecione um áudio à esquerda", Left = 14, Top = 41, Width = 292, Height = 54, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 11F), AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; right.Controls.Add(lblSoundSelection);
+            var preview = new Panel { Left = 14, Top = 102, Width = 292, Height = 132, BackColor = Surface2, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; right.Controls.Add(preview);
+            preview.Controls.Add(new Label { Text = "PRÉVIA PCM", Left = 12, Top = 10, Width = 100, Height = 18, ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8F) });
+            trkSoundPosition = new TrackBar { Left = 8, Top = 32, Width = 276, Height = 45, Minimum = 0, Maximum = 1000, TickStyle = TickStyle.None, Enabled = false, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; preview.Controls.Add(trkSoundPosition);
+            btnSoundPlay = new Button { Left = 12, Top = 86 }; SetupButton(btnSoundPlay, "PLAY", Accent, 88); btnSoundPlay.Click += btnSoundPlay_Click; preview.Controls.Add(btnSoundPlay);
+            btnSoundStop = new Button { Left = 108, Top = 86 }; SetupSecondary(btnSoundStop, "STOP", 88); btnSoundStop.Click += btnSoundStop_Click; preview.Controls.Add(btnSoundStop);
+            right.Controls.Add(new Label { Text = "EXPORTAR", Left = 14, Top = 256, Width = 100, Height = 20, ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8.5F) });
+            btnSoundExportWav = new Button { Left = 14, Top = 282 }; SetupSecondary(btnSoundExportWav, "EXPORTAR WAV", 141); btnSoundExportWav.Click += btnSoundExportWav_Click; right.Controls.Add(btnSoundExportWav);
+            btnSoundExportVag = new Button { Left = 165, Top = 282 }; SetupSecondary(btnSoundExportVag, "EXPORTAR VAG", 141); btnSoundExportVag.Click += btnSoundExportVag_Click; right.Controls.Add(btnSoundExportVag);
+            right.Controls.Add(new Label { Text = "EDIÇÃO", Left = 14, Top = 342, Width = 100, Height = 20, ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8.5F) });
+            btnSoundReplace = new Button { Left = 14, Top = 368 }; SetupButton(btnSoundReplace, "SUBSTITUIR POR WAV / VAG", Accent, 292); btnSoundReplace.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; btnSoundReplace.Click += btnSoundReplace_Click; right.Controls.Add(btnSoundReplace);
+            lblSoundStatus = new Label { Text = "Abra um SND para começar.", Left = 14, Top = 424, Width = 292, Height = 64, ForeColor = TextMuted, AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right }; right.Controls.Add(lblSoundStatus);
+            void ResizeSoundLayout() { source.Width = Math.Max(760, pnlSounds.ClientSize.Width); body.Width = source.Width; body.Height = Math.Max(300, pnlSounds.ClientSize.Height - 194); body.SplitterDistance = Math.Max(430, body.Width - 355); }
+            pnlSounds.Resize += (_, _) => ResizeSoundLayout(); ResizeSoundLayout();
+        }
+
         private void BuildBuildDesigner()
         {
-            AddPageHeader(pnlBuild, "Build & Test", "Build automático do DAT, injeção na ISO e suporte a vários cenários modificados.");
+            AddPageHeader(pnlBuild, "Build & Test", "Compile e injete DATs ou qualquer arquivo modificado do AFS na ISO de teste.");
             var hero = Card(0, 70, 882, 92); pnlBuild.Controls.Add(hero);
             lblBuildChangeStatus = new Label { UseMnemonic = false, Text = "Verificando alterações...", Left = 16, Top = 12, Width = 505, Height = 34, ForeColor = TextMuted, AutoEllipsis = true }; hero.Controls.Add(lblBuildChangeStatus);
-            hero.Controls.Add(new Label { UseMnemonic = false, Text = "Build & Test compila somente o DAT ativo e abre o PCSX2.", Left = 16, Top = 52, Width = 505, Height = 20, ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F) });
+            hero.Controls.Add(new Label { UseMnemonic = false, Text = "Selecione arquivos na tabela ou use o arquivo ativo; ao concluir, o PCSX2 será aberto.", Left = 16, Top = 52, Width = 505, Height = 20, ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F) });
             btnBuildRefreshChanges = new Button { Left = 530, Top = 28 }; SetupSecondary(btnBuildRefreshChanges, "ATUALIZAR", 112); btnBuildRefreshChanges.Click += btnBuildRefreshChanges_Click; hero.Controls.Add(btnBuildRefreshChanges);
-            btnBuildOneClick = new Button { Left = 654, Top = 15 }; SetupButton(btnBuildOneClick, "BUILD & TEST\r\nDAT ATIVO", Accent, 204); btnBuildOneClick.Height = 60; btnBuildOneClick.Click += btnBuildOneClick_Click; hero.Controls.Add(btnBuildOneClick);
+            btnBuildOneClick = new Button { Left = 654, Top = 15 }; SetupButton(btnBuildOneClick, "BUILD & TEST\r\nSELEÇÃO / ATIVO", Accent, 204); btnBuildOneClick.Height = 60; btnBuildOneClick.Click += btnBuildOneClick_Click; hero.Controls.Add(btnBuildOneClick);
 
             pnlBuildBusy = new Panel { Left = 0, Top = 70, Width = 882, Height = 92, BackColor = Surface2, Visible = false, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
             lblBuildBusy = new Label { UseMnemonic = false, Text = "Processando...", Left = 18, Top = 17, Width = 840, Height = 25, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 11F), AutoEllipsis = true };
             progressBuildBusy = new ProgressBar { Left = 18, Top = 53, Width = 840, Height = 12, Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 24 };
             pnlBuildBusy.Controls.Add(lblBuildBusy); pnlBuildBusy.Controls.Add(progressBuildBusy); pnlBuild.Controls.Add(pnlBuildBusy);
 
-            lblTrackedDatsSummary = new Label { UseMnemonic = false, Text = "Carregando DATs...", Left = 0, Top = 178, Width = 570, Height = 24, ForeColor = TextMuted }; pnlBuild.Controls.Add(lblTrackedDatsSummary);
+            lblTrackedDatsSummary = new Label { UseMnemonic = false, Text = "Carregando arquivos...", Left = 0, Top = 178, Width = 570, Height = 24, ForeColor = TextMuted }; pnlBuild.Controls.Add(lblTrackedDatsSummary);
             btnBuildRefreshTracked = new Button { Left = 600, Top = 172 }; SetupSecondary(btnBuildRefreshTracked, "ATUALIZAR LISTA", 130); btnBuildRefreshTracked.Click += btnBuildRefreshTracked_Click; pnlBuild.Controls.Add(btnBuildRefreshTracked);
             btnBuildAll = new Button { Left = 742, Top = 166 }; SetupButton(btnBuildAll, "BUILD ALL\r\nTODOS", Accent, 140); btnBuildAll.Height = 42; btnBuildAll.Click += btnBuildAll_Click; pnlBuild.Controls.Add(btnBuildAll);
-            lvTrackedDats = new ListView { Left = 0, Top = 212, Width = 882, Height = 190, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, View = View.Details, FullRowSelect = true, HideSelection = false, BackColor = Surface, ForeColor = Color.FromArgb(220, 223, 230), BorderStyle = BorderStyle.None, Font = new Font("Segoe UI", 9F) };
-            lvTrackedDats.Columns.Add("DAT", 175); lvTrackedDats.Columns.Add("Estado", 190); lvTrackedDats.Columns.Add("Arquivos", 90); lvTrackedDats.Columns.Add("TPLs", 70); lvTrackedDats.Columns.Add("Último build", 170); lvTrackedDats.DoubleClick += lvTrackedDats_DoubleClick; pnlBuild.Controls.Add(lvTrackedDats);
+            lvTrackedDats = new ListView { Left = 0, Top = 212, Width = 882, Height = 190, Anchor = AnchorStyles.Top | AnchorStyles.Left, View = View.Details, FullRowSelect = true, MultiSelect = true, HideSelection = false, BackColor = Surface, ForeColor = Color.FromArgb(220, 223, 230), BorderStyle = BorderStyle.None, Font = new Font("Segoe UI", 9F) };
+            lvTrackedDats.Columns.Add("Arquivo", 185); lvTrackedDats.Columns.Add("Tipo / origem", 165); lvTrackedDats.Columns.Add("Estado", 185); lvTrackedDats.Columns.Add("Alterações", 100); lvTrackedDats.Columns.Add("Último build", 165); lvTrackedDats.SelectedIndexChanged += lvTrackedDats_SelectedIndexChanged; lvTrackedDats.DoubleClick += lvTrackedDats_DoubleClick; pnlBuild.Controls.Add(lvTrackedDats);
 
             var actions = Card(0, 414, 882, 126); pnlBuild.Controls.Add(actions);
             lblBuildActiveDat = new Label { Text = "DAT ativo: nenhum", Left = 14, Top = 12, Width = 420, Height = 22, Font = new Font("Segoe UI Semibold", 9.5F) }; actions.Controls.Add(lblBuildActiveDat);
@@ -577,6 +651,12 @@
             cmbVisualRenderMode.SelectedIndexChanged += cmbVisualRenderMode_SelectedIndexChanged;
             toolbar.Controls.Add(cmbVisualRenderMode);
 
+            btnVisualEditCns = new Button { Left = 370, Top = 10, Height = 24, Enabled = false };
+            SetupButton(btnVisualEditCns, "EDITAR CNS", Accent, 116);
+            btnVisualEditCns.Height = 24;
+            btnVisualEditCns.Click += btnVisualEditCns_Click;
+            toolbar.Controls.Add(btnVisualEditCns);
+
             // Kept as non-visual state holders because the save routines also use
             // their Enabled/Text state. Saving is exposed exclusively through Ctrl+S.
             btnVisualFit = new Button();
@@ -584,9 +664,9 @@
             btnVisualSaveEsl = new Button { Enabled=false, Text="SAVE ESL" };
             btnVisualSaveEts = new Button { Enabled=false, Text="SAVE ETS" };
 
-            lblVisualStage = new Label { Text = "Nenhum DAT ativo", Left = 374, Top = 13, Width = 160, Height = 20, ForeColor = TextMuted, AutoEllipsis = true };
+            lblVisualStage = new Label { Text = "Nenhum DAT ativo", Left = 496, Top = 13, Width = 126, Height = 20, ForeColor = TextMuted, AutoEllipsis = true };
             toolbar.Controls.Add(lblVisualStage);
-            lblVisualStatus = new Label { UseMnemonic = false, Text = "v0.6.0 • Visual Editor", Left = 540, Top = 10, Width = 330, Height = 27, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right, AutoEllipsis = false };
+            lblVisualStatus = new Label { UseMnemonic = false, Text = "v0.7.0 • Visual Editor", Left = 628, Top = 10, Width = 242, Height = 27, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right, AutoEllipsis = false };
             toolbar.Controls.Add(lblVisualStatus);
 
             lblVisualMoveSpeed = new Label(); trkVisualMoveSpeed = new TrackBar { Minimum=10, Maximum=300, Value=100 };
@@ -623,8 +703,8 @@
             pnlVisualEditor.Resize += (_, _) => ResizeVisualEditor();
 
             var layersTitle = new Label { Text = "LAYERS", Dock = DockStyle.Top, Height = 34, Padding = new Padding(12, 10, 0, 0), ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8.5F) };
-            clbVisualLayers = new CheckedListBox { Dock = DockStyle.Top, Height = 140, BackColor = Surface, ForeColor = TextPrimary, BorderStyle = BorderStyle.None, CheckOnClick = true, Font = new Font("Segoe UI", 9.5F), Padding = new Padding(8) };
-            clbVisualLayers.Items.Add("Scenario", true); clbVisualLayers.Items.Add("AEV Events", true); clbVisualLayers.Items.Add("Enemies", false); clbVisualLayers.Items.Add("Objects", false); clbVisualLayers.Items.Add("Collision", false); clbVisualLayers.Items.Add("Lighting", true); clbVisualLayers.Items.Add("Effects", true); clbVisualLayers.Items.Add("RTP Routes", true); clbVisualLayers.Items.Add("CAM Cameras", true); clbVisualLayers.ItemCheck += clbVisualLayers_ItemCheck;
+            clbVisualLayers = new CheckedListBox { Dock = DockStyle.Top, Height = 165, BackColor = Surface, ForeColor = TextPrimary, BorderStyle = BorderStyle.None, CheckOnClick = true, Font = new Font("Segoe UI", 9.5F), Padding = new Padding(8) };
+            clbVisualLayers.Items.Add("Scenario", true); clbVisualLayers.Items.Add("AEV Events", true); clbVisualLayers.Items.Add("Enemies", false); clbVisualLayers.Items.Add("Objects", false); clbVisualLayers.Items.Add("Collision", false); clbVisualLayers.Items.Add("Lighting", true); clbVisualLayers.Items.Add("Effects", true); clbVisualLayers.Items.Add("RTP Routes", true); clbVisualLayers.Items.Add("CAM Cameras", true); clbVisualLayers.Items.Add("ITA Items", true); clbVisualLayers.Items.Add("Sound ESE/FSE", false); clbVisualLayers.ItemCheck += clbVisualLayers_ItemCheck;
 
             tabVisualEntities = new TabControl { Dock = DockStyle.Fill, Appearance = TabAppearance.Normal, BackColor = Surface, ForeColor = TextPrimary, Padding = new Point(10, 4) };
             var tabAev = new TabPage("AEV") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
@@ -636,17 +716,20 @@
             var tabEff = new TabPage("EFEITOS") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
             tabVisualRtp = new TabPage("RTP") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
             var tabCam = new TabPage("CAM") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
-            tabVisualEntities.TabPages.Add(tabAev); tabVisualEntities.TabPages.Add(tabEnemies); tabVisualEntities.TabPages.Add(tabObjects); tabVisualEntities.TabPages.Add(tabCollision); tabVisualEntities.TabPages.Add(tabSmd); tabVisualEntities.TabPages.Add(tabLit); tabVisualEntities.TabPages.Add(tabEff); tabVisualEntities.TabPages.Add(tabVisualRtp); tabVisualEntities.TabPages.Add(tabCam);
+            var tabIta = new TabPage("ITENS") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
+            var tabSound = new TabPage("SOM") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
+            tabVisualEntities.TabPages.Add(tabAev); tabVisualEntities.TabPages.Add(tabEnemies); tabVisualEntities.TabPages.Add(tabObjects); tabVisualEntities.TabPages.Add(tabCollision); tabVisualEntities.TabPages.Add(tabSmd); tabVisualEntities.TabPages.Add(tabLit); tabVisualEntities.TabPages.Add(tabEff); tabVisualEntities.TabPages.Add(tabVisualRtp); tabVisualEntities.TabPages.Add(tabCam); tabVisualEntities.TabPages.Add(tabIta); tabVisualEntities.TabPages.Add(tabSound);
             tabVisualEntities.SelectedIndexChanged += tabVisualEntities_SelectedIndexChanged;
 
-            var rtpHint=new Label{Text="WAYPOINTS • Ctrl+D duplica • Ctrl+Shift+D cria filho • Del exclui",Dock=DockStyle.Top,Height=44,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
-            lstVisualRtpNodes=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false};
+            var rtpHint=new Label{Text="WAYPOINTS • Ctrl+clique seleciona 2 • Ctrl+L conecta",Dock=DockStyle.Top,Height=44,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
+            lstVisualRtpNodes=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false,SelectionMode=SelectionMode.MultiExtended};
             lstVisualRtpNodes.SelectedIndexChanged+=lstVisualRtpNodes_SelectedIndexChanged;lstVisualRtpNodes.KeyDown+=lstVisualRtpNodes_KeyDown;
             tabVisualRtp.Controls.Add(lstVisualRtpNodes);tabVisualRtp.Controls.Add(rtpHint);
-            var rtpBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
+            var rtpBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=40,BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
             var btnRtpDuplicate=new Button();SetupButton(btnRtpDuplicate,"DUPLICAR",Surface2,82);btnRtpDuplicate.Click+=(_,_)=>DuplicateSelectedRtpNode();
             var btnRtpChild=new Button();SetupButton(btnRtpChild,"+ FILHO",Surface2,72);btnRtpChild.Click+=(_,_)=>CreateChildRtpNode();
-            var btnRtpDelete=new Button();SetupButton(btnRtpDelete,"EXCLUIR",Surface2,72);btnRtpDelete.Click+=(_,_)=>DeleteSelectedRtpNode();rtpBar.Controls.Add(btnRtpDuplicate);rtpBar.Controls.Add(btnRtpChild);rtpBar.Controls.Add(btnRtpDelete);
+            var btnRtpConnect=new Button();SetupButton(btnRtpConnect,"CONECTAR",Accent,82);btnRtpConnect.Click+=(_,_)=>ConnectSelectedRtpNodes();
+            var btnRtpDelete=new Button();SetupButton(btnRtpDelete,"EXCLUIR",Surface2,72);btnRtpDelete.Click+=(_,_)=>DeleteSelectedRtpNode();rtpBar.Controls.Add(btnRtpConnect);rtpBar.Controls.Add(btnRtpDuplicate);rtpBar.Controls.Add(btnRtpChild);rtpBar.Controls.Add(btnRtpDelete);tabVisualRtp.Controls.Add(rtpBar);
 
             var camHint=new Label{Text="CAM • F foca • 1 mover • 2 escala • 3 vértice • 4 face • 5 frame",Dock=DockStyle.Top,Height=42,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
             var camSplit=new SplitContainer{Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=190,BackColor=Border};
@@ -655,6 +738,34 @@
             var camBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=136,BackColor=Surface,Padding=new Padding(5,5,2,2),WrapContents=true};btnVisualAddCam=new Button();SetupButton(btnVisualAddCam,"+ ADD CAMERA",Accent,116);btnVisualAddCam.Height=28;btnVisualAddCam.Enabled=false;btnVisualAddCam.Click+=btnVisualAddCam_Click;btnVisualCamMove=new Button();SetupButton(btnVisualCamMove,"MOVE (1)",Accent,72);btnVisualCamMove.Height=28;btnVisualCamMove.Click+=(_,_)=>SetCamGizmoMode(CamGizmoMode.Move);btnVisualCamScale=new Button();SetupButton(btnVisualCamScale,"SCALE (2)",Surface2,76);btnVisualCamScale.Height=28;btnVisualCamScale.Click+=(_,_)=>SetCamGizmoMode(CamGizmoMode.Scale);btnVisualCamVertex=new Button();SetupButton(btnVisualCamVertex,"VERTEX (3)",Surface2,82);btnVisualCamVertex.Height=28;btnVisualCamVertex.Click+=(_,_)=>SetCamGizmoMode(CamGizmoMode.Vertex);btnVisualCamFace=new Button();SetupButton(btnVisualCamFace,"FACE (4)",Surface2,72);btnVisualCamFace.Height=28;btnVisualCamFace.Click+=(_,_)=>SetCamGizmoMode(CamGizmoMode.Face);btnVisualCamFrame=new Button();SetupButton(btnVisualCamFrame,"FRAME (5)",Surface2,84);btnVisualCamFrame.Height=28;btnVisualCamFrame.Click+=(_,_)=>SetCamGizmoMode(CamGizmoMode.Frame);btnVisualCamPreview=new Button();SetupButton(btnVisualCamPreview,"PREVIEW CAMERA",Color.FromArgb(34,110,150),126);btnVisualCamPreview.Height=28;btnVisualCamPreview.Click+=btnVisualCamPreview_Click;btnVisualCamCapture=new Button();SetupButton(btnVisualCamCapture,"FRAME ← VIEW",Color.FromArgb(36,130,92),116);btnVisualCamCapture.Height=28;btnVisualCamCapture.Click+=btnVisualCamCapture_Click;btnVisualCamPosition=new Button();SetupButton(btnVisualCamPosition,"EDIT POSITION",Surface2,104);btnVisualCamPosition.Height=28;btnVisualCamPosition.Click+=(_,_)=>SelectVisualCamFramePoint(false);btnVisualCamTarget=new Button();SetupButton(btnVisualCamTarget,"EDIT TARGET",Surface2,96);btnVisualCamTarget.Height=28;btnVisualCamTarget.Click+=(_,_)=>SelectVisualCamFramePoint(true);camBar.Controls.Add(btnVisualAddCam);camBar.Controls.Add(btnVisualCamMove);camBar.Controls.Add(btnVisualCamScale);camBar.Controls.Add(btnVisualCamVertex);camBar.Controls.Add(btnVisualCamFace);camBar.Controls.Add(btnVisualCamFrame);camBar.Controls.Add(btnVisualCamPreview);camBar.Controls.Add(btnVisualCamCapture);camBar.Controls.Add(btnVisualCamPosition);camBar.Controls.Add(btnVisualCamTarget);
             camSplit.Panel1.Controls.Add(lstVisualCamEntries);camSplit.Panel2.Controls.Add(lstVisualCamParts);tabCam.Controls.Add(camSplit);tabCam.Controls.Add(camHint);
             var camMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var duplicateCam=new ToolStripMenuItem("Duplicar camera");duplicateCam.Click+=(_,_)=>DuplicateSelectedCam();var deleteCam=new ToolStripMenuItem("Deletar camera");deleteCam.Click+=(_,_)=>DeleteSelectedCam();camMenu.Items.Add(duplicateCam);camMenu.Items.Add(deleteCam);camMenu.Opening+=(_,_)=>{bool selected=lstVisualCamEntries.SelectedItem!=null;duplicateCam.Enabled=selected;deleteCam.Enabled=selected&&lstVisualCamEntries.Items.Count>1;};lstVisualCamEntries.ContextMenuStrip=camMenu;
+
+            var itaHint=new Label{Text="ITA • F foca • G move • R gira • Ctrl+D duplica • Del exclui",Dock=DockStyle.Top,Height=42,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
+            lstVisualItaEntries=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false};
+            lstVisualItaEntries.SelectedIndexChanged+=lstVisualItaEntries_SelectedIndexChanged;lstVisualItaEntries.KeyDown+=lstVisualItaEntries_KeyDown;
+            tabIta.Controls.Add(lstVisualItaEntries);tabIta.Controls.Add(itaHint);
+            var itaBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
+            var btnItaMove=new Button();SetupButton(btnItaMove,"MOVE (G)",Accent,78);btnItaMove.Click+=(_,_)=>{visualViewport.ItaTransformMode=EtsGizmoMode.Move;visualViewport.RefreshItaGeometry();};
+            var btnItaRotate=new Button();SetupButton(btnItaRotate,"ROTATE (R)",Surface2,88);btnItaRotate.Click+=(_,_)=>{visualViewport.ItaTransformMode=EtsGizmoMode.Rotate;visualViewport.RefreshItaGeometry();};
+            var btnItaDuplicate=new Button();SetupButton(btnItaDuplicate,"DUPLICAR",Surface2,82);btnItaDuplicate.Click+=(_,_)=>DuplicateSelectedIta();
+            var btnItaDelete=new Button();SetupButton(btnItaDelete,"EXCLUIR",Surface2,72);btnItaDelete.Click+=(_,_)=>DeleteSelectedIta();
+            itaBar.Controls.Add(btnItaMove);itaBar.Controls.Add(btnItaRotate);itaBar.Controls.Add(btnItaDuplicate);itaBar.Controls.Add(btnItaDelete);
+
+            tabVisualSound=new TabControl{Dock=DockStyle.Fill,BackColor=Surface,ForeColor=TextPrimary};tabVisualSound.SelectedIndexChanged+=(_,_)=>{bool fse=tabVisualSound.SelectedIndex==1;if(visualViewport!=null){visualViewport.FseEditingEnabled=fse;visualViewport.RefreshSoundGeometry();}if(btnVisualFseMove!=null){btnVisualFseMove.Visible=fse;btnVisualFseVertex.Visible=fse;btnVisualFseFace.Visible=fse;}};
+            var eseTab=new TabPage("ESE • FONTES"){BackColor=Surface,ForeColor=TextPrimary};var fseTab=new TabPage("FSE • ZONAS"){BackColor=Surface,ForeColor=TextPrimary};var dseTab=new TabPage("DSE • PORTAS"){BackColor=Surface,ForeColor=TextPrimary};tabVisualSound.TabPages.Add(eseTab);tabVisualSound.TabPages.Add(fseTab);tabVisualSound.TabPages.Add(dseTab);
+            lstVisualEseEntries=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false};lstVisualEseEntries.SelectedIndexChanged+=lstVisualEseEntries_SelectedIndexChanged;lstVisualEseEntries.KeyDown+=lstVisualEseEntries_KeyDown;
+            lstVisualFseEntries=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false};lstVisualFseEntries.SelectedIndexChanged+=lstVisualFseEntries_SelectedIndexChanged;lstVisualFseEntries.KeyDown+=lstVisualFseEntries_KeyDown;
+            lstVisualDseEntries=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false};lstVisualDseEntries.SelectedIndexChanged+=lstVisualDseEntries_SelectedIndexChanged;lstVisualDseEntries.KeyDown+=lstVisualDseEntries_KeyDown;
+            var soundBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
+            btnVisualFseMove=new Button{Visible=false};SetupButton(btnVisualFseMove,"MOVE (1)",Accent,76);btnVisualFseMove.Click+=(_,_)=>SetFseGizmoMode(FseGizmoMode.Move);
+            btnVisualFseVertex=new Button{Visible=false};SetupButton(btnVisualFseVertex,"VERTEX (2)",Surface2,86);btnVisualFseVertex.Click+=(_,_)=>SetFseGizmoMode(FseGizmoMode.Vertex);
+            btnVisualFseFace=new Button{Visible=false};SetupButton(btnVisualFseFace,"FACE (3)",Surface2,74);btnVisualFseFace.Click+=(_,_)=>SetFseGizmoMode(FseGizmoMode.Face);
+            var btnSoundAdd=new Button();SetupButton(btnSoundAdd,"+ NOVO",Accent,70);btnSoundAdd.Click+=(_,_)=>AddVisualSoundEntry(tabVisualSound.SelectedIndex);
+            var btnSoundDuplicate=new Button();SetupButton(btnSoundDuplicate,"DUPLICAR",Surface2,82);btnSoundDuplicate.Click+=(_,_)=>DuplicateVisualSoundEntry(tabVisualSound.SelectedIndex);
+            var btnSoundDelete=new Button();SetupButton(btnSoundDelete,"EXCLUIR",Surface2,72);btnSoundDelete.Click+=(_,_)=>DeleteVisualSoundEntry(tabVisualSound.SelectedIndex);
+            soundBar.Controls.Add(btnVisualFseMove);soundBar.Controls.Add(btnVisualFseVertex);soundBar.Controls.Add(btnVisualFseFace);soundBar.Controls.Add(btnSoundAdd);soundBar.Controls.Add(btnSoundDuplicate);soundBar.Controls.Add(btnSoundDelete);
+            eseTab.Controls.Add(lstVisualEseEntries);eseTab.Controls.Add(new Label{Text="FONTES SONORAS PONTUAIS • Ctrl+D duplica • Del exclui • Ctrl+S salva tudo",Dock=DockStyle.Top,Height=39,Padding=new Padding(7,7,2,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)});
+            fseTab.Controls.Add(lstVisualFseEntries);fseTab.Controls.Add(new Label{Text="ZONAS DE AMBIENTE • arraste o centro • F foca • Ctrl+S salva tudo",Dock=DockStyle.Top,Height=39,Padding=new Padding(7,7,2,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)});
+            dseTab.Controls.Add(lstVisualDseEntries);dseTab.Controls.Add(new Label{Text="SONS DE TRANSIÇÃO POR PORTA • edite a sala como rXXX e o DoorSE ID nas propriedades • Ctrl+S salva",Dock=DockStyle.Top,Height=52,Padding=new Padding(7,7,2,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)});tabSound.Controls.Add(tabVisualSound);
 
             var collisionTitle = new Label { Text="SAT / EAT INSPECTOR", Dock=DockStyle.Top, Height=27, ForeColor=TextMuted, Font=new Font("Segoe UI Semibold",8.5F), Padding=new Padding(2,6,0,0) };
             chkVisualCollisionSat = new CheckBox { Text="SAT • personagens", Dock=DockStyle.Top, Height=27, Checked=true, ForeColor=Color.FromArgb(255,128,58), BackColor=Surface };
@@ -669,28 +780,25 @@
             cmbVisualCollisionVertex = new ComboBox { Dock=DockStyle.Top, Height=28, DropDownStyle=ComboBoxStyle.DropDownList, BackColor=Surface2, ForeColor=TextPrimary, FlatStyle=FlatStyle.Flat, Enabled=false };
             cmbVisualCollisionVertex.Items.AddRange(new object[]{"V0","V1","V2"}); cmbVisualCollisionVertex.SelectedIndexChanged += cmbVisualCollisionVertex_SelectedIndexChanged;
             var collisionMoveBar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=140,BackColor=Surface,Padding=new Padding(0,3,0,2),WrapContents=true};
-            btnVisualCollisionMoveXZ=new Button();SetupButton(btnVisualCollisionMoveXZ,"MOVE XZ",Accent,78);btnVisualCollisionMoveXZ.Height=28;btnVisualCollisionMoveXZ.Click+=(_,_)=>SetCollisionMoveMode(CollisionVertexMoveMode.Horizontal);
-            btnVisualCollisionMoveY=new Button();SetupButton(btnVisualCollisionMoveY,"MOVE Y",Surface2,72);btnVisualCollisionMoveY.Height=28;btnVisualCollisionMoveY.Click+=(_,_)=>SetCollisionMoveMode(CollisionVertexMoveMode.Vertical);
-            btnVisualCollisionMoveFace=new Button();SetupButton(btnVisualCollisionMoveFace,"REGIÃO",Surface2,72);btnVisualCollisionMoveFace.Height=28;btnVisualCollisionMoveFace.Click+=(_,_)=>ToggleCollisionFaceMove();
+            btnVisualCollisionMoveXZ=new Button();SetupButton(btnVisualCollisionMoveXZ,"VÉRTICE",Accent,78);btnVisualCollisionMoveXZ.Height=28;btnVisualCollisionMoveXZ.Click+=(_,_)=>{if(visualCollisionMoveEdge)ToggleCollisionEdgeMove();if(visualCollisionMoveWholeFace)ToggleCollisionFaceMove();};
+            btnVisualCollisionMoveY=new Button();SetupButton(btnVisualCollisionMoveY,"FACE",Surface2,72);btnVisualCollisionMoveY.Height=28;btnVisualCollisionMoveY.Click+=(_,_)=>{if(visualCollisionMoveEdge)ToggleCollisionEdgeMove();if(!visualCollisionMoveWholeFace)ToggleCollisionFaceMove();};
+            btnVisualCollisionEdge=new Button();SetupButton(btnVisualCollisionEdge,"ARESTA",Surface2,68);btnVisualCollisionEdge.Height=28;btnVisualCollisionEdge.Click+=(_,_)=>ToggleCollisionEdgeMove();
+            btnVisualCollisionMoveFace=new Button();SetupButton(btnVisualCollisionMoveFace,"REGIÃO",Surface2,72);btnVisualCollisionMoveFace.Height=28;btnVisualCollisionMoveFace.Visible=false;btnVisualCollisionMoveFace.Click+=(_,_)=>ToggleCollisionFaceMove();
             btnVisualCollisionMoveSide=new Button();SetupButton(btnVisualCollisionMoveSide,"LADO",Surface2,58);btnVisualCollisionMoveSide.Height=28;btnVisualCollisionMoveSide.Click+=(_,_)=>ToggleCollisionSideMove();
             btnVisualCollisionObject=new Button();SetupButton(btnVisualCollisionObject,"OBJETO",Surface2,68);btnVisualCollisionObject.Height=28;btnVisualCollisionObject.Click+=(_,_)=>ToggleCollisionObjectMove();
-            btnVisualCollisionRotateLeft=new Button();SetupButton(btnVisualCollisionRotateLeft,"ROT -15°",Surface2,76);btnVisualCollisionRotateLeft.Height=28;btnVisualCollisionRotateLeft.Click+=(_,_)=>TransformCollisionObject(-15);
-            btnVisualCollisionRotateRight=new Button();SetupButton(btnVisualCollisionRotateRight,"ROT +15°",Surface2,76);btnVisualCollisionRotateRight.Height=28;btnVisualCollisionRotateRight.Click+=(_,_)=>TransformCollisionObject(15);
+            btnVisualCollisionRotateLeft=new Button();SetupButton(btnVisualCollisionRotateLeft,"MOVER",Accent,70);btnVisualCollisionRotateLeft.Height=28;btnVisualCollisionRotateLeft.Click+=(_,_)=>SetCollisionGizmoMode(CollisionGizmoMode.Move);
+            btnVisualCollisionRotateRight=new Button();SetupButton(btnVisualCollisionRotateRight,"ROTACIONAR",Surface2,94);btnVisualCollisionRotateRight.Height=28;btnVisualCollisionRotateRight.Click+=(_,_)=>SetCollisionGizmoMode(CollisionGizmoMode.Rotate);
             btnVisualCollisionDuplicate=new Button();SetupButton(btnVisualCollisionDuplicate,"DUPLICAR",Surface2,82);btnVisualCollisionDuplicate.Height=28;btnVisualCollisionDuplicate.Click+=btnVisualCollisionDuplicate_Click;
             btnVisualCollisionRemove=new Button();SetupButton(btnVisualCollisionRemove,"EXCLUIR",Surface2,78);btnVisualCollisionRemove.Height=28;btnVisualCollisionRemove.Click+=btnVisualCollisionRemove_Click;
             btnVisualCollisionFlip=new Button();SetupButton(btnVisualCollisionFlip,"INVERTER",Surface2,78);btnVisualCollisionFlip.Height=28;btnVisualCollisionFlip.Click+=(_,_)=>TransformCollisionObject(0,invert:true);
-            btnVisualCollisionCube=new Button();SetupButton(btnVisualCollisionCube,"+ CRIAR",Surface2,72);btnVisualCollisionCube.Height=28;btnVisualCollisionCube.Click+=btnVisualCollisionCube_Click;
+            btnVisualCollisionCube=new Button();SetupButton(btnVisualCollisionCube,"+ CRIAR",Accent,88);btnVisualCollisionCube.Height=28;btnVisualCollisionCube.Click+=btnVisualCollisionCube_Click;
             btnVisualCollisionSave=new Button();SetupButton(btnVisualCollisionSave,"SAVE",Surface2,60);btnVisualCollisionSave.Height=28;btnVisualCollisionSave.Click+=btnVisualCollisionSave_Click;btnVisualCollisionSave.Enabled=false;
-            collisionMoveBar.Controls.Add(btnVisualCollisionMoveXZ);collisionMoveBar.Controls.Add(btnVisualCollisionMoveY);collisionMoveBar.Controls.Add(btnVisualCollisionMoveFace);collisionMoveBar.Controls.Add(btnVisualCollisionMoveSide);collisionMoveBar.Controls.Add(btnVisualCollisionObject);collisionMoveBar.Controls.Add(btnVisualCollisionRotateLeft);collisionMoveBar.Controls.Add(btnVisualCollisionRotateRight);collisionMoveBar.Controls.Add(btnVisualCollisionDuplicate);collisionMoveBar.Controls.Add(btnVisualCollisionRemove);collisionMoveBar.Controls.Add(btnVisualCollisionFlip);collisionMoveBar.Controls.Add(btnVisualCollisionCube);
-            var collisionPrimitiveBar=new FlowLayoutPanel{Dock=DockStyle.Top,Height=34,BackColor=Surface,Padding=new Padding(0,2,0,2),WrapContents=false};
-            cmbVisualCollisionPrimitive=new ComboBox{Width=116,Height=28,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat};cmbVisualCollisionPrimitive.Items.AddRange(new object[]{"Cubo","Parede","Plataforma"});cmbVisualCollisionPrimitive.SelectedIndex=0;
-            cmbVisualCollisionPrimitiveSize=new ComboBox{Width=92,Height=28,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat};cmbVisualCollisionPrimitiveSize.Items.AddRange(new object[]{"2 m","5 m","10 m","20 m"});cmbVisualCollisionPrimitiveSize.SelectedIndex=2;
-            collisionPrimitiveBar.Controls.Add(cmbVisualCollisionPrimitive);collisionPrimitiveBar.Controls.Add(cmbVisualCollisionPrimitiveSize);
+            collisionMoveBar.Controls.Add(btnVisualCollisionMoveXZ);collisionMoveBar.Controls.Add(btnVisualCollisionMoveY);collisionMoveBar.Controls.Add(btnVisualCollisionEdge);collisionMoveBar.Controls.Add(btnVisualCollisionMoveFace);collisionMoveBar.Controls.Add(btnVisualCollisionMoveSide);collisionMoveBar.Controls.Add(btnVisualCollisionObject);collisionMoveBar.Controls.Add(btnVisualCollisionRotateLeft);collisionMoveBar.Controls.Add(btnVisualCollisionRotateRight);collisionMoveBar.Controls.Add(btnVisualCollisionDuplicate);collisionMoveBar.Controls.Add(btnVisualCollisionRemove);collisionMoveBar.Controls.Add(btnVisualCollisionFlip);collisionMoveBar.Controls.Add(btnVisualCollisionCube);
             trkVisualCollisionOpacity = new TrackBar { Dock=DockStyle.Top, Height=32, Minimum=5, Maximum=80, Value=22, TickStyle=TickStyle.None };
             lblVisualCollisionInfo = new Label { Text="Clique em uma face para inspecionar flags.", Dock=DockStyle.Fill, ForeColor=TextMuted, Padding=new Padding(2,8,2,0), AutoEllipsis=true };
             chkVisualCollisionSat.CheckedChanged += visualCollisionDisplay_Changed; chkVisualCollisionEat.CheckedChanged += visualCollisionDisplay_Changed; chkVisualCollisionFloor.CheckedChanged += visualCollisionDisplay_Changed; chkVisualCollisionSlope.CheckedChanged += visualCollisionDisplay_Changed; chkVisualCollisionWall.CheckedChanged += visualCollisionDisplay_Changed;
             cmbVisualCollisionStyle.SelectedIndexChanged += visualCollisionDisplay_Changed; cmbVisualCollisionMesh.SelectedIndexChanged += visualCollisionDisplay_Changed; trkVisualCollisionOpacity.Scroll += visualCollisionDisplay_Changed;
-            tabCollision.Controls.Add(lblVisualCollisionInfo); tabCollision.Controls.Add(trkVisualCollisionOpacity);tabCollision.Controls.Add(collisionPrimitiveBar); tabCollision.Controls.Add(cmbVisualCollisionVertex); tabCollision.Controls.Add(cmbVisualCollisionMesh); tabCollision.Controls.Add(cmbVisualCollisionStyle); tabCollision.Controls.Add(chkVisualCollisionWall); tabCollision.Controls.Add(chkVisualCollisionSlope); tabCollision.Controls.Add(chkVisualCollisionFloor); tabCollision.Controls.Add(categoryTitle); tabCollision.Controls.Add(chkVisualCollisionEat); tabCollision.Controls.Add(chkVisualCollisionSat); tabCollision.Controls.Add(collisionTitle);
+            tabCollision.Controls.Add(lblVisualCollisionInfo); tabCollision.Controls.Add(trkVisualCollisionOpacity); tabCollision.Controls.Add(cmbVisualCollisionVertex); tabCollision.Controls.Add(cmbVisualCollisionMesh); tabCollision.Controls.Add(cmbVisualCollisionStyle); tabCollision.Controls.Add(chkVisualCollisionWall); tabCollision.Controls.Add(chkVisualCollisionSlope); tabCollision.Controls.Add(chkVisualCollisionFloor); tabCollision.Controls.Add(categoryTitle); tabCollision.Controls.Add(chkVisualCollisionEat); tabCollision.Controls.Add(chkVisualCollisionSat); tabCollision.Controls.Add(collisionTitle);
 
             cmbVisualAevTypeFilter = new ComboBox { Dock = DockStyle.Top, Height = 30, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextPrimary, FlatStyle = FlatStyle.Flat };
             cmbVisualAevTypeFilter.SelectedIndexChanged += cmbVisualAevTypeFilter_SelectedIndexChanged;
@@ -753,10 +861,10 @@
             lstVisualObjectEntries = new ListBox { Dock = DockStyle.Fill, BackColor = Surface, ForeColor = TextPrimary, BorderStyle = BorderStyle.None, IntegralHeight = false, Font = new Font("Segoe UI", 9F), SelectionMode = SelectionMode.MultiExtended };
             lstVisualObjectEntries.SelectedIndexChanged += lstVisualObjectEntries_SelectedIndexChanged;
             lstVisualObjectEntries.KeyDown += lstVisualObjectEntries_KeyDown;
-            var objectHint = new Label { Text = "G mover • R girar • F focar", Dock = DockStyle.Bottom, Height = 38, Padding = new Padding(8, 7, 0, 0), ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8F) };
+            var objectHint = new Label { Text = "1 mover • 2 rotacionar • F focar", Dock = DockStyle.Bottom, Height = 38, Padding = new Padding(8, 7, 0, 0), ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8F) };
             var objectBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 68, BackColor = Surface, Padding = new Padding(5, 4, 2, 2), WrapContents = true };
-            btnVisualObjectMove = new Button(); SetupButton(btnVisualObjectMove,"MOVE (G)",Accent,78); btnVisualObjectMove.Height=27; btnVisualObjectMove.Click += (_,_)=>SetEtsGizmoMode(EtsGizmoMode.Move);
-            btnVisualObjectRotate = new Button(); SetupButton(btnVisualObjectRotate,"ROTATE (R)",Surface2,88); btnVisualObjectRotate.Height=27; btnVisualObjectRotate.Click += (_,_)=>SetEtsGizmoMode(EtsGizmoMode.Rotate);
+            btnVisualObjectMove = new Button(); SetupButton(btnVisualObjectMove,"MOVER",Accent,78); btnVisualObjectMove.Height=27; btnVisualObjectMove.Click += (_,_)=>SetEtsGizmoMode(EtsGizmoMode.Move);
+            btnVisualObjectRotate = new Button(); SetupButton(btnVisualObjectRotate,"ROTACIONAR",Surface2,96); btnVisualObjectRotate.Height=27; btnVisualObjectRotate.Click += (_,_)=>SetEtsGizmoMode(EtsGizmoMode.Rotate);
             chkVisualObjectSnap = new CheckBox { Text="Snap",AutoSize=true,Margin=new Padding(8,6,0,0),ForeColor=TextPrimary,BackColor=Surface }; chkVisualObjectSnap.CheckedChanged += (_,_)=>{if(visualViewport!=null)visualViewport.EtsSnapEnabled=chkVisualObjectSnap.Checked;};
             objectBar.Controls.Add(btnVisualObjectMove);objectBar.Controls.Add(btnVisualObjectRotate);objectBar.Controls.Add(chkVisualObjectSnap);
             var objectTextureDebugHost=new Panel{Dock=DockStyle.Bottom,Height=190,BackColor=Surface2,Padding=new Padding(5)};
@@ -776,12 +884,14 @@
             chkVisualSmdSnap=new CheckBox{Text="Snap",AutoSize=true,Margin=new Padding(8,6,0,0),ForeColor=TextPrimary,BackColor=Surface};chkVisualSmdSnap.CheckedChanged+=(_,_)=>{if(visualViewport!=null)visualViewport.SmdSnapEnabled=chkVisualSmdSnap.Checked;};
             chkVisualSmdEditMode=new CheckBox{Text="EDIT MODE",AutoSize=true,Margin=new Padding(8,6,0,0),ForeColor=Color.FromArgb(255,170,55),BackColor=Surface};chkVisualSmdEditMode.CheckedChanged+=(_,_)=>{if(visualViewport!=null){visualViewport.SetSmdFaceEditMode(chkVisualSmdEditMode.Checked);if(chkVisualSmdEditMode.Checked)SetSmdGizmoMode(SmdGizmoMode.Move);}btnVisualSmdRotate.Enabled=!chkVisualSmdEditMode.Checked;btnVisualSmdScale.Enabled=!chkVisualSmdEditMode.Checked;};
             cmbVisualSmdTransformSpeed=new ComboBox{Width=72,Height=27,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat,Margin=new Padding(5,1,0,0)};cmbVisualSmdTransformSpeed.Items.AddRange(new object[]{"0.5×","1×","2×","4×","8×","16×"});cmbVisualSmdTransformSpeed.SelectedIndex=3;cmbVisualSmdTransformSpeed.SelectedIndexChanged+=(_,_)=>{if(visualViewport!=null)visualViewport.SmdTransformSpeed=cmbVisualSmdTransformSpeed.SelectedIndex switch{0=>.5f,1=>1f,2=>2f,3=>4f,4=>8f,5=>16f,_=>1f};};
+            cmbVisualSmdTransformSpace=new ComboBox{Width=78,Height=27,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat,Margin=new Padding(5,1,0,0)};cmbVisualSmdTransformSpace.Items.AddRange(new object[]{"WORLD","LOCAL"});cmbVisualSmdTransformSpace.SelectedIndex=0;cmbVisualSmdTransformSpace.SelectedIndexChanged+=(_,_)=>{if(visualViewport!=null)visualViewport.SetSmdTransformSpace(cmbVisualSmdTransformSpace.SelectedIndex==1?SmdTransformSpace.Local:SmdTransformSpace.World);};
             btnVisualSaveSmd=new Button();SetupButton(btnVisualSaveSmd,"SAVE SMD",Surface2,92);btnVisualSaveSmd.Height=27;btnVisualSaveSmd.Enabled=false;btnVisualSaveSmd.Click+=btnVisualSaveSmd_Click;
             btnVisualSmdImport=new Button();SetupButton(btnVisualSmdImport,"IMPORT MODEL",Surface2,112);btnVisualSmdImport.Height=27;btnVisualSmdImport.Enabled=false;btnVisualSmdImport.Click+=btnVisualSmdImport_Click;
-            btnVisualSmdNew=new Button();SetupButton(btnVisualSmdNew,"NEW",Surface2,55);btnVisualSmdNew.Height=27;btnVisualSmdNew.Enabled=false;btnVisualSmdNew.Click+=btnVisualSmdNew_Click;
-            smdBar.Controls.Add(btnVisualSmdMove);smdBar.Controls.Add(btnVisualSmdRotate);smdBar.Controls.Add(btnVisualSmdScale);smdBar.Controls.Add(chkVisualSmdSnap);smdBar.Controls.Add(chkVisualSmdEditMode);smdBar.Controls.Add(cmbVisualSmdTransformSpeed);smdBar.Controls.Add(btnVisualSmdNew);smdBar.Controls.Add(btnVisualSmdImport);
+            btnVisualSmdDuplicate=new Button();SetupButton(btnVisualSmdDuplicate,"DUPLICATE",Surface2,88);btnVisualSmdDuplicate.Height=27;btnVisualSmdDuplicate.Enabled=false;btnVisualSmdDuplicate.Click+=(_,_)=>DuplicateSelectedSmdEntries();
+            btnVisualSmdCatalog=new Button();SetupButton(btnVisualSmdCatalog,"CATÁLOGO",Color.FromArgb(77,67,122),86);btnVisualSmdCatalog.Height=27;btnVisualSmdCatalog.Click+=btnVisualSmdCatalog_Click;
+            smdBar.Controls.Add(btnVisualSmdMove);smdBar.Controls.Add(btnVisualSmdRotate);smdBar.Controls.Add(btnVisualSmdScale);smdBar.Controls.Add(chkVisualSmdSnap);smdBar.Controls.Add(chkVisualSmdEditMode);smdBar.Controls.Add(cmbVisualSmdTransformSpace);smdBar.Controls.Add(cmbVisualSmdTransformSpeed);smdBar.Controls.Add(btnVisualSmdDuplicate);smdBar.Controls.Add(btnVisualSmdImport);smdBar.Controls.Add(btnVisualSmdCatalog);
             tabSmd.Controls.Add(lstVisualSmdEntries);tabSmd.Controls.Add(smdHint);
-            var smdMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var smdDuplicate=new ToolStripMenuItem("Duplicar   Ctrl+D");smdDuplicate.Click+=(_,_)=>DuplicateSelectedSmdEntries();var smdDelete=new ToolStripMenuItem("Excluir   Del");smdDelete.Click+=(_,_)=>DeleteSelectedSmdEntries();smdMenu.Items.Add(smdDuplicate);smdMenu.Items.Add(smdDelete);smdMenu.Opening+=(_,_)=>{bool any=lstVisualSmdEntries.SelectedItems.Count>0;smdDuplicate.Enabled=any;smdDelete.Enabled=any;};lstVisualSmdEntries.ContextMenuStrip=smdMenu;
+            var smdMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var smdDuplicate=new ToolStripMenuItem("Duplicar   Ctrl+D");smdDuplicate.Click+=(_,_)=>DuplicateSelectedSmdEntries();var smdDelete=new ToolStripMenuItem("Excluir   Del");smdDelete.Click+=(_,_)=>DeleteSelectedSmdEntries();var smdTextures=new ToolStripMenuItem("Editar texturas deste modelo...");smdTextures.Click+=(_,_)=>EditSelectedSmdTextures();var smdToCatalog=new ToolStripMenuItem("Adicionar seleção ao catálogo...");smdToCatalog.Click+=(_,_)=>AddSelectedSmdToCatalog();var smdExportBin=new ToolStripMenuItem("Exportar modelo BIN...");smdExportBin.Click+=(_,_)=>ExportSelectedSmdBin();var smdExportObj=new ToolStripMenuItem("Exportar modelo OBJ + texturas...");smdExportObj.Click+=(_,_)=>ExportSelectedSmdObj();smdMenu.Items.Add(smdTextures);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdToCatalog);smdMenu.Items.Add(smdExportBin);smdMenu.Items.Add(smdExportObj);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdDuplicate);smdMenu.Items.Add(smdDelete);smdMenu.Opening+=(_,_)=>{bool any=lstVisualSmdEntries.SelectedItems.Count>0;bool one=lstVisualSmdEntries.SelectedItems.Count==1;smdTextures.Enabled=one;smdToCatalog.Enabled=any;smdExportBin.Enabled=one;smdExportObj.Enabled=one;smdDuplicate.Enabled=any;smdDelete.Enabled=any;};lstVisualSmdEntries.ContextMenuStrip=smdMenu;
 
             var litHint=new Label{Text="LIT • selecione um grupo e uma luz",Dock=DockStyle.Top,Height=27,Padding=new Padding(8,7,0,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
             cmbVisualLitFile=new ComboBox{Dock=DockStyle.Top,Height=30,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat};
@@ -831,9 +941,10 @@
             var rtpMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};
             var duplicateRtpItem=new ToolStripMenuItem("Duplicar waypoint   Ctrl+D");duplicateRtpItem.Click+=(_,_)=>DuplicateSelectedRtpNode();
             var childRtpItem=new ToolStripMenuItem("Criar waypoint filho   Ctrl+Shift+D");childRtpItem.Click+=(_,_)=>CreateChildRtpNode();
+            var connectRtpItem=new ToolStripMenuItem("Conectar 2 waypoints   Ctrl+L");connectRtpItem.Click+=(_,_)=>ConnectSelectedRtpNodes();
             var deleteRtpItem=new ToolStripMenuItem("Deletar waypoint   Del");deleteRtpItem.Click+=(_,_)=>DeleteSelectedRtpNode();
-            rtpMenu.Items.Add(duplicateRtpItem);rtpMenu.Items.Add(childRtpItem);rtpMenu.Items.Add(new ToolStripSeparator());rtpMenu.Items.Add(deleteRtpItem);
-            rtpMenu.Opening+=(_,_)=>{bool selected=lstVisualRtpNodes.SelectedItem!=null;duplicateRtpItem.Enabled=selected;childRtpItem.Enabled=selected;deleteRtpItem.Enabled=selected;};
+            rtpMenu.Items.Add(connectRtpItem);rtpMenu.Items.Add(new ToolStripSeparator());rtpMenu.Items.Add(duplicateRtpItem);rtpMenu.Items.Add(childRtpItem);rtpMenu.Items.Add(new ToolStripSeparator());rtpMenu.Items.Add(deleteRtpItem);
+            rtpMenu.Opening+=(_,_)=>{bool selected=lstVisualRtpNodes.SelectedItem!=null;connectRtpItem.Enabled=lstVisualRtpNodes.SelectedItems.Count==2;duplicateRtpItem.Enabled=selected;childRtpItem.Enabled=selected;deleteRtpItem.Enabled=selected;};
             lstVisualRtpNodes.ContextMenuStrip=rtpMenu;
 
             splitVisualWorkspace.Panel1.Controls.Add(tabVisualEntities); splitVisualWorkspace.Panel1.Controls.Add(clbVisualLayers); splitVisualWorkspace.Panel1.Controls.Add(layersTitle);
@@ -854,7 +965,7 @@
             visualViewport.FpsUpdated += fps => { if (!lblVisualFps.IsDisposed) lblVisualFps.Text = $"{fps} FPS"; };
             viewportHost.Controls.Add(lblVisualFps);
             lblVisualFps.BringToFront();
-            visualContextActionBars.Clear();visualContextActionBars[0]=aevBar;visualContextActionBars[1]=enemyGizmoBar;visualContextActionBars[2]=objectBar;visualContextActionBars[3]=collisionMoveBar;visualContextActionBars[4]=smdBar;visualContextActionBars[6]=effBar;visualContextActionBars[7]=rtpBar;visualContextActionBars[8]=camBar;
+            visualContextActionBars.Clear();visualContextActionBars[0]=aevBar;visualContextActionBars[1]=enemyGizmoBar;visualContextActionBars[2]=objectBar;visualContextActionBars[3]=collisionMoveBar;visualContextActionBars[4]=smdBar;visualContextActionBars[6]=effBar;visualContextActionBars[7]=rtpBar;visualContextActionBars[8]=camBar;visualContextActionBars[9]=itaBar;visualContextActionBars[10]=soundBar;
             UpdateVisualContextActions();
             tblVisualWorkspaceRight.Controls.Add(viewportHost, 0, 0);
 
@@ -888,14 +999,32 @@
             var box = Card(0, 76, 882, 204); pnlTools.Controls.Add(box);
             txtTplManager = ToolRow(box, "TPL Manager (opcional)", 16, out btnBrowseTpl, out btnOpenTpl); btnBrowseTpl.Click += btnBrowseTpl_Click; btnOpenTpl.Click += btnOpenTpl_Click;
             txtPcsx2 = ToolRow(box, "PCSX2", 94, out btnBrowsePcsx2, out btnOpenPcsx2); btnBrowsePcsx2.Click += btnBrowsePcsx2_Click; btnOpenPcsx2.Click += btnOpenPcsx2_Click;
+            var assetCard = Card(0, 298, 882, 112); pnlTools.Controls.Add(assetCard);
+            assetCard.Controls.Add(new Label { Text = "EDITOR DE MODELOS DE OBJETOS", Left = 16, Top = 14, Width = 420, Height = 22, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 10F) });
+            assetCard.Controls.Add(new Label { Text = "Edite modelos e texturas de armas, itens (ITM) e objetos interativos (ETM). Também abre com duplo clique na lista de Arquivos.", Left = 16, Top = 42, Width = 650, Height = 45, ForeColor = TextMuted });
+            var openAssetEditor = new Button { Left = 690, Top = 34 }; SetupButton(openAssetEditor, "ABRIR EDITOR 3D", Accent, 160); openAssetEditor.Click += (_, _) => OpenAssetModelEditor(); assetCard.Controls.Add(openAssetEditor);
+            var executableCard = Card(0, 428, 882, 126); pnlTools.Controls.Add(executableCard);
+            executableCard.Controls.Add(new Label { Text = "EDITOR DE EXECUTÁVEL", Left = 16, Top = 14, Width = 420, Height = 22, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 10F) });
+            executableCard.Controls.Add(new Label { Text = "Edite armas e limites no ELF do RE4 PS2 e injete o HUD de vida dos inimigos no SLPS debug. Compatível com SLUS, SLES e SLPS debug.", Left = 16, Top = 42, Width = 650, Height = 58, ForeColor = TextMuted });
+            var openExecutableEditor = new Button { Left = 690, Top = 43 }; SetupButton(openExecutableEditor, "ABRIR EDITOR", Accent, 160); openExecutableEditor.Click += (_, _) => OpenExecutableEditor(); executableCard.Controls.Add(openExecutableEditor);
         }
 
         private void BuildSettingsDesigner()
         {
             AddPageHeader(pnlSettings,"Configurações","Preferências de segurança e comportamento dos editores.");
-            var tabs=new TabControl{Left=0,Top=70,Width=882,Height=632,Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right};
+            var tabs=new TabControl{Left=0,Top=70,Width=882,Height=632,Anchor=AnchorStyles.Top|AnchorStyles.Left};
+            void ResizeSettingsTabs()
+            {
+                // pnlSettings and the top action bar share the same 24 px page
+                // margin. Leaving two pixels inside the page keeps the complete
+                // native border visible while aligning with Build & Test.
+                tabs.Width=Math.Max(320,pnlSettings.ClientSize.Width-2);
+                tabs.Height=Math.Max(320,pnlSettings.ClientSize.Height-tabs.Top-2);
+            }
+            pnlSettings.SizeChanged+=(_,_)=>ResizeSettingsTabs();
+            ResizeSettingsTabs();
             var generalTab=new TabPage("GERAL"){BackColor=Surface,ForeColor=TextPrimary,Padding=new Padding(18)};
-            var generalCard=Card(18,18,790,242);generalCard.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+            var generalCard=Card(18,18,790,330);generalCard.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
             generalCard.Controls.Add(new Label{Text="SALVAMENTO AUTOMÁTICO",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
             chkSettingsAutoSave=new CheckBox{Text="Ativar auto-save do cenário no Editor Visual",Left=18,Top=48,Width=420,Height=26,ForeColor=TextPrimary,BackColor=Surface2};
             chkSettingsAutoSave.CheckedChanged+=chkSettingsAutoSave_CheckedChanged;
@@ -909,7 +1038,20 @@
             chkSettingsShowFps=new CheckBox{Text="Mostrar FPS no canto superior direito do viewport",Left=18,Top=190,Width=430,Height=26,ForeColor=TextPrimary,BackColor=Surface2};
             chkSettingsShowFps.CheckedChanged+=chkSettingsShowFps_CheckedChanged;
             generalCard.Controls.Add(chkSettingsShowFps);
-            generalTab.Controls.Add(generalCard);tabs.TabPages.Add(generalTab);
+            chkSettingsStartMaximized=new CheckBox{Text="Iniciar em tela maximizada",Left=470,Top=190,Width=285,Height=26,ForeColor=TextPrimary,BackColor=Surface2};
+            chkSettingsStartMaximized.CheckedChanged+=chkSettingsStartMaximized_CheckedChanged;
+            generalCard.Controls.Add(chkSettingsStartMaximized);
+            generalCard.Controls.Add(new Label{Text="IDIOMA",Left=18,Top=232,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
+            generalCard.Controls.Add(new Label{Text="Idioma da interface",Left=38,Top=272,Width=180,Height=26,TextAlign=ContentAlignment.MiddleLeft,ForeColor=TextMuted,BackColor=Surface2});
+            cmbSettingsLanguage=new ComboBox{Left=220,Top=270,Width=250,Height=28,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat};
+            cmbSettingsLanguage.SelectedIndexChanged+=cmbSettingsLanguage_SelectedIndexChanged;
+            generalCard.Controls.Add(cmbSettingsLanguage);
+            generalTab.Controls.Add(generalCard);
+            var setupCard=Card(18,366,790,126);setupCard.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+            setupCard.Controls.Add(new Label{Text="CONFIGURAÇÃO INICIAL",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
+            setupCard.Controls.Add(new Label{Text="Troque a ISO, mova o workspace ou revise as ferramentas usando o assistente guiado.",Left=18,Top=48,Width=540,Height=42,ForeColor=TextMuted,Font=new Font("Segoe UI",8.5F)});
+            btnSettingsRunSetup=new Button{Left=598,Top=43};SetupSecondary(btnSettingsRunSetup,"ABRIR ASSISTENTE",164);btnSettingsRunSetup.Click+=btnSettingsRunSetup_Click;setupCard.Controls.Add(btnSettingsRunSetup);
+            generalTab.Controls.Add(setupCard);tabs.TabPages.Add(generalTab);
             var smdTab=new TabPage("SMD"){BackColor=Surface,ForeColor=TextPrimary,Padding=new Padding(18)};
             var card=Card(18,18,790,150);card.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
             card.Controls.Add(new Label{Text="PROTEÇÃO DE ÍNDICES",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
@@ -918,6 +1060,13 @@
             card.Controls.Add(chkSettingsSmdProtectIndices);
             card.Controls.Add(new Label{Text="Quando necessário, a exclusão mantém um slot invisível com escala zero para não deslocar eventos vinculados pelo executável.",Left=38,Top=80,Width=710,Height=46,ForeColor=TextMuted,Font=new Font("Segoe UI",8.5F)});
             smdTab.Controls.Add(card);tabs.TabPages.Add(smdTab);
+            var toolsTab=new TabPage("FERRAMENTAS"){BackColor=Surface,ForeColor=TextPrimary,Padding=new Padding(18)};
+            var toolsCard=Card(18,18,790,160);toolsCard.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+            toolsCard.Controls.Add(new Label{Text="EDITOR DE EXECUTÁVEL",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
+            chkSettingsCreateIsoBackup=new CheckBox{Text="Criar backup da ISO antes de editar o ELF interno",Left=18,Top=48,Width=560,Height=26,ForeColor=TextPrimary,BackColor=Surface2,Checked=true};
+            chkSettingsCreateIsoBackup.CheckedChanged+=chkSettingsCreateIsoBackup_CheckedChanged;toolsCard.Controls.Add(chkSettingsCreateIsoBackup);
+            toolsCard.Controls.Add(new Label{Text="Quando ativado, a primeira gravação cria uma cópia .iso.bak completa. Desative para economizar espaço e tempo; o backup de arquivos ELF independentes não é afetado.",Left=38,Top=80,Width=710,Height=54,ForeColor=TextMuted,Font=new Font("Segoe UI",8.5F)});
+            toolsTab.Controls.Add(toolsCard);tabs.TabPages.Add(toolsTab);
             var camTab=new TabPage("CAM"){BackColor=Surface,ForeColor=TextPrimary,Padding=new Padding(18)};var camCard=Card(18,18,790,260);camCard.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;camCard.Controls.Add(new Label{Text="TIMELINE DE FRAMES",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});chkSettingsCamTimeline=new CheckBox{Text="Mostrar timeline CAM na parte inferior do viewport",Left=18,Top=48,Width=520,Height=26,ForeColor=TextPrimary,BackColor=Surface2,Checked=true};chkSettingsCamTimeline.CheckedChanged+=chkSettingsCamTimeline_CheckedChanged;camCard.Controls.Add(chkSettingsCamTimeline);camCard.Controls.Add(new Label{Text="A lista tradicional de frames permanece disponível. A timeline permite selecionar, adicionar e remover datasets rapidamente.",Left=38,Top=80,Width=710,Height=40,ForeColor=TextMuted,Font=new Font("Segoe UI",8.5F)});camCard.Controls.Add(new Label{Text="PROTEÇÃO DE ÍNDICES MOTION",Left=18,Top=132,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});chkSettingsCamProtectMotion=new CheckBox{Text="Preservar os índices físicos das câmeras Motion",Left=18,Top=165,Width=520,Height=26,ForeColor=TextPrimary,BackColor=Surface2,Checked=true};chkSettingsCamProtectMotion.CheckedChanged+=chkSettingsCamProtectMotion_CheckedChanged;camCard.Controls.Add(chkSettingsCamProtectMotion);camCard.Controls.Add(new Label{Text="Ao excluir câmeras anteriores, o registro necessário é mantido como slot reservado para não deslocar referências dinâmicas usadas pelo jogo.",Left=38,Top=197,Width=710,Height=46,ForeColor=TextMuted,Font=new Font("Segoe UI",8.5F)});camTab.Controls.Add(camCard);tabs.TabPages.Add(camTab);pnlSettings.Controls.Add(tabs);
         }
 

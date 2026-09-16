@@ -2,7 +2,7 @@ using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
-public sealed class CamPresetDialog : Form
+public sealed class CamPresetDialog : AppForm
 {
     private static readonly Color Bg=Color.FromArgb(18,21,27),Surface=Color.FromArgb(27,31,39),Surface2=Color.FromArgb(37,42,52),TextColor=Color.FromArgb(230,234,241),Muted=Color.FromArgb(145,155,173),Accent=Color.FromArgb(206,54,62);
     private readonly FlowLayoutPanel cards=new(){Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new Padding(14,8,14,8)};
@@ -63,12 +63,12 @@ public sealed class CamPresetDialog : Form
 
     private void CreatePreset(object? sender,EventArgs e)
     {
-        using var dialog=new CamPresetEditDialog();if(dialog.ShowDialog(this)!=DialogResult.OK||dialog.Preset==null)return;custom.Add(dialog.Preset);CustomPresetsChanged=true;RenderCards();
+        using var dialog=new CamPresetEditDialog();if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||dialog.Preset==null)return;custom.Add(dialog.Preset);CustomPresetsChanged=true;RenderCards();
     }
 
     private void EditPreset(CamPresetDefinition preset)
     {
-        using var dialog=new CamPresetEditDialog(preset);if(dialog.ShowDialog(this)!=DialogResult.OK||dialog.Preset==null)return;int index=custom.IndexOf(preset);if(index<0)return;custom[index]=dialog.Preset;CustomPresetsChanged=true;RenderCards();
+        using var dialog=new CamPresetEditDialog(preset);if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||dialog.Preset==null)return;int index=custom.IndexOf(preset);if(index<0)return;custom[index]=dialog.Preset;CustomPresetsChanged=true;RenderCards();
     }
 
     private void DeletePreset(CamPresetDefinition preset)
@@ -77,7 +77,7 @@ public sealed class CamPresetDialog : Form
     }
 }
 
-internal sealed class CamPresetEditDialog : Form
+internal sealed class CamPresetEditDialog : AppForm
 {
     public CamPresetDefinition? Preset { get; private set; }
     private readonly TextBox name=new(){Text="My camera preset",Dock=DockStyle.Fill};

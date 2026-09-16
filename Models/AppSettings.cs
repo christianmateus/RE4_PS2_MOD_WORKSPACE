@@ -1,7 +1,14 @@
-﻿namespace RE4_PS2_MOD_WORKSPACE;
+namespace RE4_PS2_MOD_WORKSPACE;
 
 public sealed class AppSettings
 {
+    public string Language { get; set; } = "pt-BR";
+    public bool SetupCompleted { get; set; }
+    public bool SetupShowOnStartup { get; set; }
+    public string? SetupDraftIsoPath { get; set; }
+    public string? SetupDraftWorkspacePath { get; set; }
+    public string? SetupDraftPcsx2Path { get; set; }
+    public string? SetupDraftTplManagerPath { get; set; }
     public string? TplManagerPath { get; set; }
     public string? Pcsx2Path { get; set; }
     public string? Ps2BinToolPath { get; set; }
@@ -13,9 +20,14 @@ public sealed class AppSettings
     public bool VisualEnemiesLayer { get; set; } = false;
     public bool VisualObjectsLayer { get; set; } = false;
     public bool VisualCollisionLayer { get; set; } = false;
+    public bool VisualCollisionSatVisible { get; set; } = true;
+    public bool VisualCollisionEatVisible { get; set; } = true;
     public bool VisualLightingLayer { get; set; } = true;
     public bool VisualEffectsLayer { get; set; } = true;
     public bool VisualRtpLayer { get; set; } = true;
+    public bool VisualCamLayer { get; set; } = true;
+    public bool VisualItaLayer { get; set; } = true;
+    public bool VisualSoundLayer { get; set; } = false;
     public string? SelectedEnemyEslName { get; set; }
     public bool VisualEnemyLabels { get; set; } = false;
     public bool VisualEnemyModelParts { get; set; } = false;
@@ -24,12 +36,15 @@ public sealed class AppSettings
     public bool VisualShowInactiveEnemies { get; set; } = false;
     public int VisualSelectedEntityTab { get; set; } = 0;
     public bool SmdProtectSpecialEntryIndices { get; set; } = true;
+    public bool StartMaximized { get; set; } = false;
+    public bool CreateIsoBackup { get; set; } = true;
     public bool AutoSaveEnabled { get; set; } = false;
     public int AutoSaveIntervalMinutes { get; set; } = 5;
     public bool VisualShowFps { get; set; } = false;
     public bool VisualLayersPanelCollapsed { get; set; } = false;
     public bool VisualPropertiesPanelCollapsed { get; set; } = false;
     public string? LastCharacterDatPath { get; set; }
+    public string? LastAnimationDatPath { get; set; }
     public bool HasCharacterCamera { get; set; }
     public float CharacterCameraX { get; set; }
     public float CharacterCameraY { get; set; }

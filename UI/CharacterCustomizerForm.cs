@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
-public sealed class CharacterCustomizerForm : Form
+public sealed class CharacterCustomizerForm : AppForm
 {
     private const byte PreviewType = 0;
     private readonly ScenarioViewport viewport = new() { Dock = DockStyle.Fill, ScenarioVisible = true, AevVisible = false, EnemiesVisible = true, ObjectsVisible = false, ShowEnemyLabels = false, EnemyModelPartPickingEnabled = true };
@@ -305,7 +305,7 @@ public sealed class CharacterCustomizerForm : Form
     private void BrowseDat()
     {
         using var dialog = new OpenFileDialog { Filter = "RE4 character/enemy DAT (*.dat)|*.dat|Todos os arquivos (*.*)|*.*", Title = "Abrir personagem ou inimigo" };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
         if (!SupportedDatName.IsMatch(Path.GetFileName(dialog.FileName)))
         { MessageBox.Show(this, "O nome precisa seguir o padrão plXX.dat ou emXX.dat, usando dois números.", "DAT não suportado", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         LoadDat(dialog.FileName); RefreshDatList(dialog.FileName);
@@ -680,7 +680,7 @@ public sealed class CharacterCustomizerForm : Form
         if (datPath == null || selectedPart == null)
         { MessageBox.Show(this, "Selecione primeiro o BIN que receberá o modelo externo, na lista ou no viewer.", "Importar modelo", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         using var modelDialog = new OpenFileDialog { Filter = "Modelos compatíveis (*.obj;*.smd)|*.obj;*.smd|Wavefront OBJ (*.obj)|*.obj|StudioModelData (*.smd)|*.smd", Title = "Importar modelo externo" };
-        if (modelDialog.ShowDialog(this) != DialogResult.OK) return;
+        if (modelDialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
         try
         {
             ExternalModelStats stats = ExternalPs2ModelConverter.Analyze(modelDialog.FileName);
@@ -736,7 +736,7 @@ public sealed class CharacterCustomizerForm : Form
             Filter = "RE4 PS2 BIN Tool (*.exe)|*.exe",
             Title = "Selecione a RE4 PS2 BIN Tool (necessário somente na primeira vez)"
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return null;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return null;
         externalConverterPath = dialog.FileName;
         externalConverterSelected?.Invoke(dialog.FileName);
         return externalConverterPath;
@@ -980,7 +980,7 @@ public sealed class CharacterCustomizerForm : Form
     {
         if (datPath == null || lstTextures.SelectedItems.Count == 0 || lstTextures.SelectedItems[0].Tag is not TextureItem item) { MessageBox.Show(this, "Selecione uma textura primeiro."); return; }
         using var dialog = new OpenFileDialog { Filter = "Imagem PNG (*.png)|*.png", Title = $"Substituir TPL #{item.TplEntry:D3}, textura {item.Index}" };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
         try
         {
             byte[] before = Ps2CharacterDatEditor.CaptureTplEntry(datPath, item.TplEntry);
@@ -1011,7 +1011,7 @@ public sealed class CharacterCustomizerForm : Form
             AddExtension = true,
             DefaultExt = "png"
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
 
         try
         {
@@ -1054,7 +1054,7 @@ public sealed class CharacterCustomizerForm : Form
         if (datPath == null || lstTextures.SelectedItems.Count == 0 || lstTextures.SelectedItems[0].Tag is not TextureItem item)
         { MessageBox.Show(this, "Selecione uma textura primeiro."); return; }
         using var dialog = new TextureResizeDialog(item.Width, item.Height);
-        if (dialog.ShowDialog(this) != DialogResult.OK || (dialog.TargetWidth == item.Width && dialog.TargetHeight == item.Height)) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK || (dialog.TargetWidth == item.Width && dialog.TargetHeight == item.Height)) return;
         try
         {
             Cursor = Cursors.WaitCursor;

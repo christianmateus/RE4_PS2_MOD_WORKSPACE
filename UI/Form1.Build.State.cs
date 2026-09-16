@@ -18,8 +18,8 @@ public partial class Form1
 
     private async Task<(SnapshotDiff Diff, int PendingTpl)> GetChangeStateAsync(string datName, string contentDir)
     {
-        var current = await Task.Run(() => ChangeDetectionService.Capture(contentDir));
         var baseline = ChangeDetectionService.Load(GetChangeStatePath(datName));
+        var current = await Task.Run(() => ChangeDetectionService.Capture(contentDir, baseline));
         var diff = ChangeDetectionService.Compare(baseline, current);
         int pendingTpl = await Task.Run(() => CountPendingTplChanges(contentDir, datName));
         return (diff, pendingTpl);
@@ -139,26 +139,44 @@ public partial class Form1
         try
         {
             var statuses = await GetTrackedDatStatusesAsync();
+            var afsFiles = await Task.Run(GetTrackedAfsFileStatuses);
             lvTrackedDats.BeginUpdate(); lvTrackedDats.Items.Clear();
             foreach (var status in statuses)
             {
                 bool neverBuilt = !status.State.LastBuildUtc.HasValue && !status.Diff.HasChanges && status.PendingTpl == 0 && (string.IsNullOrWhiteSpace(status.State.BuildDatPath) || !File.Exists(status.State.BuildDatPath));
                 string stateText = neverBuilt ? "NÃO COMPILADO" : status.NeedsRepack ? (status.PendingTpl > 0 ? "MODIFICADO + TPL" : "MODIFICADO") : (status.NeedsInject ? "AGUARDA INJEÇÃO" : "ATUALIZADO");
-                var item = new ListViewItem(status.State.DatName) { Tag = status.State.DatName };
+                var item = new ListViewItem(status.State.DatName) { Tag = new BuildListItem("dat:" + status.State.DatName, "DAT", status.State.DatName, DatName: status.State.DatName) };
+                item.SubItems.Add("DAT / cenário");
                 item.SubItems.Add(stateText);
                 item.SubItems.Add(status.Diff.Total.ToString("N0"));
-                item.SubItems.Add(status.PendingTpl.ToString("N0"));
                 item.SubItems.Add(status.State.LastBuildUtc.HasValue ? status.State.LastBuildUtc.Value.ToLocalTime().ToString("dd/MM HH:mm:ss") : "Nunca");
                 lvTrackedDats.Items.Add(item);
             }
-            lblTrackedDatsSummary.Text = statuses.Count == 0 ? "Nenhum DAT acompanhado. Extraia dois ou mais cenários para usar o Build All." : $"{statuses.Count} DAT(s) acompanhado(s) • {statuses.Count(x => x.NeedsRepack)} para repack • {statuses.Count(x => x.NeedsInject)} para injeção";
-            btnBuildAll.Enabled = statuses.Count > 0;
+            foreach (TrackedAfsFileStatus status in afsFiles)
+            {
+                var item = new ListViewItem(status.FileName) { Tag = new BuildListItem(status.Key, "AFS", status.FileName, SourcePath: status.SourcePath) };
+                item.SubItems.Add($"{Path.GetExtension(status.FileName).TrimStart('.').ToUpperInvariant()} / {status.AfsStem}");
+                item.SubItems.Add(status.NeedsInject ? "MODIFICADO" : "ATUALIZADO");
+                item.SubItems.Add("—");
+                item.SubItems.Add(status.NeedsInject ? "Pendente" : "Na ISO");
+                lvTrackedDats.Items.Add(item);
+            }
+            int pending = statuses.Count(x => x.NeedsRepack || x.NeedsInject) + afsFiles.Count(x => x.NeedsInject);
+            lblTrackedDatsSummary.Text = statuses.Count + afsFiles.Count == 0 ? "Nenhum arquivo acompanhado. Extraia um DAT ou arquivo do AFS para começar." : $"{statuses.Count + afsFiles.Count} arquivo(s) acompanhado(s) • {pending} pendente(s) para build";
+            btnBuildAll.Enabled = statuses.Count + afsFiles.Count > 0;
         }
         catch (Exception ex) { lblTrackedDatsSummary.Text = "Erro ao verificar DATs: " + ex.Message; }
         finally { if (lvTrackedDats != null && !lvTrackedDats.IsDisposed) lvTrackedDats.EndUpdate(); }
     }
 
     private async void btnBuildRefreshTracked_Click(object? sender, EventArgs e) => await RefreshTrackedDatsAsync();
+
+    private void lvTrackedDats_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (btnBuildOneClick == null || btnBuildOneClick.IsDisposed) return;
+        int count = lvTrackedDats.SelectedItems.Count;
+        btnBuildOneClick.Text = count > 0 ? $"BUILD & TEST\r\nSELEÇÃO ({count})" : "BUILD & TEST\r\nARQUIVO ATIVO";
+    }
 
     private void UpdateBuildUi(long? rebuiltSize = null)
     {

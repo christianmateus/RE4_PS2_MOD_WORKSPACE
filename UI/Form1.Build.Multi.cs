@@ -2,6 +2,8 @@
 
 public partial class Form1
 {
+    private HashSet<string>? buildSelectionOverride;
+
     private async void btnBuildAll_Click(object? sender, EventArgs e)
     {
         if (!RequireWorkspace()) return;
@@ -17,13 +19,20 @@ public partial class Form1
             SetBuildBusy(true, "Preparando o build de todos os DATs modificados...");
             WriteLog("=== BUILD ALL & TEST ===");
             var statuses = await GetTrackedDatStatusesAsync();
-            var targets = statuses.Where(x => x.NeedsRepack || x.NeedsInject).ToArray();
+            HashSet<string>? selectedKeys = buildSelectionOverride;
+            var targets = statuses.Where(x => selectedKeys == null
+                ? x.NeedsRepack || x.NeedsInject
+                : selectedKeys.Contains("dat:" + x.State.DatName)).ToArray();
+            var looseTargets = await Task.Run(GetTrackedAfsFileStatuses);
+            looseTargets = looseTargets.Where(x => selectedKeys == null ? x.NeedsInject : selectedKeys.Contains(x.Key)).ToList();
             if (targets.Length == 0)
             {
-                WriteLog("Nenhum DAT modificado. Sincronizando o ESL atual e abrindo a ISO de Build existente.");
-                if (!File.Exists(buildIso)) throw new FileNotFoundException("Nenhum DAT precisa de build, mas a ISO de Build ainda não existe.");
-                await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
-                LaunchPcsx2WithIso(buildIso); return;
+                if (looseTargets.Count == 0)
+                {
+                    WriteLog("Nenhum arquivo selecionado precisa de build. Abrindo a ISO de Build existente.");
+                    if (!File.Exists(buildIso)) throw new FileNotFoundException("Nenhum arquivo precisa de build, mas a ISO de Build ainda não existe.");
+                    LaunchPcsx2WithIso(buildIso); return;
+                }
             }
             if (File.Exists(buildIso) && !string.IsNullOrWhiteSpace(project.BuildIsoSourcePath) && !string.Equals(Path.GetFullPath(project.BuildIsoSourcePath), Path.GetFullPath(project.IsoPath), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("A ISO base mudou. Use RECRIAR ISO LIMPA antes do Build All.");
@@ -73,22 +82,25 @@ public partial class Form1
                 st.InjectedGeneration = project.BuildIsoGeneration;
                 WriteLog($"{st.DatName}: {(target.NeedsRepack ? "repack + " : "")}Fast Inject concluído ({FormatBytes(buildSize)}).");
             }
-            await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
+            await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso, selectedKeys);
+            if (selectedKeys == null) await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
             project.ActiveBuildIsoPath = buildIso; project.BuildIsoSourcePath = project.IsoPath;
             var activeState = !string.IsNullOrWhiteSpace(project.ActiveDatName) ? GetDatState(project.ActiveDatName, false) : null;
             if (activeState != null) { project.ActiveBuildDatPath = activeState.BuildDatPath; project.LastBuildUtc = activeState.LastBuildUtc; }
             SaveProject(); UpdateBuildUi(); await RefreshTrackedDatsAsync(); await RefreshChangeStatusAsync();
-            WriteLog($"BUILD ALL concluído: {targets.Length} DAT(s) reconstruído(s) e injetado(s). Abrindo PCSX2...");
+            WriteLog($"BUILD concluído: {targets.Length} DAT(s) e {looseTargets.Count} arquivo(s) do AFS processado(s). Abrindo PCSX2...");
             SetBuildBusy(true, "Build All concluído. Abrindo o PCSX2...");
             LaunchPcsx2WithIso(buildIso);
         }
         catch (Exception ex) { WriteLog("ERRO NO BUILD ALL: " + ex.Message); MessageBox.Show(ex.Message, "Build All", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { SetBuildBusy(false); await RefreshTrackedDatsAsync(); }
+        finally { buildSelectionOverride = null; SetBuildBusy(false); await RefreshTrackedDatsAsync(); }
     }
 
     private void lvTrackedDats_DoubleClick(object? sender, EventArgs e)
     {
-        if (lvTrackedDats.SelectedItems.Count != 1 || lvTrackedDats.SelectedItems[0].Tag is not string datName) return;
+        if (lvTrackedDats.SelectedItems.Count != 1 || lvTrackedDats.SelectedItems[0].Tag is not BuildListItem selected) return;
+        if (selected.Kind == "AFS") { if (!string.IsNullOrWhiteSpace(selected.SourcePath) && File.Exists(selected.SourcePath)) OpenFolder(Path.GetDirectoryName(selected.SourcePath)); return; }
+        string datName = selected.DatName!;
         for (int i = 0; i < cmbDatEntries.Items.Count; i++)
         {
             if (cmbDatEntries.Items[i] is AfsEntry entry && entry.FileName.Equals(datName, StringComparison.OrdinalIgnoreCase))

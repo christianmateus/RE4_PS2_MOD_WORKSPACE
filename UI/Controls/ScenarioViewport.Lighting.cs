@@ -90,6 +90,9 @@ public sealed partial class ScenarioViewport
         if(!LightingVisible||litVertexCount==0)return;
         GL.UseProgram(litShader);var mvp=BuildMvp();GL.UniformMatrix4(litMvp,true,ref mvp);GL.Disable(EnableCap.CullFace);GL.Disable(EnableCap.Blend);
         GL.BindVertexArray(litVao);GL.LineWidth(2f);GL.DrawArrays(PrimitiveType.Lines,0,litVertexCount);GL.LineWidth(1f);GL.Enable(EnableCap.CullFace);
+        // Editor overlays use uniforms owned by the main shader. EFF used to
+        // restore it incidentally, making them depend on that layer's checkbox.
+        GL.UseProgram(shaderProgram);
     }
 
     private void DisposeLitGpu(){if(litVbo!=0)GL.DeleteBuffer(litVbo);if(litVao!=0)GL.DeleteVertexArray(litVao);if(litShader!=0)GL.DeleteProgram(litShader);litVbo=litVao=litShader=0;}

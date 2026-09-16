@@ -42,3 +42,5 @@ public sealed class DatProjectState
 }
 
 public sealed record TrackedDatStatus(DatProjectState State, SnapshotDiff Diff, int PendingTpl, bool NeedsRepack, bool NeedsInject);
+public sealed record TrackedAfsFileStatus(string Key, string AfsStem, string SourcePath, string FileName, bool NeedsInject);
+public sealed record BuildListItem(string Key, string Kind, string DisplayName, string? DatName = null, string? SourcePath = null);

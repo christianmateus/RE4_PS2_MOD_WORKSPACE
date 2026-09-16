@@ -1,11 +1,11 @@
-﻿using RE4_PS2_MOD_WORKSPACE.Core.Afs;
+using RE4_PS2_MOD_WORKSPACE.Core.Afs;
 using RE4_PS2_MOD_WORKSPACE.Core.Iso;
 using System.Diagnostics;
 using System.Text.Json;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
-public partial class Form1 : Form
+public partial class Form1 : AppForm
 {
 
     private readonly string settingsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RE4_PS2_MOD_WORKSPACE", "settings.json");
@@ -19,11 +19,15 @@ public partial class Form1 : Form
     private readonly System.Windows.Forms.Timer autoSaveTimer = new();
     private readonly System.Windows.Forms.Timer visualSpeedSaveTimer = new();
     private bool autoSaveRunning;
+    private bool setupConfiguredThisSession;
+    private IReadOnlyList<LanguageInfo> availableLanguages = Array.Empty<LanguageInfo>();
 
     public Form1()
     {
         InitializeComponent();
         LoadSettings();
+        WindowState = settings.StartMaximized ? FormWindowState.Maximized : FormWindowState.Normal;
+        InitializeLocalization();
         ApplySidebarState(settings.SidebarCollapsed);
         ApplyVisualSidePanelState();
         InitializeAutoSave();

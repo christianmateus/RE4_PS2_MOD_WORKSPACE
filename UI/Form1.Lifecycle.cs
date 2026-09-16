@@ -6,6 +6,9 @@ public partial class Form1
     {
         ShowStartupLoading("Preparando o aplicativo...");
         await Task.Yield();
+        HideStartupLoading();
+        if (!await RunSetupWizardAsync()) return;
+        ShowStartupLoading(setupConfiguredThisSession ? "Finalizando a configuração..." : "Restaurando o workspace...");
         if (string.IsNullOrWhiteSpace(project.RootPath) || !Directory.Exists(project.RootPath))
         {
             HideStartupLoading();
@@ -21,7 +24,7 @@ public partial class Form1
             if (!string.IsNullOrWhiteSpace(project.IsoPath) && File.Exists(project.IsoPath))
             {
                 SetStartupLoadingStatus("Lendo a ISO e o índice do AFS...");
-                await LoadIsoAfsAsync(project.ActiveAfsPath, project.ActiveDatName);
+                if (loadedAfs == null) await LoadIsoAfsAsync(project.ActiveAfsPath, project.ActiveDatName);
                 ExtractLog("Sessão restaurada: " + (project.ActiveAfsPath ?? "AFS padrão") + " / " + (project.ActiveDatName ?? "DAT não definido"));
             }
             else if (!string.IsNullOrWhiteSpace(project.IsoPath)) ExtractLog("ISO salva não foi encontrada: " + project.IsoPath);
@@ -46,6 +49,7 @@ public partial class Form1
     private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
         if (messagesModified && !ConfirmDiscardMessageChanges()) { e.Cancel = true; return; }
+        StopSoundPreview();
         SaveVisualCameraStateForActiveDat();
         characterCustomizer?.SaveCameraState();
         SaveProject();
@@ -64,9 +68,11 @@ public partial class Form1
         var title = new Label
         {
             Text = "RESTAURANDO WORKSPACE",
-            Left = 24,
+            // WinForms adds horizontal glyph overhang to Label text. Starting the
+            // label four pixels earlier aligns the visible text with the progress bar.
+            Left = 20,
             Top = 22,
-            Width = 470,
+            Width = 474,
             Height = 26,
             Font = new Font("Segoe UI Semibold", 13F),
             ForeColor = Color.FromArgb(238, 240, 244)
@@ -74,9 +80,9 @@ public partial class Form1
         lblStartupLoading = new Label
         {
             Text = "Preparando o aplicativo...",
-            Left = 24,
+            Left = 20,
             Top = 58,
-            Width = 470,
+            Width = 474,
             Height = 28,
             ForeColor = Color.FromArgb(145, 151, 163)
         };
@@ -130,10 +136,10 @@ public partial class Form1
     private void ShowPage(Panel page, Button navButton, string title)
     {
         if (pnlCharacters != null && pnlCharacters.Visible && page != pnlCharacters) characterCustomizer?.SaveCameraState();
-        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlMessages, pnlVisualEditor, pnlCharacters, pnlEnemies, pnlAnimations, pnlBuild, pnlTools, pnlSettings, pnlLogs }) panel.Visible = false;
+        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlMessages, pnlVisualEditor, pnlCharacters, pnlEnemies, pnlAnimations, pnlSounds, pnlBuild, pnlTools, pnlSettings, pnlLogs }) panel.Visible = false;
         page.Visible = true;
         page.BringToFront();
-        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavMessages, btnNavVisualEditor, btnNavCharacters, btnNavEnemies, btnNavAnimations, btnNavBuild, btnNavTools, btnNavSettings, btnNavLogs })
+        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavMessages, btnNavVisualEditor, btnNavCharacters, btnNavEnemies, btnNavAnimations, btnNavSounds, btnNavBuild, btnNavTools, btnNavSettings, btnNavLogs })
         {
             button.BackColor = Color.FromArgb(18, 20, 24);
             button.ForeColor = Color.FromArgb(145, 151, 163);
@@ -271,7 +277,7 @@ public partial class Form1
             lblLogo.Text = collapsed ? "RE4" : "RE4 PS2";
             lblLogo.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             lblLogoSub.Visible = !collapsed;
-            lblVersion.Text = "v0.6.0";
+            lblVersion.Text = "v0.7.0";
             lblVersion.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             btnSidebarToggle.Text = collapsed ? "›" : "RETRAIR  ‹";
             btnSidebarToggle.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleRight;
@@ -306,6 +312,7 @@ public partial class Form1
             case "Messages": btnNavMessages_Click(null, EventArgs.Empty); break;
             case "Enemies": btnNavEnemies_Click(null, EventArgs.Empty); break;
             case "Animations": btnNavAnimations_Click(null, EventArgs.Empty); break;
+            case "Sounds": btnNavSounds_Click(null, EventArgs.Empty); break;
             case "Build": btnNavBuild_Click(null, EventArgs.Empty); break;
             case "Tools": btnNavTools_Click(null, EventArgs.Empty); break;
             case "Settings": btnNavSettings_Click(null, EventArgs.Empty); break;

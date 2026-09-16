@@ -4,11 +4,12 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
-    <Version>0.6.0</Version>
-    <AssemblyVersion>0.6.0.0</AssemblyVersion>
-    <FileVersion>0.6.0.0</FileVersion>
+    <Version>0.7.0</Version>
+    <AssemblyVersion>0.7.0.0</AssemblyVersion>
+    <FileVersion>0.7.0.0</FileVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +17,14 @@
     <Compile Remove="tmp\**" />
     <EmbeddedResource Remove="_references\**" />
     <None Remove="_references\**" />
+    <None Remove="icon.png" />
+    <None Remove="icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="_references\ita\HEX -Items &amp; Weapons.txt" LogicalName="ItaItems.txt" />
+    <EmbeddedResource Include="_references\weapon list.txt" LogicalName="WeaponList.txt" />
+    <EmbeddedResource Include="icon.ico" LogicalName="AppIcon.ico" />
   </ItemGroup>
 
   <ItemGroup>
@@ -39,8 +48,16 @@
     <PackageReference Include="OpenTK.GLControl" Version="4.0.2" />
   </ItemGroup>
 
+
   <ItemGroup>
     <Folder Include="Images\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="locales\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

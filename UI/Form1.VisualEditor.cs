@@ -1,10 +1,12 @@
-﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 using System.ComponentModel;
 using RE4_PS2_MOD_WORKSPACE.Core.Collision;
 using RE4_PS2_MOD_WORKSPACE.Core.Lighting;
 using RE4_PS2_MOD_WORKSPACE.Core.Effects;
+using RE4_PS2_MOD_WORKSPACE.Core.Cns;
+using RE4_PS2_MOD_WORKSPACE.Core.Smd;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
@@ -38,7 +40,8 @@ public partial class Form1
     private bool visualEnemyDebugStabilizeFeet=true;
     private bool syncingVisualEnemyAnimation;
     private bool visualCollisionModified;
-    private bool visualCollisionMoveWholeFace,visualCollisionMoveFaceSide,visualCollisionMoveObject;
+    private bool visualCollisionMoveWholeFace,visualCollisionMoveFaceSide,visualCollisionMoveObject,visualCollisionMoveEdge;
+    private readonly List<(string Path,int MeshIndex,int FaceIndex,int EdgeSlot)> visualCollisionMarkedEdges=new();
     private bool syncingVisualLitFile;
     private bool syncingVisualRtpSelection;
     private bool syncingVisualCamFrameSelection;
@@ -110,6 +113,7 @@ public partial class Form1
     private string? visualLitPath;
     private LitScene? visualLitScene;
     private string? visualEffPath;
+    private string? visualCnsPath;
     private Ps2EffFile? visualEffScene;
     private EffTextureCatalog? visualEffTextures;
     private EffTextureResource? visualEffTexture;
@@ -207,7 +211,7 @@ public partial class Form1
     {
         if (syncingVisualDat || loadingVisualEditor || cmbVisualDat.SelectedItem is not TextureDatItem item) return;
 
-        if (visualAevModified || visualCollisionModified || visualViewport?.Scene?.IsModified == true || visualEtsScene?.IsModified == true || visualLitScene?.IsModified == true || visualViewport?.RtpScene?.IsModified == true)
+        if (visualAevModified || visualCollisionModified || visualViewport?.Scene?.IsModified == true || visualEtsScene?.IsModified == true || visualItaScene?.IsModified == true || visualEseScene?.IsModified == true || visualFseScene?.IsModified == true || visualDseScene?.IsModified == true || visualLitScene?.IsModified == true || visualViewport?.RtpScene?.IsModified == true)
         {
             DialogResult answer = MessageBox.Show(
                 "O Visual Editor possui alterações não salvas.\n\nTrocar de DAT e descartar essas alterações?",
@@ -249,6 +253,15 @@ public partial class Form1
             && byte.TryParse(name.Substring(2,2), System.Globalization.NumberStyles.HexNumber, null, out roomId);
     }
 
+    private static bool IsVisualScenarioDat(string? datName)
+    {
+        string fileName = Path.GetFileName(datName ?? string.Empty);
+        string name = Path.GetFileNameWithoutExtension(fileName);
+        if (!Path.GetExtension(fileName).Equals(".dat", StringComparison.OrdinalIgnoreCase)
+            || name.Length != 4 || (name[0] != 'r' && name[0] != 'R')) return false;
+        for (int i = 1; i < name.Length; i++) if (!Uri.IsHexDigit(name[i])) return false;
+        return true;
+    }
     private void PopulateVisualEnemyLocationFilter(string? preferredDatName = null)
     {
         if (cmbVisualEnemyLocationFilter == null) return;
@@ -646,6 +659,12 @@ public partial class Form1
     private async Task LoadVisualDatAsync(TextureDatItem item)
     {
         if (loadingVisualEditor) return;
+        if (!IsVisualScenarioDat(item.DatName))
+        {
+            ClearVisualEditor("Arquivo selecionado não é um cenário compatível.");
+            visualViewport?.SetStatusMessage("O arquivo selecionado não é um cenário compatível.\nSelecione um cenário rXXX.dat.");
+            return;
+        }
         loadingVisualEditor = true;
         UseWaitCursor = true;
         btnVisualFit.Enabled = false;
@@ -653,12 +672,21 @@ public partial class Form1
 
         try
         {
+            visualViewport?.SetStatusMessage(null);
             string content = item.ContentPath;
+            visualCnsPath = null;
+            btnVisualEditCns.Enabled = false;
+            btnVisualEditCns.Text = "SEM CNS";
             if (!Directory.Exists(content))
             {
                 ClearVisualEditor("Content do DAT não encontrado.");
                 return;
             }
+
+            visualCnsPath = Directory.GetFiles(content, "*.CNS", SearchOption.AllDirectories)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+            btnVisualEditCns.Enabled = visualCnsPath != null;
+            btnVisualEditCns.Text = visualCnsPath == null ? "SEM CNS" : "EDITAR CNS";
 
             (string? smd, string? aev, string? etm, string? ets, string? sat, string? eat, string? lit, string? eff, string? rtp, string? cam) = FindVisualFiles(content, item.DatName);
             visualSmdPath = smd;
@@ -673,6 +701,9 @@ public partial class Form1
             visualCamPath = cam;
             visualAevModified = false;
             visualCollisionModified = false;
+
+            await LoadVisualItaAsync(content);
+            await LoadVisualSoundAsync(content);
 
             if (smd == null)
             {
@@ -768,7 +799,7 @@ public partial class Form1
             if(eff!=null)
             {
                 string[] coreEffs=FindCoreEffFiles();
-                (visualEffScene,visualEffTextures)=await Task.Run(()=>(Ps2EffReader.Read(eff),EffTextureCatalog.Build(eff,coreEffs)));visualViewport.EffectsVisible=true;if(clbVisualLayers.Items.Count>6)clbVisualLayers.SetItemChecked(6,true);visualViewport.SetEffScene(visualEffScene);LoadVisualEffViewportTextures();WireVisualEffEvents();RefreshVisualEffEntries();
+                (visualEffScene,visualEffTextures)=await Task.Run(()=>(Ps2EffReader.Read(eff),EffTextureCatalog.Build(eff,coreEffs)));visualViewport.SetEffScene(visualEffScene);LoadVisualEffViewportTextures();WireVisualEffEvents();RefreshVisualEffEntries();
                 ExtractLog($"Visual Editor: EFF carregado: {Path.GetFileName(eff)} • {visualEffScene.Effect0Groups.Count} grupos E0 • {visualEffScene.Effect1Groups.Count} grupos E1 • {visualEffScene.EntryCount} efeitos.");
                 ExtractLog($"Visual Editor: diagnóstico EFF • {visualViewport.FireEmitterCount} emissores de fogo • {visualViewport.EffTextureCount} texturas enviadas ao viewport • camada ligada.");
             }
@@ -798,6 +829,32 @@ public partial class Form1
         }
     }
 
+    private void btnVisualEditCns_Click(object? sender, EventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(visualCnsPath) || !File.Exists(visualCnsPath))
+        {
+            MessageBox.Show(this, "Nenhum arquivo CNS foi encontrado no cenário selecionado.", "Editor CNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            using var editor = new CnsEditorForm(visualCnsPath);
+            editor.ShowLocalizedDialog(this);
+            if (editor.WasSaved)
+            {
+                Ps2CnsFile saved = Ps2CnsFile.Read(visualCnsPath);
+                ExtractLog($"Visual Editor: CNS salvo e validado: {Path.GetFileName(visualCnsPath)} • count {saved.Count} • flags 0x{saved.Flags:X8}.");
+                UpdateVisualStatus();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Editor CNS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            ExtractLog("Visual Editor: erro ao abrir CNS: " + ex.Message);
+        }
+    }
+
     private void WireVisualAevEvents()
     {
         visualViewport.AevEntryClicked -= visualViewport_AevEntryClicked;
@@ -816,43 +873,47 @@ public partial class Form1
         visualViewport.RtpSceneEdited += visualViewport_RtpSceneEdited;
         visualViewport.RtpNodeSelected -= visualViewport_RtpNodeSelected;
         visualViewport.RtpNodeSelected += visualViewport_RtpNodeSelected;
+        visualViewport.RtpSelectionChanged -= visualViewport_RtpSelectionChanged;
+        visualViewport.RtpSelectionChanged += visualViewport_RtpSelectionChanged;
     }
 
     private void visualViewport_RtpSceneEdited()
     {
-        RefreshVisualRtpNodes(visualViewport.SelectedRtpNodeIndex);
+        RefreshVisualRtpNodes(visualViewport.SelectedRtpNodeIndices);
         UpdateVisualStatus();
         ExtractLog("Visual Editor: RTP modificado • Ctrl+S para salvar.");
     }
 
     private void visualViewport_RtpNodeSelected(RtpNode? node)
     {
+        if(node!=null&&tabVisualEntities!=null&&tabVisualRtp!=null)tabVisualEntities.SelectedTab=tabVisualRtp;
+    }
+
+    private void visualViewport_RtpSelectionChanged(IReadOnlyList<RtpNode> nodes)
+    {
         syncingVisualRtpSelection=true;
         try
         {
-            if(node==null)lstVisualRtpNodes.ClearSelected();
-            else
-            {
-                if(tabVisualEntities!=null&&tabVisualRtp!=null)tabVisualEntities.SelectedTab=tabVisualRtp;
-                if(node.Index>=0&&node.Index<lstVisualRtpNodes.Items.Count)lstVisualRtpNodes.SelectedIndex=node.Index;
-            }
+            lstVisualRtpNodes.ClearSelected();
+            foreach(RtpNode node in nodes)if(node.Index>=0&&node.Index<lstVisualRtpNodes.Items.Count)lstVisualRtpNodes.SetSelected(node.Index,true);
         }
         finally{syncingVisualRtpSelection=false;}
     }
 
-    private void RefreshVisualRtpNodes(int selected=-1)
+    private void RefreshVisualRtpNodes(IEnumerable<int>? selected=null)
     {
-        if(lstVisualRtpNodes==null)return;syncingVisualRtpSelection=true;lstVisualRtpNodes.BeginUpdate();
-        try{lstVisualRtpNodes.Items.Clear();RtpScene? scene=visualViewport?.RtpScene;if(scene!=null)foreach(RtpNode node in scene.Nodes)lstVisualRtpNodes.Items.Add(node);if(selected>=0&&selected<lstVisualRtpNodes.Items.Count)lstVisualRtpNodes.SelectedIndex=selected;}
+        if(lstVisualRtpNodes==null)return;int[] selectedIndices=selected?.ToArray()??[];syncingVisualRtpSelection=true;lstVisualRtpNodes.BeginUpdate();
+        try{lstVisualRtpNodes.Items.Clear();RtpScene? scene=visualViewport?.RtpScene;if(scene!=null)foreach(RtpNode node in scene.Nodes)lstVisualRtpNodes.Items.Add(node);foreach(int index in selectedIndices)if(index>=0&&index<lstVisualRtpNodes.Items.Count)lstVisualRtpNodes.SetSelected(index,true);}
         finally{lstVisualRtpNodes.EndUpdate();syncingVisualRtpSelection=false;}
     }
 
     private void lstVisualRtpNodes_SelectedIndexChanged(object? sender,EventArgs e)
-    {if(syncingVisualRtpSelection)return;visualViewport?.SelectRtpNode((lstVisualRtpNodes.SelectedItem as RtpNode)?.Index??-1);}
+    {if(syncingVisualRtpSelection)return;visualViewport?.SetRtpSelection(lstVisualRtpNodes.SelectedItems.OfType<RtpNode>().Select(x=>x.Index));}
     private void lstVisualRtpNodes_KeyDown(object? sender,KeyEventArgs e)
-    {if(e.Control&&e.Shift&&e.KeyCode==Keys.D){CreateChildRtpNode();e.Handled=true;e.SuppressKeyPress=true;}else if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedRtpNode();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){DeleteSelectedRtpNode();e.Handled=true;e.SuppressKeyPress=true;}}
+    {if(e.Control&&e.Shift&&e.KeyCode==Keys.D){CreateChildRtpNode();e.Handled=true;e.SuppressKeyPress=true;}else if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedRtpNode();e.Handled=true;e.SuppressKeyPress=true;}else if(e.Control&&e.KeyCode==Keys.L){ConnectSelectedRtpNodes();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){DeleteSelectedRtpNode();e.Handled=true;e.SuppressKeyPress=true;}}
     private void DuplicateSelectedRtpNode(){visualViewport?.DuplicateSelectedRtpNodeInFront();}
     private void CreateChildRtpNode(){visualViewport?.AddChildToSelectedRtpNodeInFront();}
+    private void ConnectSelectedRtpNodes(){if(visualViewport?.ConnectSelectedRtpNodes()==false)ExtractLog("RTP: selecione exatamente 2 waypoints ainda não conectados.");}
     private void DeleteSelectedRtpNode(){visualViewport?.DeleteSelectedRtpNode();}
 
     private static (string? Smd, string? Aev, string? Etm, string? Ets, string? Sat, string? Eat, string? Lit, string? Eff, string? Rtp, string? Cam) FindVisualFiles(string content, string datName)
@@ -898,6 +959,8 @@ public partial class Form1
         visualSatPath = null; visualEatPath = null; visualRtpPath = null; visualCamPath=null;
         visualLitPath=null;visualLitScene=null;
         visualEffPath=null;visualEffScene=null;visualEffTextures=null;
+        ClearVisualIta();
+        ClearVisualSound();
         visualAevModified = false;
         visualCollisionModified = false;
         visualViewport?.SetScene(null);
@@ -1127,16 +1190,20 @@ public partial class Form1
         finally { btnVisualSaveAev.Enabled = visualViewport?.AevScene != null; }
     }
 
-    private async Task<bool> SaveVisualEditorAllAsync(bool updateUi = true)
+    private async Task<bool> SaveVisualEditorAllAsync(bool updateUi = true, bool preserveEditorState = false)
     {
         bool savedAnything = false;
         if (visualViewport?.Scene?.IsModified == true && !string.IsNullOrWhiteSpace(visualSmdPath)) savedAnything |= SaveVisualSmd();
         if (visualAevModified && visualViewport?.AevScene != null && !string.IsNullOrWhiteSpace(visualAevPath)) savedAnything |= await SaveVisualAevAsync();
         if (enemySceneModified && selectedEnemyScene != null && !string.IsNullOrWhiteSpace(currentEnemyEslPath)) savedAnything |= SaveCurrentEnemyEsl(false);
         if (visualEtsScene?.IsModified == true) savedAnything |= SaveVisualEts();
+        if (visualItaScene?.IsModified == true) savedAnything |= SaveVisualIta();
+        if (visualEseScene?.IsModified == true) savedAnything |= SaveVisualSound(true);
+        if (visualFseScene?.IsModified == true) savedAnything |= SaveVisualSound(false);
+        if (visualDseScene?.IsModified == true) savedAnything |= SaveVisualDse();
         if (visualLitScene?.IsModified == true) savedAnything |= SaveVisualLit();
         if (visualEffScene?.IsModified == true) savedAnything |= SaveVisualEff();
-        if (visualCollisionModified) savedAnything |= SaveVisualCollision();
+        if (visualCollisionModified) savedAnything |= SaveVisualCollision(reloadAfterSave: !preserveEditorState);
         if (visualViewport?.RtpScene?.IsModified == true) savedAnything |= SaveVisualRtp();
         if (visualViewport?.CamScene?.IsModified == true) savedAnything |= SaveVisualCam();
         string? activeContent = GetActiveContentPath();
@@ -1152,7 +1219,7 @@ public partial class Form1
         if (savedAnything)
         {
             if(updateUi) { lblVisualStatus.UseMnemonic = false; lblVisualStatus.Text = "Salvo • pronto para Build & Test"; }
-            ExtractLog("Visual Editor: dados carregados salvos (SMD/AEV/ESL/ETS/LIT/EFF/RTP/CAM). O Build & Test reinserirá os arquivos automaticamente na ISO de Build.");
+            ExtractLog("Visual Editor: dados carregados salvos (SMD/AEV/ESL/ETS/ITA/ESE/FSE/DSE/LIT/EFF/RTP/CAM). O Build & Test reinserirá os arquivos automaticamente na ISO de Build.");
         }
         UpdateTopVisualSaveState();
         return savedAnything;
@@ -1178,7 +1245,7 @@ public partial class Form1
 
     private bool HasUnsavedVisualChanges() =>
         visualViewport?.Scene?.IsModified == true ||
-        visualAevModified || enemySceneModified || visualCollisionModified ||
+        visualAevModified || enemySceneModified || visualCollisionModified || visualItaScene?.IsModified == true || visualEseScene?.IsModified == true || visualFseScene?.IsModified == true || visualDseScene?.IsModified == true ||
         visualEtsScene?.IsModified == true || visualLitScene?.IsModified == true ||
         visualEffScene?.IsModified == true || visualViewport?.RtpScene?.IsModified == true ||
         visualViewport?.CamScene?.IsModified == true;
@@ -1197,19 +1264,37 @@ public partial class Form1
         bool visualOpen = pnlVisualEditor != null && pnlVisualEditor.Visible;
         bool enemiesOpen = pnlEnemies != null && pnlEnemies.Visible;
         bool messagesOpen = pnlMessages != null && pnlMessages.Visible;
+        bool soundsOpen = pnlSounds != null && pnlSounds.Visible;
         bool objectTab = visualOpen && tabVisualEntities?.SelectedIndex == 2;
         bool smdTab = visualOpen && tabVisualEntities?.SelectedIndex == 4;
         bool camTab = visualOpen && tabVisualEntities?.SelectedIndex == 8;
+        bool collisionTab = visualOpen && tabVisualEntities?.SelectedIndex == 3;
+        if(collisionTab&&!e.Control&&e.KeyCode==Keys.F&&visualCollisionMarkedEdges.Count>=2){btnVisualCollisionEdgeFill_Click(null,EventArgs.Empty);e.Handled=true;e.SuppressKeyPress=true;return;}
+        if(collisionTab&&!e.Control&&e.KeyCode==Keys.Delete){btnVisualCollisionRemove_Click(null,EventArgs.Empty);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(camTab&&!e.Control&&e.KeyCode==Keys.F){visualViewport?.FocusCam(lstVisualCamEntries.SelectedItem as CamEntry);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(camTab&&!e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3 or Keys.D4 or Keys.NumPad4 or Keys.D5 or Keys.NumPad5){SetCamGizmoMode(e.KeyCode is Keys.D1 or Keys.NumPad1?CamGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?CamGizmoMode.Scale:e.KeyCode is Keys.D3 or Keys.NumPad3?CamGizmoMode.Vertex:e.KeyCode is Keys.D4 or Keys.NumPad4?CamGizmoMode.Face:CamGizmoMode.Frame);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(smdTab&&!e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3){SmdGizmoMode mode=e.KeyCode is Keys.D1 or Keys.NumPad1?SmdGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?SmdGizmoMode.Rotate:SmdGizmoMode.Scale;if(chkVisualSmdEditMode.Checked)mode=SmdGizmoMode.Move;SetSmdGizmoMode(mode);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(objectTab && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;visualViewport?.FocusEts(lstVisualObjectEntries.SelectedItem as EtsEntry);return;}
-        if(objectTab && !e.Control && e.KeyCode==Keys.G){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Move);return;}
-        if(objectTab && !e.Control && e.KeyCode==Keys.R){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Rotate);return;}
+        if(objectTab && !e.Control && e.KeyCode is Keys.D1 or Keys.NumPad1){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Move);return;}
+        if(objectTab && !e.Control && e.KeyCode is Keys.D2 or Keys.NumPad2){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Rotate);return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;FocusSelectedEnemy();return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.G){e.Handled=true;e.SuppressKeyPress=true;SetEnemyGizmoMode(EnemyGizmoMode.Move);return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.R){e.Handled=true;e.SuppressKeyPress=true;SetEnemyGizmoMode(EnemyGizmoMode.Rotate);return;}
         if (!e.Control) return;
+        if (soundsOpen && e.KeyCode == Keys.Z)
+        {
+            if (UndoSoundEdit()) { e.Handled = true; e.SuppressKeyPress = true; }
+            return;
+        }
+        if (soundsOpen && e.KeyCode == Keys.Y)
+        {
+            if (RedoSoundEdit()) { e.Handled = true; e.SuppressKeyPress = true; }
+            return;
+        }
+        if (soundsOpen && e.KeyCode == Keys.S)
+        {
+            btnSoundSave_Click(null, EventArgs.Empty); e.Handled = true; e.SuppressKeyPress = true; return;
+        }
         if (messagesOpen && e.KeyCode == Keys.F)
         {
             e.Handled = true; e.SuppressKeyPress = true;
@@ -1483,6 +1568,10 @@ public partial class Form1
 
     private void pgVisualProperties_PropertyValueChanged(object? sender, PropertyValueChangedEventArgs e)
     {
+        if(pgVisualProperties.SelectedObject is EsatFaceInspection collisionFace){visualCollisionModified=true;btnVisualCollisionSave.Enabled=true;visualViewport?.RefreshCollisionDisplay();pgVisualProperties.Refresh();UpdateTopVisualSaveState();return;}
+        if(pgVisualProperties.SelectedObject is EseEntry){MarkSoundModified(true);lstVisualEseEntries.Refresh();return;}
+        if(pgVisualProperties.SelectedObject is FseEntry){MarkSoundModified(false);lstVisualFseEntries.Refresh();return;}
+        if(pgVisualProperties.SelectedObject is DseEntry){MarkDseModified();lstVisualDseEntries.Refresh();return;}
         if(pgVisualProperties.SelectedObject is CamEntry or CamVertex or CamFrame)
         {
             object targetObject=pgVisualProperties.SelectedObject;PropertyDescriptor? property=e.ChangedItem.PropertyDescriptor;object? camOldValue=e.OldValue,camNewValue=property?.GetValue(targetObject);if(property!=null&&visualViewport!=null)visualViewport.RegisterCamEdit(()=>ApplyCamProperty(targetObject,property,camOldValue),()=>ApplyCamProperty(targetObject,property,camNewValue));
@@ -1497,6 +1586,10 @@ public partial class Form1
         {
             if(visualLitScene!=null)visualLitScene.IsModified=true;
             btnVisualSaveLit.Text="SAVE LIT *";lstVisualLitEntries.Refresh();visualViewport?.RefreshLitGeometry();UpdateVisualStatus();return;
+        }
+        if(pgVisualProperties.SelectedObject is ItaEntry)
+        {
+            MarkItaModified();lstVisualItaEntries.Refresh();visualViewport?.RefreshItaGeometry(pgVisualProperties.SelectedObject as ItaEntry);UpdateTopVisualSaveState();return;
         }
         if (pgVisualProperties.SelectedObject is ScenarioEntry smdEntry)
         {
@@ -1659,13 +1752,16 @@ public partial class Form1
         if(eff!=null)modified += $" • {eff.EntryCount:N0} effects"+(eff.IsModified?" • EFF Modified":"");
         RtpScene? rtp=visualViewport?.RtpScene;
         if(rtp!=null)modified += $" • {rtp.Nodes.Count:N0} RTP nodes"+(rtp.IsModified?" • RTP Modified":"");
+        if(visualEseScene!=null)modified += $" • {visualEseScene.Entries.Count:N0} ESE"+(visualEseScene.IsModified?" • ESE Modified":"");
+        if(visualFseScene!=null)modified += $" • {visualFseScene.Entries.Count:N0} FSE"+(visualFseScene.IsModified?" • FSE Modified":"");
+        if(visualDseScene!=null)modified += $" • {visualDseScene.Entries.Count:N0} DSE"+(visualDseScene.IsModified?" • DSE Modificado":"");
 
         if (scene != null && aev != null && esl != null) lblVisualStatus.Text = $"{scene.Triangles.Count:N0} tris • {aev.Count:N0} AEV • {esl.ActiveCount:N0} enemies • {ets?.Entries.Count ?? 0:N0} objects{modified}";
         else if (scene != null && aev != null) lblVisualStatus.Text = $"{scene.Triangles.Count:N0} tris • {aev.Count:N0} AEV{modified}";
         else if (scene != null) lblVisualStatus.Text = $"{scene.Triangles.Count:N0} tris • {visualViewport.LoadedTextureCount:N0} tex";
         else if (aev != null) lblVisualStatus.Text = $"{aev.Count:N0} AEV{modified}";
         else if(esl != null) lblVisualStatus.Text = $"{esl.ActiveCount:N0} enemies{modified}";
-        else lblVisualStatus.Text = "v0.6.0 • Visual Editor";
+        else lblVisualStatus.Text = "v0.7.0 • Visual Editor";
         UpdateTopVisualSaveState();
     }
 
@@ -1697,6 +1793,9 @@ public partial class Form1
         clbVisualLayers.SetItemChecked(5, settings.VisualLightingLayer);
         clbVisualLayers.SetItemChecked(6, settings.VisualEffectsLayer);
         clbVisualLayers.SetItemChecked(7, settings.VisualRtpLayer);
+        if(clbVisualLayers.Items.Count>8)clbVisualLayers.SetItemChecked(8,settings.VisualCamLayer);
+        if(clbVisualLayers.Items.Count>9)clbVisualLayers.SetItemChecked(9,settings.VisualItaLayer);
+        if(clbVisualLayers.Items.Count>10)clbVisualLayers.SetItemChecked(10,settings.VisualSoundLayer);
         if (visualViewport != null && !visualViewport.IsDisposed)
         {
             visualViewport.ScenarioVisible = settings.VisualScenarioLayer;
@@ -1707,8 +1806,13 @@ public partial class Form1
             visualViewport.LightingVisible = settings.VisualLightingLayer;
             visualViewport.EffectsVisible = settings.VisualEffectsLayer;
             visualViewport.RtpVisible = settings.VisualRtpLayer;
+            visualViewport.CamVisible=settings.VisualCamLayer;
+            visualViewport.ItaVisible=settings.VisualItaLayer;
+            visualViewport.SoundVisible=settings.VisualSoundLayer;
             visualViewport.EnemySnapEnabled = settings.VisualEnemySnap;
         }
+        if(chkVisualCollisionSat!=null)chkVisualCollisionSat.Checked=settings.VisualCollisionSatVisible;
+        if(chkVisualCollisionEat!=null)chkVisualCollisionEat.Checked=settings.VisualCollisionEatVisible;
         if(chkVisualEnemySnap!=null) chkVisualEnemySnap.Checked=settings.VisualEnemySnap;
         if(chkVisualEnemyAnimated!=null) chkVisualEnemyAnimated.Checked=settings.VisualEnemyAnimated;
         SetEnemyGizmoMode(EnemyGizmoMode.Move);
@@ -1718,6 +1822,7 @@ public partial class Form1
     {
         visualViewport.CollisionFaceClicked -= visualViewport_CollisionFaceClicked;
         visualViewport.CollisionFaceClicked += visualViewport_CollisionFaceClicked;
+        visualViewport.CollisionEdgeClicked-=visualViewport_CollisionEdgeClicked;visualViewport.CollisionEdgeClicked+=visualViewport_CollisionEdgeClicked;
         visualViewport.CollisionVertexEdited -= visualViewport_CollisionVertexEdited;
         visualViewport.CollisionVertexEdited += visualViewport_CollisionVertexEdited;
     }
@@ -1740,6 +1845,7 @@ public partial class Form1
     private void visualCollisionDisplay_Changed(object? sender, EventArgs e)
     {
         if (visualViewport == null) return;
+        settings.VisualCollisionSatVisible=chkVisualCollisionSat.Checked;settings.VisualCollisionEatVisible=chkVisualCollisionEat.Checked;if(!restoringSession)SaveSettings();
         VisualCollisionMeshItem? item = cmbVisualCollisionMesh?.SelectedItem as VisualCollisionMeshItem;
         visualViewport.SatCollisionVisible = chkVisualCollisionSat.Checked && (item?.Kind == null || item.Kind == EsatKind.Sat);
         visualViewport.EatCollisionVisible = chkVisualCollisionEat.Checked && (item?.Kind == null || item.Kind == EsatKind.Eat);
@@ -1766,10 +1872,15 @@ public partial class Form1
         lblVisualPropertiesTitle.Text = $"PROPERTIES • {face.FileType} FACE #{face.FaceIndex}";
         lblVisualCollisionInfo.Text = $"{face.FileType} • submesh {face.MeshIndex} • face {face.FaceIndex} • {face.Category}\nBB {face.Blue}  GG {face.Green}  RR {face.Red}  YY {face.Connectivity}";
         if(visualCollisionMoveWholeFace||visualCollisionMoveFaceSide||visualCollisionMoveObject){var size=visualViewport.GetCollisionRegionSelectionSize();string mode=visualCollisionMoveObject?"OBJETO":visualCollisionMoveFaceSide?"LADO":"REGIÃO";lblVisualCollisionInfo.Text=$"{mode} • {size.Faces} faces, {size.Vertices} vértices • {face.FileType} submesh {face.MeshIndex}";}
-        cmbVisualCollisionVertex.Enabled=!visualCollisionMoveWholeFace&&!visualCollisionMoveFaceSide&&!visualCollisionMoveObject;
+        cmbVisualCollisionVertex.Enabled=!visualCollisionMoveWholeFace&&!visualCollisionMoveFaceSide&&!visualCollisionMoveObject&&!visualCollisionMoveEdge;
         if(cmbVisualCollisionVertex.SelectedIndex<0)cmbVisualCollisionVertex.SelectedIndex=0;else visualViewport.SelectCollisionVertex(cmbVisualCollisionVertex.SelectedIndex);
     }
 
+    private void visualViewport_CollisionEdgeClicked(EsatFaceInspection? face,int edge,bool additive)
+    {
+        if(face==null||edge<0){visualCollisionMarkedEdges.Clear();visualViewport?.SetCollisionMarkedEdges(Array.Empty<(int,int)>());return;}
+        if(!additive||visualCollisionMarkedEdges.Any(x=>x.Path!=face.File.SourcePath||x.MeshIndex!=face.MeshIndex))visualCollisionMarkedEdges.Clear();var key=(face.File.SourcePath,face.MeshIndex,face.FaceIndex,edge);int existing=visualCollisionMarkedEdges.FindIndex(x=>x==key);if(existing>=0&&additive)visualCollisionMarkedEdges.RemoveAt(existing);else if(existing<0)visualCollisionMarkedEdges.Add(key);visualViewport?.SetCollisionMarkedEdges(visualCollisionMarkedEdges.Select(x=>(x.FaceIndex,x.EdgeSlot)));lblVisualCollisionInfo.Text=$"ARESTAS MARCADAS • {visualCollisionMarkedEdges.Count} • arraste o gizmo para mover • Ctrl/Shift adiciona • F preenche";
+    }
     private void cmbVisualCollisionVertex_SelectedIndexChanged(object? sender, EventArgs e) => visualViewport?.SelectCollisionVertex(cmbVisualCollisionVertex.SelectedIndex);
     private void SetCollisionMoveMode(CollisionVertexMoveMode mode)
     {
@@ -1778,19 +1889,30 @@ public partial class Form1
         btnVisualCollisionMoveY.BackColor=mode==CollisionVertexMoveMode.Vertical?Accent:Surface2;
         lblVisualCollisionInfo.Text=mode==CollisionVertexMoveMode.Horizontal?"Arraste a cruz amarela para mover o vértice em X/Z.":"Arraste a cruz amarela para mover o vértice verticalmente.";
     }
-    private void ToggleCollisionFaceMove()
+    private void SetCollisionGizmoMode(CollisionGizmoMode mode)
     {
+        visualViewport?.SetCollisionGizmoMode(mode);btnVisualCollisionRotateLeft.BackColor=mode==CollisionGizmoMode.Move?Accent:Surface2;btnVisualCollisionRotateRight.BackColor=mode==CollisionGizmoMode.Rotate?Accent:Surface2;lblVisualCollisionInfo.Text=mode==CollisionGizmoMode.Rotate?"Arraste um dos anéis X/Y/Z para rotacionar a seleção.":"Arraste uma das setas X/Y/Z para mover a seleção.";
+    }
+    private void ToggleCollisionEdgeMove()
+    {
+        visualCollisionMoveEdge=!visualCollisionMoveEdge;if(visualCollisionMoveEdge){visualCollisionMoveWholeFace=false;visualCollisionMoveFaceSide=false;visualCollisionMoveObject=false;visualViewport?.SetCollisionMoveWholeFace(false);visualViewport?.SetCollisionMoveFaceSide(false);visualViewport?.SetCollisionMoveObject(false);}visualViewport!.CollisionEdgeEditingEnabled=visualCollisionMoveEdge;
+        if(!visualCollisionMoveEdge){visualCollisionMarkedEdges.Clear();visualViewport.SetCollisionMarkedEdges(Array.Empty<(int,int)>());}
+        btnVisualCollisionEdge.BackColor=visualCollisionMoveEdge?Accent:Surface2;btnVisualCollisionEdge.Text=visualCollisionMoveEdge?"ARESTA ✓":"ARESTA";btnVisualCollisionMoveXZ.BackColor=visualCollisionMoveEdge?Surface2:Accent;btnVisualCollisionMoveY.BackColor=Surface2;btnVisualCollisionMoveSide.BackColor=Surface2;btnVisualCollisionMoveSide.Text="LADO";btnVisualCollisionObject.BackColor=Surface2;btnVisualCollisionObject.Text="OBJETO";cmbVisualCollisionVertex.Enabled=!visualCollisionMoveEdge&&visualViewport.SelectedCollisionFace!=null;
+        lblVisualCollisionInfo.Text=visualCollisionMoveEdge?"ARESTA • clique próximo de uma aresta; Ctrl/Shift seleciona várias; arraste o gizmo.":"VÉRTICE • escolha V0, V1 ou V2 para editar.";
+    }
+    private void ToggleCollisionFaceMove()
+    {visualCollisionMoveEdge=false;if(visualViewport!=null)visualViewport.CollisionEdgeEditingEnabled=false;visualCollisionMarkedEdges.Clear();visualViewport?.SetCollisionMarkedEdges(Array.Empty<(int,int)>());btnVisualCollisionEdge.BackColor=Surface2;btnVisualCollisionEdge.Text="ARESTA";
         visualCollisionMoveWholeFace=!visualCollisionMoveWholeFace;if(visualCollisionMoveWholeFace){visualCollisionMoveFaceSide=false;visualCollisionMoveObject=false;visualViewport?.SetCollisionMoveFaceSide(false);visualViewport?.SetCollisionMoveObject(false);}visualViewport?.SetCollisionMoveWholeFace(visualCollisionMoveWholeFace);
-        btnVisualCollisionMoveFace.BackColor=visualCollisionMoveWholeFace?Accent:Surface2;
-        btnVisualCollisionMoveFace.Text=visualCollisionMoveWholeFace?"REGIÃO ✓":"REGIÃO";
+        btnVisualCollisionMoveXZ.BackColor=visualCollisionMoveWholeFace?Surface2:Accent;btnVisualCollisionMoveY.BackColor=visualCollisionMoveWholeFace?Accent:Surface2;btnVisualCollisionMoveFace.BackColor=Surface2;
+        btnVisualCollisionMoveFace.Text="REGIÃO";
         btnVisualCollisionMoveSide.BackColor=Surface2;btnVisualCollisionMoveSide.Text="LADO";
         btnVisualCollisionObject.BackColor=Surface2;btnVisualCollisionObject.Text="OBJETO";
         cmbVisualCollisionVertex.Enabled=!visualCollisionMoveWholeFace&&visualViewport?.SelectedCollisionFace!=null;
         var size=visualViewport?.GetCollisionRegionSelectionSize()??default;
-        lblVisualCollisionInfo.Text=visualCollisionMoveWholeFace?$"REGIÃO • {size.Faces} faces, {size.Vertices} vértices • arraste a cruz central.":"VERTEX • escolha V0, V1 ou V2 para editar.";
+        lblVisualCollisionInfo.Text=visualCollisionMoveWholeFace?$"FACE • {size.Vertices} vértices • arraste um eixo colorido.":"VÉRTICE • escolha V0, V1 ou V2 e arraste X, Y ou Z.";
     }
     private void ToggleCollisionSideMove()
-    {
+    {visualCollisionMoveEdge=false;if(visualViewport!=null)visualViewport.CollisionEdgeEditingEnabled=false;visualCollisionMarkedEdges.Clear();visualViewport?.SetCollisionMarkedEdges(Array.Empty<(int,int)>());btnVisualCollisionEdge.BackColor=Surface2;btnVisualCollisionEdge.Text="ARESTA";
         visualCollisionMoveFaceSide=!visualCollisionMoveFaceSide;if(visualCollisionMoveFaceSide){visualCollisionMoveWholeFace=false;visualCollisionMoveObject=false;visualViewport?.SetCollisionMoveWholeFace(false);visualViewport?.SetCollisionMoveObject(false);}visualViewport?.SetCollisionMoveFaceSide(visualCollisionMoveFaceSide);
         btnVisualCollisionMoveSide.BackColor=visualCollisionMoveFaceSide?Accent:Surface2;btnVisualCollisionMoveSide.Text=visualCollisionMoveFaceSide?"LADO ✓":"LADO";btnVisualCollisionMoveFace.BackColor=Surface2;btnVisualCollisionMoveFace.Text="REGIÃO";
         btnVisualCollisionObject.BackColor=Surface2;btnVisualCollisionObject.Text="OBJETO";
@@ -1798,15 +1920,15 @@ public partial class Form1
         lblVisualCollisionInfo.Text=visualCollisionMoveFaceSide?$"LADO • {size.Faces} faces, {size.Vertices} vértices • mova o pivô central.":"VERTEX • escolha V0, V1 ou V2 para editar.";
     }
     private void ToggleCollisionObjectMove()
-    {
+    {visualCollisionMoveEdge=false;if(visualViewport!=null)visualViewport.CollisionEdgeEditingEnabled=false;visualCollisionMarkedEdges.Clear();visualViewport?.SetCollisionMarkedEdges(Array.Empty<(int,int)>());btnVisualCollisionEdge.BackColor=Surface2;btnVisualCollisionEdge.Text="ARESTA";
         visualCollisionMoveObject=!visualCollisionMoveObject;if(visualCollisionMoveObject){visualCollisionMoveWholeFace=false;visualCollisionMoveFaceSide=false;visualViewport?.SetCollisionMoveWholeFace(false);visualViewport?.SetCollisionMoveFaceSide(false);}visualViewport?.SetCollisionMoveObject(visualCollisionMoveObject);
         btnVisualCollisionObject.BackColor=visualCollisionMoveObject?Accent:Surface2;btnVisualCollisionObject.Text=visualCollisionMoveObject?"OBJETO ✓":"OBJETO";btnVisualCollisionMoveFace.BackColor=Surface2;btnVisualCollisionMoveFace.Text="REGIÃO";btnVisualCollisionMoveSide.BackColor=Surface2;btnVisualCollisionMoveSide.Text="LADO";
         cmbVisualCollisionVertex.Enabled=!visualCollisionMoveObject&&visualViewport?.SelectedCollisionFace!=null;var size=visualViewport?.GetCollisionRegionSelectionSize()??default;
-        lblVisualCollisionInfo.Text=visualCollisionMoveObject?(size.Faces==12?$"OBJETO reconhecido • {size.Faces} faces, {size.Vertices} vértices":"Esta face não pertence a uma primitiva criada pela ferramenta."):"VERTEX • escolha V0, V1 ou V2 para editar.";
+        lblVisualCollisionInfo.Text=visualCollisionMoveObject?(size.Faces>0?$"OBJETO reconhecido • {size.Faces} faces, {size.Vertices} vértices":"Esta face não pertence a uma primitiva reconhecida pela ferramenta."):"VERTEX • escolha V0, V1 ou V2 para editar.";
     }
     private void TransformCollisionObject(float rotation,bool invert=false,bool remove=false)
     {
-        if(visualViewport?.TransformSelectedCollisionObject(rotation,invert,remove)!=true){MessageBox.Show(this,"Ative OBJETO e selecione uma primitiva de 12 faces criada pela ferramenta.","Editar primitiva",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+        if(visualViewport?.TransformSelectedCollisionObject(rotation,invert,remove)!=true){MessageBox.Show(this,"Ative OBJETO e selecione uma primitiva reconhecida pela ferramenta.","Editar primitiva",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
         visualCollisionModified=true;btnVisualCollisionSave.Enabled=true;lblVisualCollisionInfo.Text=remove?"Primitiva removida da área jogável • SAVE para confirmar":invert?"Lados da colisão invertidos • SAVE para confirmar":$"Primitiva girada {rotation:+0;-0}° • SAVE para confirmar";
     }
     private void btnVisualCollisionDuplicate_Click(object? sender,EventArgs e)
@@ -1817,44 +1939,45 @@ public partial class Form1
             string dat=string.IsNullOrWhiteSpace(project.ActiveDatName)?"active":Path.GetFileNameWithoutExtension(project.ActiveDatName);string root=project.RootPath??AppContext.BaseDirectory;
             var b=bounds.Value;var center=b.Center+new System.Numerics.Vector3(Math.Max(100f,b.Size.X*1.25f),0,0);
             Ps2EsatPrimitiveWriter.AddBoxAt(selected.File,selected.MeshIndex,selected.FaceIndex,b.Size,center,Path.Combine(root,".workspace","backups",dat,Path.GetFileName(selected.File.SourcePath)+".bak"));
-            EsatFile refreshed=Ps2EsatReader.Read(selected.File.SourcePath,EsatKind.Sat);visualViewport!.SetCollision(refreshed,visualViewport.EatCollision);PopulateVisualCollisionMeshes(refreshed,visualViewport.EatCollision);visualCollisionModified=false;btnVisualCollisionSave.Enabled=false;lblVisualCollisionInfo.Text="Primitiva duplicada ao lado (+X) • arquivo validado e recarregado";
+            EsatKind kind=selected.File.Kind;EsatFile refreshed=Ps2EsatReader.Read(selected.File.SourcePath,kind);EsatFile? sat=kind==EsatKind.Sat?refreshed:visualViewport!.SatCollision,eat=kind==EsatKind.Eat?refreshed:visualViewport!.EatCollision;visualViewport.SetCollision(sat,eat);PopulateVisualCollisionMeshes(sat,eat);visualCollisionModified=false;btnVisualCollisionSave.Enabled=false;lblVisualCollisionInfo.Text=$"Primitiva {kind.ToString().ToUpperInvariant()} duplicada ao lado (+X) • arquivo validado e recarregado";
         }
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Duplicar primitiva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }
     private void btnVisualCollisionRemove_Click(object? sender,EventArgs e)
     {
-        try
-        {
-            EsatFaceInspection? selected=visualViewport?.SelectedCollisionFace;if(selected==null){MessageBox.Show(this,"Ative OBJETO e selecione uma primitiva criada pela ferramenta.","Excluir primitiva",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-            if(visualViewport?.SelectedCollisionIsBoxPrimitive!=true){MessageBox.Show(this,"A exclusão de colisão original foi bloqueada porque ela altera índices e dependências internas do SAT que ainda não são conhecidas. Nos testes, remover até uma única face original fez o jogo crashar.\n\nVocê ainda pode mover ou deformar a geometria original sem alterar sua estrutura. Somente primitivas criadas pela ferramenta podem ser excluídas com segurança.","Exclusão original bloqueada",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
-            if(MessageBox.Show(this,"Excluir definitivamente esta primitiva do SAT?\n\nAs 12 faces e seus dados exclusivos serão removidos. O backup original será preservado.","Excluir primitiva",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
-            string dat=string.IsNullOrWhiteSpace(project.ActiveDatName)?"active":Path.GetFileNameWithoutExtension(project.ActiveDatName);string root=project.RootPath??AppContext.BaseDirectory;
-            string backup=Path.Combine(root,".workspace","backups",dat,Path.GetFileName(selected.File.SourcePath)+".bak");Ps2EsatPrimitiveWriter.DeleteBox(selected.File,selected.MeshIndex,selected.FaceIndex,backup);
-            EsatFile refreshed=Ps2EsatReader.Read(selected.File.SourcePath,EsatKind.Sat);visualViewport!.SetCollision(refreshed,visualViewport.EatCollision);PopulateVisualCollisionMeshes(refreshed,visualViewport.EatCollision);visualCollisionModified=false;btnVisualCollisionSave.Enabled=false;lblVisualCollisionInfo.Text="Primitiva excluída • 12 faces e dados exclusivos removidos • SAT validado";
-        }
-        catch(Exception ex){MessageBox.Show(this,ex.Message,"Excluir primitiva",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        try{int count=visualViewport?.DisableSelectedCollisionFaces()??0;if(count==0)return;visualCollisionMarkedEdges.Clear();visualCollisionModified=true;btnVisualCollisionSave.Enabled=true;lblVisualCollisionInfo.Text=$"{count} face{(count==1?"":"s")} desativada{(count==1?"":"s")} • Ctrl+Z desfaz • SAVE confirma";UpdateTopVisualSaveState();}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Excluir colisão",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }
     private void visualViewport_CollisionVertexEdited(EsatFaceInspection face)
     {
         visualCollisionModified=true;btnVisualCollisionSave.Enabled=true;pgVisualProperties.Refresh();
         lblVisualCollisionInfo.Text=$"MODIFICADO • {face.FileType} face {face.FaceIndex} • use Ctrl+Z para desfazer";
     }
+    private void btnVisualCollisionEdgeFill_Click(object? sender,EventArgs e)
+    {
+        try
+        {
+            if(visualCollisionMarkedEdges.Count<2){MessageBox.Show(this,"Marque pelo menos duas arestas para criar a superfície.","Preencher arestas",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}EsatFaceInspection? selected=visualViewport?.SelectedCollisionFace;if(selected==null||selected.File.SourcePath!=visualCollisionMarkedEdges[0].Path||selected.MeshIndex!=visualCollisionMarkedEdges[0].MeshIndex)throw new InvalidOperationException("Selecione novamente uma face do mesmo submesh das arestas marcadas.");
+            string dat=string.IsNullOrWhiteSpace(project.ActiveDatName)?"active":Path.GetFileNameWithoutExtension(project.ActiveDatName);string root=project.RootPath??AppContext.BaseDirectory;string backup=Path.Combine(root,".workspace","backups",dat,Path.GetFileName(selected.File.SourcePath)+".bak");var edges=visualCollisionMarkedEdges.Select(x=>(x.FaceIndex,x.EdgeSlot)).ToArray();Ps2EsatPrimitiveWriter.AddSurfaceFromEdges(selected.File,selected.MeshIndex,edges,backup);int created=edges.SelectMany(x=>new[]{x}).Count();visualCollisionMarkedEdges.Clear();EsatFile refreshed=Ps2EsatReader.Read(selected.File.SourcePath,EsatKind.Sat);visualViewport!.SetCollision(refreshed,visualViewport.EatCollision);PopulateVisualCollisionMeshes(refreshed,visualViewport.EatCollision);visualCollisionModified=false;btnVisualCollisionSave.Enabled=false;lblVisualCollisionInfo.Text="Superfície criada entre as arestas • alturas e vértices originais preservados";
+        }
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Preencher arestas",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
     private void btnVisualCollisionCube_Click(object? sender,EventArgs e)
     {
         try
         {
-            EsatFaceInspection? selected=visualViewport?.SelectedCollisionFace;if(selected==null){MessageBox.Show(this,"Selecione uma face SAT para posicionar o cubo.","Criar cubo",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-            if(selected.File.Kind!=EsatKind.Sat){MessageBox.Show(this,"Selecione uma face do arquivo SAT.","Criar cubo",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-            string dat=string.IsNullOrWhiteSpace(project.ActiveDatName)?"active":Path.GetFileNameWithoutExtension(project.ActiveDatName);string root=project.RootPath??AppContext.BaseDirectory;
-            float meters=cmbVisualCollisionPrimitiveSize.SelectedIndex switch{0=>2f,1=>5f,2=>10f,_=>20f};float units=meters*100f;string kind=cmbVisualCollisionPrimitive.SelectedItem?.ToString()??"Cubo";
-            System.Numerics.Vector3 dimensions=kind switch{"Parede"=>new(units*2f,units,Math.Max(20f,units*0.1f)),"Plataforma"=>new(units*2f,Math.Max(20f,units*0.1f),units*2f),_=>new(units)};
-            Ps2EsatPrimitiveWriter.AddBox(selected.File,selected.MeshIndex,selected.FaceIndex,dimensions,Path.Combine(root,".workspace","backups",dat,Path.GetFileName(selected.File.SourcePath)+".bak"));
-            EsatFile refreshed=Ps2EsatReader.Read(selected.File.SourcePath,EsatKind.Sat);visualViewport!.SetCollision(refreshed,visualViewport.EatCollision);PopulateVisualCollisionMeshes(refreshed,visualViewport.EatCollision);lblVisualCollisionInfo.Text=$"{kind} experimental criado • escala {meters:0} m";ExtractLog($"Visual Editor: {kind.ToLowerInvariant()} SAT experimental criado com 12 faces.");
+            using var dialog=new CollisionPrimitiveDialog();if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||dialog.Options==null)return;CollisionPrimitiveOptions options=dialog.Options;
+            EsatFile? target=options.TargetKind==EsatKind.Sat?visualViewport?.SatCollision:visualViewport?.EatCollision;if(target==null){MessageBox.Show(this,$"Carregue o {options.TargetKind.ToString().ToUpperInvariant()} da sala antes de criar uma primitiva.","Criar colisão",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+            System.Numerics.Vector3 center=visualViewport!.GetCollisionCreationPosition();
+            var candidates=target.Meshes.SelectMany((mesh,mi)=>mesh.Faces.Select((face,fi)=>(Mesh:mesh,MeshIndex:mi,Face:face,FaceIndex:fi))).Where(x=>!Ps2EsatPrimitiveWriter.IsFaceDisabled(target.Kind,x.Face)).Select(x=>(x.MeshIndex,x.FaceIndex,Distance:System.Numerics.Vector3.DistanceSquared((x.Mesh.Positions[x.Face.Vertex0]+x.Mesh.Positions[x.Face.Vertex1]+x.Mesh.Positions[x.Face.Vertex2])/3f,center))).OrderBy(x=>x.Distance).ToArray();if(candidates.Length==0)throw new InvalidOperationException($"O {target.Kind.ToString().ToUpperInvariant()} não possui uma face ativa para determinar o grupo espacial da nova primitiva.");var anchor=candidates[0];
+            string dat=string.IsNullOrWhiteSpace(project.ActiveDatName)?"active":Path.GetFileNameWithoutExtension(project.ActiveDatName);string root=project.RootPath??AppContext.BaseDirectory;string backup=Path.Combine(root,".workspace","backups",dat,Path.GetFileName(target.SourcePath)+".bak");if(options.Kind=="Prisma triangular completo")Ps2EsatPrimitiveWriter.AddFullTriangularPrismAt(target,anchor.MeshIndex,anchor.FaceIndex,options.Dimensions,center,backup);else if(options.Kind=="Prisma triangular")Ps2EsatPrimitiveWriter.AddTriangularPrismAt(target,anchor.MeshIndex,anchor.FaceIndex,options.Dimensions,center,backup);else Ps2EsatPrimitiveWriter.AddBoxAt(target,anchor.MeshIndex,anchor.FaceIndex,options.Dimensions,center,backup);
+            EsatFile refreshed=Ps2EsatReader.Read(target.SourcePath,target.Kind);EsatFile? sat=target.Kind==EsatKind.Sat?refreshed:visualViewport.SatCollision,eat=target.Kind==EsatKind.Eat?refreshed:visualViewport.EatCollision;visualViewport.SetCollision(sat,eat);PopulateVisualCollisionMeshes(sat,eat);visualCollisionModified=false;btnVisualCollisionSave.Enabled=false;lblVisualCollisionInfo.Text=$"{options.Kind} {target.Kind.ToString().ToUpperInvariant()} criado à frente da câmera • {options.Dimensions.X/100f:0.##} × {options.Dimensions.Y/100f:0.##} × {options.Dimensions.Z/100f:0.##} m";
         }
-        catch(Exception ex){MessageBox.Show(this,ex.Message,"Criar cubo",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Criar colisão",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }
+
     private void btnVisualCollisionSave_Click(object? sender, EventArgs e)=>SaveVisualCollision();
-    private bool SaveVisualCollision()
+    private bool SaveVisualCollision(bool reloadAfterSave = true)
     {
         try
         {
@@ -1864,12 +1987,22 @@ public partial class Form1
             if(eat is not null&&eat.Meshes.Any(x=>x.IsModified))saved|=Ps2EsatVertexWriter.Save(eat,Path.Combine(root,".workspace","backups",dat,Path.GetFileName(eat.SourcePath)+".bak"));
             if(saved)
             {
-                EsatFile? refreshedSat=sat is null?null:Ps2EsatReader.Read(sat.SourcePath,EsatKind.Sat);
-                EsatFile? refreshedEat=eat is null?null:Ps2EsatReader.Read(eat.SourcePath,EsatKind.Eat);
-                visualViewport.SetCollision(refreshedSat,refreshedEat);
-                PopulateVisualCollisionMeshes(refreshedSat,refreshedEat);
+                if (reloadAfterSave)
+                {
+                    EsatFile? refreshedSat=sat is null?null:Ps2EsatReader.Read(sat.SourcePath,EsatKind.Sat);
+                    EsatFile? refreshedEat=eat is null?null:Ps2EsatReader.Read(eat.SourcePath,EsatKind.Eat);
+                    visualViewport!.SetCollision(refreshedSat,refreshedEat);
+                    PopulateVisualCollisionMeshes(refreshedSat,refreshedEat);
+                    ExtractLog("Visual Editor: SAT/EAT salvo sem alterar sua estrutura, validado e recarregado com backup.");
+                }
+                else
+                {
+                    // O writer atualiza os snapshots originais nos próprios meshes. Mantê-los
+                    // evita que o autosave destrua seleção, gizmo, arestas marcadas e undo.
+                    visualViewport!.RefreshCollisionDisplay();
+                    ExtractLog("Visual Editor: SAT/EAT salvo em segundo plano sem recarregar a seleção.");
+                }
                 visualCollisionModified=false;btnVisualCollisionSave.Enabled=false;lblVisualCollisionInfo.Text="SAT/EAT salvo em modo compatível • backup preservado";
-                ExtractLog("Visual Editor: SAT/EAT salvo sem alterar sua estrutura, validado e recarregado com backup.");
             }
             return saved;
         }
@@ -1878,35 +2011,27 @@ public partial class Form1
 
     private void clbVisualLayers_ItemCheck(object? sender, ItemCheckEventArgs e)
     {
-        // During the constructor the persisted checks are restored before the Form handle exists.
-        // ApplyVisualLayerSettings already updates the viewport directly in that case.
-        if (!IsHandleCreated) return;
-        BeginInvoke(new Action(() =>
+        // ItemCheck fires before CheckedItems is updated, so persist e.NewValue
+        // directly. This also avoids losing a queued BeginInvoke when the app closes.
+        if (!IsHandleCreated || restoringSession) return;
+        bool visible = e.NewValue == CheckState.Checked;
+        switch (e.Index)
         {
-            if (clbVisualLayers == null || clbVisualLayers.Items.Count < 8) return;
-            settings.VisualScenarioLayer = clbVisualLayers.GetItemChecked(0);
-            settings.VisualAevLayer = clbVisualLayers.GetItemChecked(1);
-            settings.VisualEnemiesLayer = clbVisualLayers.GetItemChecked(2);
-            settings.VisualObjectsLayer = clbVisualLayers.GetItemChecked(3);
-            settings.VisualCollisionLayer = clbVisualLayers.GetItemChecked(4);
-            settings.VisualLightingLayer = clbVisualLayers.GetItemChecked(5);
-            settings.VisualEffectsLayer = clbVisualLayers.GetItemChecked(6);
-            settings.VisualRtpLayer = clbVisualLayers.GetItemChecked(7);
-            if (visualViewport != null && !visualViewport.IsDisposed)
-            {
-                visualViewport.ScenarioVisible = settings.VisualScenarioLayer;
-                visualViewport.AevVisible = settings.VisualAevLayer;
-                visualViewport.EnemiesVisible = settings.VisualEnemiesLayer;
-                visualViewport.ObjectsVisible = settings.VisualObjectsLayer;
-                visualViewport.CollisionVisible = settings.VisualCollisionLayer;
-                visualViewport.LightingVisible = settings.VisualLightingLayer;
-                visualViewport.EffectsVisible = settings.VisualEffectsLayer;
-                visualViewport.RtpVisible = settings.VisualRtpLayer;
-                if(clbVisualLayers.Items.Count>8)visualViewport.CamVisible=clbVisualLayers.GetItemChecked(8);
-                visualViewport.Invalidate();
-            }
-            if (!restoringSession) SaveSettings();
-        }));
+            case 0: settings.VisualScenarioLayer = visible; if (visualViewport != null) visualViewport.ScenarioVisible = visible; break;
+            case 1: settings.VisualAevLayer = visible; if (visualViewport != null) visualViewport.AevVisible = visible; break;
+            case 2: settings.VisualEnemiesLayer = visible; if (visualViewport != null) visualViewport.EnemiesVisible = visible; break;
+            case 3: settings.VisualObjectsLayer = visible; if (visualViewport != null) visualViewport.ObjectsVisible = visible; break;
+            case 4: settings.VisualCollisionLayer = visible; if (visualViewport != null) visualViewport.CollisionVisible = visible; break;
+            case 5: settings.VisualLightingLayer = visible; if (visualViewport != null) visualViewport.LightingVisible = visible; break;
+            case 6: settings.VisualEffectsLayer = visible; if (visualViewport != null) visualViewport.EffectsVisible = visible; break;
+            case 7: settings.VisualRtpLayer = visible; if (visualViewport != null) visualViewport.RtpVisible = visible; break;
+            case 8: settings.VisualCamLayer = visible; if (visualViewport != null) visualViewport.CamVisible = visible; break;
+            case 9: settings.VisualItaLayer = visible; if (visualViewport != null) visualViewport.ItaVisible = visible; break;
+            case 10: settings.VisualSoundLayer = visible; if (visualViewport != null) visualViewport.SoundVisible = visible; break;
+            default: return;
+        }
+        visualViewport?.Invalidate();
+        SaveSettings();
     }
 
     private void RefreshVisualCamEntries(int selected=-1)
@@ -1962,7 +2087,7 @@ public partial class Form1
 
     private void btnVisualAddCam_Click(object? sender,EventArgs e)
     {
-        CamScene? scene=visualViewport?.CamScene;if(scene==null)return;settings.CamPresets??=new();using var dialog=new CamPresetDialog(settings.CamPresets);if(dialog.ShowDialog(this)!=DialogResult.OK||dialog.SelectedPreset==null){if(dialog.CustomPresetsChanged)SaveSettings();return;}if(dialog.CustomPresetsChanged)SaveSettings();AddCamFromPreset(scene,dialog.SelectedPreset);
+        CamScene? scene=visualViewport?.CamScene;if(scene==null)return;settings.CamPresets??=new();using var dialog=new CamPresetDialog(settings.CamPresets);if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||dialog.SelectedPreset==null){if(dialog.CustomPresetsChanged)SaveSettings();return;}if(dialog.CustomPresetsChanged)SaveSettings();AddCamFromPreset(scene,dialog.SelectedPreset);
     }
     private void DuplicateSelectedCam(){if(visualViewport?.CamScene is CamScene scene&&lstVisualCamEntries.SelectedItem is CamEntry source)AddCamClone(scene,source,shift:false);}
     private void AddCamFromPreset(CamScene scene,CamPresetDefinition preset)
@@ -2051,7 +2176,7 @@ public partial class Form1
     {
         if (tabVisualEntities.SelectedIndex < 0) return;
         UpdateVisualContextActions();
-        if (visualViewport != null) { visualViewport.SmdEditingEnabled = tabVisualEntities.SelectedIndex == 4; visualViewport.Invalidate(); }
+        if (visualViewport != null) { visualViewport.SmdEditingEnabled = tabVisualEntities.SelectedIndex == 4;visualViewport.FseEditingEnabled=tabVisualEntities.SelectedIndex==10&&tabVisualSound.SelectedIndex==1;visualViewport.Invalidate(); }
         if (pnlVisualSmdTexturePreview != null) pnlVisualSmdTexturePreview.Visible = tabVisualEntities.SelectedIndex == 4;
         if (tabVisualEntities.SelectedIndex == 4) UpdateSmdTexturePreview(lstVisualSmdEntries?.SelectedItem as ScenarioEntry);
         ApplyCamTimelineVisibility();
@@ -2096,7 +2221,7 @@ public partial class Form1
 
     private void SetEtsGizmoMode(EtsGizmoMode mode)
     {
-        if(visualViewport==null)return;visualViewport.EtsTransformMode=mode;visualViewport.RefreshEtsGeometry(lstVisualObjectEntries.SelectedItem as EtsEntry);
+        if(visualViewport==null)return;visualViewport.EtsTransformMode=mode;visualViewport.AssetTransformMode=mode==EtsGizmoMode.Move?AssetMeshTransformMode.Move:AssetMeshTransformMode.Rotate;visualViewport.RefreshEtsGeometry(lstVisualObjectEntries.SelectedItem as EtsEntry);visualViewport.RefreshAssetOverlay();
         btnVisualObjectMove.BackColor=mode==EtsGizmoMode.Move?Accent:Surface2;btnVisualObjectRotate.BackColor=mode==EtsGizmoMode.Rotate?Accent:Surface2;
     }
 
@@ -2108,7 +2233,7 @@ public partial class Form1
     }
     private void visualViewport_EtsEntryClicked(EtsEntry? entry)
     {
-        if(entry==null){lstVisualObjectEntries.ClearSelected();return;}tabVisualEntities.SelectedIndex=2;lstVisualObjectEntries.SelectedItem=entry;pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=GetEtmObjectTitle(entry);
+        if(entry==null)return;tabVisualEntities.SelectedIndex=2;pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=GetEtmObjectTitle(entry);
     }
     private void visualViewport_EtsSelectionChanged(IReadOnlyList<EtsEntry> entries)
     {
@@ -2189,7 +2314,7 @@ public partial class Form1
     }
     private void lstVisualSmdEntries_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;if(selected.Length>1)pgVisualProperties.SelectedObjects=selected.Cast<object>().ToArray();else pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=selected.Length>1?$"PROPERTIES • {selected.Length} SMD ENTRIES":entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • SMD ENTRY {entry.FileOrder:D3} • BIN {entry.BinId:D3}";visualViewport.SelectSmdEntry(entry);btnVisualSmdImport.Enabled=entry!=null;btnVisualSmdNew.Enabled=entry!=null;UpdateSmdTexturePreview(entry);
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;if(selected.Length>1)pgVisualProperties.SelectedObjects=selected.Cast<object>().ToArray();else pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=selected.Length>1?$"PROPERTIES • {selected.Length} SMD ENTRIES":entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • SMD ENTRY {entry.FileOrder:D3} • BIN {entry.BinId:D3}";visualViewport.SelectSmdEntries(selected,entry);btnVisualSmdImport.Enabled=entry!=null;btnVisualSmdDuplicate.Enabled=entry!=null;UpdateSmdTexturePreview(entry);
     }
     private void UpdateSmdTexturePreview(ScenarioEntry? entry)
     {
@@ -2219,14 +2344,14 @@ public partial class Form1
     }
     private void WireVisualSmdEvents()
     {
-        visualViewport.SmdEntryClicked-=visualViewport_SmdEntryClicked;visualViewport.SmdEntryClicked+=visualViewport_SmdEntryClicked;
         visualViewport.SmdEntryEdited-=visualViewport_SmdEntryEdited;visualViewport.SmdEntryEdited+=visualViewport_SmdEntryEdited;
+        visualViewport.SmdSelectionChanged-=visualViewport_SmdSelectionChanged;visualViewport.SmdSelectionChanged+=visualViewport_SmdSelectionChanged;
         visualViewport.SmdTransformModeRequested-=visualViewport_SmdTransformModeRequested;visualViewport.SmdTransformModeRequested+=visualViewport_SmdTransformModeRequested;
         visualViewport.DuplicateSmdRequested-=visualViewport_DuplicateSmdRequested;visualViewport.DuplicateSmdRequested+=visualViewport_DuplicateSmdRequested;
         visualViewport.DeleteSmdRequested-=visualViewport_DeleteSmdRequested;visualViewport.DeleteSmdRequested+=visualViewport_DeleteSmdRequested;
     }
-    private void visualViewport_SmdEntryClicked(ScenarioEntry? entry)
-    { if(entry==null){lstVisualSmdEntries.ClearSelected();pgVisualProperties.SelectedObject=null;return;}tabVisualEntities.SelectedIndex=4;lstVisualSmdEntries.SelectedIndexChanged-=lstVisualSmdEntries_SelectedIndexChanged;try{lstVisualSmdEntries.ClearSelected();lstVisualSmdEntries.SelectedItem=entry;}finally{lstVisualSmdEntries.SelectedIndexChanged+=lstVisualSmdEntries_SelectedIndexChanged;}lstVisualSmdEntries_SelectedIndexChanged(null,EventArgs.Empty); }
+    private void visualViewport_SmdSelectionChanged(IReadOnlyList<ScenarioEntry> entries)
+    { tabVisualEntities.SelectedIndex=4;lstVisualSmdEntries.SelectedIndexChanged-=lstVisualSmdEntries_SelectedIndexChanged;try{lstVisualSmdEntries.ClearSelected();foreach(ScenarioEntry item in entries){int index=lstVisualSmdEntries.Items.IndexOf(item);if(index>=0)lstVisualSmdEntries.SetSelected(index,true);}}finally{lstVisualSmdEntries.SelectedIndexChanged+=lstVisualSmdEntries_SelectedIndexChanged;}lstVisualSmdEntries_SelectedIndexChanged(null,EventArgs.Empty); }
     private void visualViewport_SmdTransformModeRequested(SmdGizmoMode mode)=>SetSmdGizmoMode(mode);
     private void visualViewport_DuplicateSmdRequested()=>DuplicateSelectedSmdEntries();
     private void visualViewport_DeleteSmdRequested()=>DeleteSelectedSmdEntries();
@@ -2246,10 +2371,6 @@ public partial class Form1
     }
     private void btnVisualSaveSmd_Click(object? sender, EventArgs e) => SaveVisualSmd();
 
-    private void btnVisualSmdNew_Click(object? sender,EventArgs e)
-    {
-        ScenarioEntry? source=lstVisualSmdEntries.SelectedItem as ScenarioEntry;if(source==null||visualViewport?.Scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(visualViewport.Scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();var fresh=CloneSmdEntry(source);fresh.PositionX=fresh.PositionY=fresh.PositionZ=0;fresh.RotationX=fresh.RotationY=fresh.RotationZ=0;fresh.ScaleX=fresh.ScaleY=fresh.ScaleZ=1;int index=SmdEmbeddedBinService.AppendEntry(visualSmdPath,fresh,visualViewport.Scene.EntryCount,visualViewport.Scene.BinCount);ReloadVisualSmd(index);ExtractLog($"Visual Editor: nova entry SMD #{index:D3} adicionada no final usando BIN {source.BinId}.");
-    }
     private void DuplicateSelectedSmdEntries()
     {
         ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();if(selected.Length==0||visualViewport?.Scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(visualViewport.Scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();int entries=visualViewport.Scene.EntryCount,bins=visualViewport.Scene.BinCount,last=-1;foreach(ScenarioEntry source in selected){var clone=CloneSmdEntry(source);clone.PositionX+=1f;last=SmdEmbeddedBinService.AppendEntry(visualSmdPath,clone,entries++,bins);}ReloadVisualSmd(last);ExtractLog($"Visual Editor: {selected.Length} entry(s) SMD duplicada(s) no final.");
@@ -2272,7 +2393,7 @@ public partial class Form1
         ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? current=visualViewport?.Scene;
         if(entry==null||current==null||string.IsNullOrWhiteSpace(visualSmdPath))return;
         using var modelDialog=new OpenFileDialog{Filter="Modelos compatíveis (*.obj;*.smd)|*.obj;*.smd|Wavefront OBJ (*.obj)|*.obj|StudioModelData (*.smd)|*.smd",Title="Importar modelo para a entry SMD selecionada"};
-        if(modelDialog.ShowDialog(this)!=DialogResult.OK)return;
+        if(modelDialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
         try
         {
             ExternalModelStats stats=ExternalPs2ModelConverter.Analyze(modelDialog.FileName);int shared=current.Entries.Count(x=>x.BinId==entry.BinId);
@@ -2280,7 +2401,7 @@ public partial class Form1
             if(texture==null)
             {
                 using var textureDialog=new OpenFileDialog{Filter="Imagens (*.png;*.bmp;*.jpg;*.jpeg)|*.png;*.bmp;*.jpg;*.jpeg|Todos os arquivos (*.*)|*.*",Title="Selecione a textura do modelo (Cancelar = manter textura atual)"};
-                if(textureDialog.ShowDialog(this)==DialogResult.OK)texture=textureDialog.FileName;
+                if(textureDialog.ShowLocalizedDialog(this)==DialogResult.OK)texture=textureDialog.FileName;
             }
             string warning=shared>1?$"\n\nATENÇÃO: o BIN {entry.BinId} é compartilhado por {shared} entries. Todas usarão o novo modelo.":"";
             string textureText=texture==null?"manter a textura atual":Path.GetFileName(texture);
@@ -2307,18 +2428,93 @@ public partial class Form1
                 var textureService=new TextureWorkspaceService();foreach(int index in textureIndices)textureService.ReplaceFromImage(tplPath,index,texture);
             }
             if(texture!=null)RE4_PS2_MOD_WORKSPACE.Core.Smd.SmdTextureService.InjectTpl(visualSmdPath,tplPath);
-            ScenarioCameraState camera=visualViewport.GetCameraState();ScenarioScene reloaded=await Task.Run(()=>Ps2ScenarioReader.Read(visualSmdPath));visualViewport.SetScene(reloaded);visualViewport.SetCameraState(camera);WireVisualSmdEvents();RefreshVisualSmdEntryList(reloaded.Entries.FirstOrDefault(x=>x.FileOrder==selectedAfter));visualViewport.SetTextureSource(tplPath);visualViewport.ReloadTextures(tplPath);
+            ScenarioCameraState camera=visualViewport.GetCameraState();float flySpeed=visualViewport.FlySpeed;ScenarioScene reloaded=await Task.Run(()=>Ps2ScenarioReader.Read(visualSmdPath));visualViewport.SetScene(reloaded);visualViewport.SetCameraState(camera);visualViewport.FlySpeed=flySpeed;WireVisualSmdEvents();RefreshVisualSmdEntryList(reloaded.Entries.FirstOrDefault(x=>x.FileOrder==selectedAfter));visualViewport.SetTextureSource(tplPath);visualViewport.ReloadTextures(tplPath);
             btnVisualSaveSmd.Enabled=true;lblVisualStatus.Text=$"Modelo importado • BIN {entry.BinId} • {stats.Faces:N0} faces";ExtractLog($"Visual Editor: {Path.GetFileName(modelDialog.FileName)} importado no BIN SMD {entry.BinId} com {(texture==null?"textura preservada":Path.GetFileName(texture))}.");
         }
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Importar modelo SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);ExtractLog("Visual Editor: erro ao importar modelo SMD: "+ex.Message);}
         finally{UseWaitCursor=false;btnVisualSmdImport.Enabled=lstVisualSmdEntries?.SelectedItem is ScenarioEntry;}
     }
 
+    private void AddSelectedSmdToCatalog()
+    {
+        ScenarioScene? scene=visualViewport?.Scene;
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();
+        if(scene==null||selected.Length==0||string.IsNullOrWhiteSpace(visualSmdPath))return;
+        if(scene.IsModified&&!SaveVisualSmd())return;
+        if(!TryGetSmdCatalogMetadata(selected,out string name,out string category,out string notes))return;
+        try
+        {
+            string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");
+            if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);
+            var service=new SmdObjectCatalogService();
+            SmdCatalogItem item=service.Export(visualSmdPath,tpl,selected,scene.BinCount,name,category,notes,null);
+            lblVisualStatus.Text=$"“{item.Name}” adicionado ao Catálogo SMD";
+            ExtractLog($"Catálogo SMD: {item.Name} salvo com {item.Entries.Count} entry(s), {item.Bins.Count} BIN(s) e {item.Textures.Count} textura(s).");
+        }
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Catálogo SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private void ExportSelectedSmdBin()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry==null||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(scene.IsModified&&!SaveVisualSmd())return;
+        using var dialog=new SaveFileDialog{Title="Exportar modelo BIN",Filter="Modelo BIN do PS2 (*.bin)|*.bin",FileName=$"smd_bin_{entry.BinId:D3}.bin"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
+        try{SmdModelExporter.ExportBin(visualSmdPath,entry,scene.BinCount,dialog.FileName);int shared=scene.Entries.Count(x=>x.BinId==entry.BinId);lblVisualStatus.Text=$"BIN {entry.BinId:D3} exportado"+(shared>1?$" • compartilhado por {shared} entries":"");ExtractLog($"Visual Editor: BIN SMD {entry.BinId:D3} exportado para {dialog.FileName}.");}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar BIN",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private void EditSelectedSmdTextures()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry==null||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(scene.IsModified&&!SaveVisualSmd())return;
+        int shared=scene.Entries.Count(x=>x.BinId==entry.BinId);if(shared>1&&MessageBox.Show(this,$"O BIN {entry.BinId:D3} é usado por {shared} entries.\n\nAlterar seus materiais afetará todas essas instâncias. Deseja continuar?","Texturas locais SMD",MessageBoxButtons.YesNo,MessageBoxIcon.Information)!=DialogResult.Yes)return;
+        string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);byte[] bin=SmdEmbeddedBinService.Extract(visualSmdPath,entry.BinId,scene.BinCount);
+        using var editor=new SmdTextureEditorForm(bin,tpl,entry.BinId);if(editor.ShowLocalizedDialog(this)!=DialogResult.OK)return;
+        string smdRecovery=visualSmdPath+".texture_recovery",tplRecovery=tpl+".texture_recovery";File.Copy(visualSmdPath,smdRecovery,true);File.Copy(tpl,tplRecovery,true);
+        try{EnsureVisualSmdBackup();SmdEmbeddedBinService.Replace(visualSmdPath,entry.BinId,scene.BinCount,editor.WorkingBin);File.Copy(editor.WorkingTplPath,tpl,true);SmdTextureService.InjectTpl(visualSmdPath,tpl);ReloadVisualSmd(entry.FileOrder);lblVisualStatus.Text=$"Materiais e texturas do BIN {entry.BinId:D3} atualizados";ExtractLog($"Visual Editor: texturas locais do BIN SMD {entry.BinId:D3} atualizadas.");}
+        catch(Exception ex){File.Copy(smdRecovery,visualSmdPath,true);File.Copy(tplRecovery,tpl,true);MessageBox.Show(this,ex.Message,"Texturas locais SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        finally{try{File.Delete(smdRecovery);}catch{}try{File.Delete(tplRecovery);}catch{}}
+    }
+
+    private void ExportSelectedSmdObj()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry==null||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(scene.IsModified&&!SaveVisualSmd())return;
+        using var dialog=new SaveFileDialog{Title="Exportar modelo OBJ com UVs e texturas",Filter="Wavefront OBJ (*.obj)|*.obj",FileName=$"smd_bin_{entry.BinId:D3}.obj"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
+        try{string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);SmdModelExporter.ExportObj(entry,tpl,dialog.FileName);lblVisualStatus.Text=$"BIN {entry.BinId:D3} exportado como OBJ • UVs, MTL e texturas incluídos";ExtractLog($"Visual Editor: BIN SMD {entry.BinId:D3} exportado como OBJ para {dialog.FileName}.");}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar OBJ",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private void btnVisualSmdCatalog_Click(object? sender,EventArgs e)
+    {
+        ScenarioScene? scene=visualViewport?.Scene;if(scene==null||string.IsNullOrWhiteSpace(visualSmdPath)){MessageBox.Show(this,"Abra um cenário com SMD antes de inserir um objeto.","Catálogo SMD",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+        var service=new SmdObjectCatalogService();using var dialog=new SmdCatalogForm(service);if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||dialog.SelectedItem==null)return;
+        if(scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);
+        string smdRecovery=visualSmdPath+".catalog_recovery";string tplRecovery=tpl+".catalog_recovery";File.Copy(visualSmdPath,smdRecovery,true);File.Copy(tpl,tplRecovery,true);
+        try
+        {
+            UseWaitCursor=true;lblVisualStatus.Text=$"Inserindo “{dialog.SelectedItem.Name}”...";
+            int index=service.Import(dialog.SelectedItem,visualSmdPath,tpl,scene.EntryCount,scene.BinCount);
+            ReloadVisualSmd(index);lblVisualStatus.Text=$"“{dialog.SelectedItem.Name}” inserido no final do SMD";
+            ExtractLog($"Catálogo SMD: {dialog.SelectedItem.Name} importado com texturas remapeadas.");
+        }
+        catch(Exception ex){File.Copy(smdRecovery,visualSmdPath,true);File.Copy(tplRecovery,tpl,true);MessageBox.Show(this,ex.Message,"Importar do Catálogo SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        finally{UseWaitCursor=false;try{File.Delete(smdRecovery);}catch{}try{File.Delete(tplRecovery);}catch{}}
+    }
+    private bool TryGetSmdCatalogMetadata(IReadOnlyList<ScenarioEntry> entries,out string name,out string category,out string notes)
+    {
+        name=category=notes="";using var dialog=new AppForm{Text="Adicionar ao Catálogo SMD",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(470,330),BackColor=Color.FromArgb(20,22,27),ForeColor=TextPrimary,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
+        var heading=new Label{Text=entries.Count==1?$"Salvar entry #{entries[0].FileOrder:D3} como objeto reutilizável":$"Salvar seleção de {entries.Count} entries como conjunto",Left=22,Top=18,Width=425,Height=26,Font=new Font("Segoe UI Semibold",11),ForeColor=Color.White};
+        var nameBox=new TextBox{Left=22,Top=77,Width=425,Height=28,Text=entries.Count==1?$"Objeto BIN {entries[0].BinId:D3}":$"Conjunto SMD ({entries.Count})",BackColor=Surface2,ForeColor=TextPrimary};
+        var categoryBox=new TextBox{Left=22,Top=139,Width=425,Height=28,Text="Cenário",BackColor=Surface2,ForeColor=TextPrimary};
+        var notesBox=new TextBox{Left=22,Top=201,Width=425,Height=62,Multiline=true,BackColor=Surface2,ForeColor=TextPrimary,PlaceholderText="Observações opcionais..."};
+        var save=new Button{Text="ADICIONAR AO CATÁLOGO",Left=247,Top=280,Width=200,Height=34,BackColor=Accent,ForeColor=Color.White,FlatStyle=FlatStyle.Flat,DialogResult=DialogResult.OK};var cancel=new Button{Text="CANCELAR",Left=137,Top=280,Width=100,Height=34,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat,DialogResult=DialogResult.Cancel};
+        dialog.Controls.AddRange(new Control[]{heading,new Label{Text="NOME",Left=22,Top=55,Width=100,Height=20,ForeColor=TextMuted},nameBox,new Label{Text="CATEGORIA",Left=22,Top=117,Width=120,Height=20,ForeColor=TextMuted},categoryBox,new Label{Text="DESCRIÇÃO",Left=22,Top=179,Width=120,Height=20,ForeColor=TextMuted},notesBox,save,cancel});dialog.AcceptButton=save;dialog.CancelButton=cancel;
+        if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||string.IsNullOrWhiteSpace(nameBox.Text))return false;name=nameBox.Text;category=categoryBox.Text;notes=notesBox.Text;return true;
+    }
+
     private string? ResolveSmdExternalConverterPath()
     {
         if(!string.IsNullOrWhiteSpace(settings.Ps2BinToolPath)&&File.Exists(settings.Ps2BinToolPath))return settings.Ps2BinToolPath;
         string[] names={"RE4_PS2_BIN_TOOL.exe","Re4Ps2BINrepack.exe"};foreach(string folder in new[]{Application.StartupPath,Path.Combine(Application.StartupPath,"Tools")})foreach(string name in names){string path=Path.Combine(folder,name);if(File.Exists(path))return path;}
-        using var dialog=new OpenFileDialog{Filter="RE4 PS2 BIN Tool (*.exe)|*.exe",Title="Selecione a RE4 PS2 BIN Tool"};if(dialog.ShowDialog(this)!=DialogResult.OK)return null;settings.Ps2BinToolPath=dialog.FileName;SaveSettings();return dialog.FileName;
+        using var dialog=new OpenFileDialog{Filter="RE4 PS2 BIN Tool (*.exe)|*.exe",Title="Selecione a RE4 PS2 BIN Tool"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return null;settings.Ps2BinToolPath=dialog.FileName;SaveSettings();return dialog.FileName;
     }
     private static string? FindExternalModelTexture(string modelPath)
     {
@@ -2330,6 +2526,6 @@ public partial class Form1
     private static ScenarioEntry CloneSmdEntry(ScenarioEntry e)=>new(){RawData=(byte[])e.RawData.Clone(),BinId=e.BinId,PositionX=e.PositionX,PositionY=e.PositionY,PositionZ=e.PositionZ,RotationX=e.RotationX,RotationY=e.RotationY,RotationZ=e.RotationZ,ScaleX=e.ScaleX,ScaleY=e.ScaleY,ScaleZ=e.ScaleZ,TextureIndex=e.TextureIndex,LocalTriangles=e.LocalTriangles};
     private void ReloadVisualSmd(int selectIndex)
     {
-        ScenarioCameraState camera=visualViewport.GetCameraState();ScenarioScene scene=Ps2ScenarioReader.Read(visualSmdPath!);visualViewport.SetScene(scene);visualViewport.SetCameraState(camera);WireVisualSmdEvents();RefreshVisualSmdEntryList(scene.Entries.FirstOrDefault(x=>x.FileOrder==selectIndex));string tpl=GetTplWorkPath(visualSmdPath!,project.ActiveDatName??"");visualViewport.SetTextureSource(tpl);visualViewport.ReloadTextures(tpl);btnVisualSaveSmd.Enabled=true;
+        ScenarioCameraState camera=visualViewport.GetCameraState();float flySpeed=visualViewport.FlySpeed;ScenarioScene scene=Ps2ScenarioReader.Read(visualSmdPath!);visualViewport.SetScene(scene);visualViewport.SetCameraState(camera);visualViewport.FlySpeed=flySpeed;WireVisualSmdEvents();RefreshVisualSmdEntryList(scene.Entries.FirstOrDefault(x=>x.FileOrder==selectIndex));string tpl=GetTplWorkPath(visualSmdPath!,project.ActiveDatName??"");visualViewport.SetTextureSource(tpl);visualViewport.ReloadTextures(tpl);btnVisualSaveSmd.Enabled=true;
     }
 }

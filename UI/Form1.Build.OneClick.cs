@@ -5,6 +5,14 @@ public partial class Form1
     private async void btnBuildOneClick_Click(object? sender, EventArgs e)
     {
         if (!RequireWorkspace()) return;
+        if (lvTrackedDats?.SelectedItems.Count > 0)
+        {
+            buildSelectionOverride = lvTrackedDats.SelectedItems.Cast<ListViewItem>()
+                .Select(x => x.Tag as BuildListItem).Where(x => x != null).Select(x => x!.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            btnBuildAll_Click(sender, e);
+            return;
+        }
         if (string.IsNullOrWhiteSpace(project.ActiveDatName) || string.IsNullOrWhiteSpace(GetActiveContentPath())) { MessageBox.Show("Extraia um cenário primeiro.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path)) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
@@ -92,6 +100,7 @@ public partial class Form1
 
             // ESL files are not part of the scenario DAT. Keep the selected emleonXX.esl
             // synchronized with the Build ISO independently of the DAT fast-build state.
+            await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso);
             await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
 
             var builtSnapshot = await Task.Run(() => ChangeDetectionService.Capture(contentDir));

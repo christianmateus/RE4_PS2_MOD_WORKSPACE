@@ -6,7 +6,9 @@ namespace RE4_PS2_MOD_WORKSPACE.Core.Workspace;
 
 public static class ChangeDetectionService
 {
-    public static ContentSnapshot Capture(string root)
+    public static ContentSnapshot Capture(string root) => Capture(root, null);
+
+    public static ContentSnapshot Capture(string root, ContentSnapshot? reuse)
     {
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return new ContentSnapshot();
         var files = new Dictionary<string, FileFingerprint>(StringComparer.OrdinalIgnoreCase);
@@ -14,11 +16,18 @@ public static class ChangeDetectionService
         {
             var fi = new FileInfo(path);
             string relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-            files[relative] = new FileFingerprint(fi.Length, HashFile(path));
+            long modified = fi.LastWriteTimeUtc.Ticks;
+            string hash;
+            if (reuse?.Files.TryGetValue(relative, out FileFingerprint? old) == true && old.Size == fi.Length &&
+                ((old.LastWriteUtcTicks != 0 && old.LastWriteUtcTicks == modified) ||
+                 (old.LastWriteUtcTicks == 0 && reuse.CapturedUtc != default && fi.LastWriteTimeUtc <= reuse.CapturedUtc)))
+                hash = old.Sha256;
+            else
+                hash = HashFile(path);
+            files[relative] = new FileFingerprint(fi.Length, hash, modified);
         }
         return new ContentSnapshot { Files = files, CapturedUtc = DateTime.UtcNow };
     }
-
     public static SnapshotDiff Compare(ContentSnapshot? baseline, ContentSnapshot current)
     {
         baseline ??= new ContentSnapshot();
@@ -78,7 +87,7 @@ public sealed class ContentSnapshot
     public Dictionary<string, FileFingerprint> Files { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
-public sealed record FileFingerprint(long Size, string Sha256);
+public sealed record FileFingerprint(long Size, string Sha256, long LastWriteUtcTicks = 0);
 public sealed record SnapshotDiff(IReadOnlyList<string> Changed, IReadOnlyList<string> Added, IReadOnlyList<string> Removed)
 {
     public int Total => Changed.Count + Added.Count + Removed.Count;

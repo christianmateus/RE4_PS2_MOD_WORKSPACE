@@ -41,6 +41,11 @@ public static class FcvWriter
             WriteAxis(writer,track.Z,encoding);
         }
 
+        // FCV resources are DMA-fed by the PS2 engine and every original file is padded to a
+        // 32-byte boundary. A structurally readable but unaligned file can make the following
+        // resource begin inside the final DMA block, producing PCSX2 DMA errors at runtime.
+        while((stream.Position&31)!=0) writer.Write((byte)0);
+
         byte[] result=stream.ToArray();
         BinaryPrimitives.WriteUInt32BigEndian(result.AsSpan(checked((int)sizePosition),4),checked((uint)result.Length));
         for(int i=0;i<offsets.Length;i++)

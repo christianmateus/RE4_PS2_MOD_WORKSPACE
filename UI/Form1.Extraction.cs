@@ -99,7 +99,7 @@ public partial class Form1
             RefreshDashboard();
             return;
         }
-        SaveProject(); RefreshDashboard(); RefreshExtractedContent(); UpdateBuildUi(); _ = RefreshTrackedDatsAsync();
+        SaveProject(); RefreshDashboard(); RefreshExtractedContent(); UpdateBuildUi(); if (pnlBuild?.Visible == true) _ = RefreshTrackedDatsAsync();
         if (pnlMessages?.Visible == true) LoadMessagesForActiveDat(false);
     }
 
@@ -115,7 +115,7 @@ public partial class Form1
             {
                 await ExtractScenarioAsync(entry, updateActiveProject: true);
                 string root = Path.Combine(project.RootPath!, "Extracted", Path.GetFileNameWithoutExtension(entry.FileName));
-                ApplyDataToUi(); await RefreshTrackedDatsAsync();
+                ApplyDataToUi(); if (pnlBuild?.Visible == true) await RefreshTrackedDatsAsync();
                 MessageBox.Show($"Pacote DAT extraído e aberto com sucesso.\n\n{root}", "Extrair DAT", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
@@ -176,7 +176,7 @@ public partial class Form1
             await Task.Run(() => DeleteDatWorkingArtifacts(entry.FileName));
             project.DatStates?.RemoveAll(x => x.DatName.Equals(entry.FileName, StringComparison.OrdinalIgnoreCase));
             await ExtractScenarioAsync(entry, updateActiveProject: true);
-            ApplyDataToUi(); await RefreshTrackedDatsAsync();
+            ApplyDataToUi(); if (pnlBuild?.Visible == true) await RefreshTrackedDatsAsync();
             ExtractLog($"DAT restaurado da ISO original: {entry.FileName}");
             MessageBox.Show($"{entry.FileName} foi restaurado e extraído novamente da ISO original.", "DAT restaurado", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -285,7 +285,7 @@ public partial class Form1
                 try { await ExtractScenarioAsync(entry, updateActiveProject: false); completed++; }
                 catch (Exception ex) { failures.Add($"{entry.FileName}: {ex.Message}"); ExtractLog($"ERRO EM {entry.FileName}: {ex.Message}"); }
             }
-            SaveProject(); ApplyDataToUi(); await RefreshTrackedDatsAsync();
+            SaveProject(); ApplyDataToUi(); if (pnlBuild?.Visible == true) await RefreshTrackedDatsAsync();
             string summary = $"Extração concluída: {completed:N0} de {entries.Count:N0} cenário(s)." + (failures.Count > 0 ? $"\n\nFalhas: {failures.Count:N0}. Consulte o Console para detalhes." : "");
             MessageBox.Show(summary, "Extração em lote concluída", MessageBoxButtons.OK, failures.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
         }

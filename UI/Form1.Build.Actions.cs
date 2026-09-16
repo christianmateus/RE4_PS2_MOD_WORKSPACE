@@ -113,6 +113,8 @@ string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
             var verifiedEntry = verify.Entries.First(x => x.Index == buildEntry.Index);
             if (verifiedEntry.CurrentSize != buildSize) throw new InvalidDataException($"Validação falhou: Current Size esperado {buildSize:N0}, encontrado {verifiedEntry.CurrentSize:N0}.");
 
+            await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso);
+
             project.ActiveBuildIsoPath = buildIso; project.BuildIsoSourcePath = project.IsoPath;
             string? activeContent = GetActiveContentPath();
             if (!string.IsNullOrWhiteSpace(activeContent) && Directory.Exists(activeContent))

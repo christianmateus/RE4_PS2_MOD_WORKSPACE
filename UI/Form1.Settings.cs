@@ -19,6 +19,8 @@ public partial class Form1
         cmbSettingsAutoSaveInterval.SelectedIndex = Array.IndexOf(AutoSaveIntervals, interval);
         cmbSettingsAutoSaveInterval.Enabled = settings.AutoSaveEnabled;
         chkSettingsShowFps.Checked = settings.VisualShowFps;
+        chkSettingsStartMaximized.Checked = settings.StartMaximized;
+        if(chkSettingsCreateIsoBackup!=null)chkSettingsCreateIsoBackup.Checked=settings.CreateIsoBackup;
         if(chkSettingsCamTimeline!=null)chkSettingsCamTimeline.Checked=settings.CamShowTimeline;
         if(chkSettingsCamProtectMotion!=null)chkSettingsCamProtectMotion.Checked=settings.CamProtectMotionIndices;
         ApplyVisualFpsVisibility();
@@ -49,6 +51,18 @@ public partial class Form1
         if (!restoringSession) SaveSettings();
     }
 
+    private void chkSettingsStartMaximized_CheckedChanged(object? sender, EventArgs e)
+    {
+        settings.StartMaximized = chkSettingsStartMaximized.Checked;
+        if (!restoringSession) SaveSettings();
+    }
+
+    private void chkSettingsCreateIsoBackup_CheckedChanged(object? sender,EventArgs e)
+    {
+        settings.CreateIsoBackup=chkSettingsCreateIsoBackup.Checked;
+        if(!restoringSession)SaveSettings();
+    }
+
     private void chkSettingsShowFps_CheckedChanged(object? sender, EventArgs e)
     {
         settings.VisualShowFps = chkSettingsShowFps.Checked;
@@ -70,13 +84,18 @@ public partial class Form1
     private async void autoSaveTimer_Tick(object? sender, EventArgs e)
     {
         if (autoSaveRunning || restoringSession || loadingVisualEditor || visualViewport?.Scene == null) return;
+        if (IsVisualEditorInteractionActive())
+        {
+            ExtractLog("Visual Editor: auto-save adiado até a edição atual terminar.");
+            return;
+        }
         autoSaveRunning = true;
         autoSaveTimer.Stop();
         try
         {
             lblVisualStatus.Text = "Auto-save em andamento...";
             SaveVisualCameraStateForActiveDat();
-            bool saved = await SaveVisualEditorAllAsync(false);
+            bool saved = await SaveVisualEditorAllAsync(false, preserveEditorState: true);
             ExtractLog(saved ? "Visual Editor: auto-save concluído." : "Visual Editor: auto-save verificado; nenhuma alteração pendente.");
             UpdateVisualStatus();
             UpdateTopVisualSaveState();
@@ -91,6 +110,17 @@ public partial class Form1
             autoSaveRunning = false;
             if (settings.AutoSaveEnabled) autoSaveTimer.Start();
         }
+    }
+
+    private bool IsVisualEditorInteractionActive()
+    {
+        if (MouseButtons != MouseButtons.None || visualViewport?.Capture == true) return true;
+        if (pgVisualProperties?.ContainsFocus == true) return true;
+
+        Control? focused = ActiveControl;
+        while (focused is ContainerControl container && container.ActiveControl is not null)
+            focused = container.ActiveControl;
+        return focused is TextBoxBase or NumericUpDown or ComboBox;
     }
 
     private void InitializeVisualSpeedPersistence()

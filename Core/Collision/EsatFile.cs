@@ -29,10 +29,12 @@ public sealed class EsatMesh
     public List<Vector3> Positions { get; } = new();
     public List<Vector3> OriginalPositions { get; } = new();
     public List<Vector3> Normals { get; } = new();
+    public List<Vector3> OriginalNormals { get; } = new();
     public List<Vector3> EdgeVectors { get; } = new();
     public List<EsatFace> Faces { get; } = new();
+    public List<EsatFace> OriginalFaces { get; } = new();
     public List<EsatGroup> Groups { get; } = new();
-    public bool IsModified => Positions.Count == OriginalPositions.Count && Positions.Where((p, i) => p != OriginalPositions[i]).Any();
+    public bool IsModified => (Positions.Count == OriginalPositions.Count && Positions.Where((p, i) => p != OriginalPositions[i]).Any()) || (Faces.Count == OriginalFaces.Count && Faces.Where((f,i)=>f!=OriginalFaces[i]).Any());
 }
 
 public sealed record EsatFace(

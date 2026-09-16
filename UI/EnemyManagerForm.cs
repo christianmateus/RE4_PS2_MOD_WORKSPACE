@@ -3,7 +3,7 @@ using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
-public sealed class EnemyManagerForm : Form
+public sealed class EnemyManagerForm : AppForm
 {
     private readonly AfsImage afs;
     private readonly string workspaceRoot;

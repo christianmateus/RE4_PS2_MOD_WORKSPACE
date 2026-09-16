@@ -1,4 +1,4 @@
-﻿using RE4_PS2_MOD_WORKSPACE.Core.Textures;
+using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
@@ -7,6 +7,8 @@ public partial class Form1
     private readonly TextureWorkspaceService textureService = new();
     private string? activeTextureTplPath;
     private string? activeTextureSmdPath;
+    private TextureSmdItem? activeTextureSource;
+    private readonly Dictionary<TextureInfo, TextureSmdItem> textureOwners = new(ReferenceEqualityComparer.Instance);
     private bool loadingTextures;
     private bool syncingTextureDat;
     private int previewRequestId;
@@ -80,7 +82,6 @@ public partial class Form1
     private void RefreshTextureSmdList()
     {
         if (cmbTextureSmd == null || cmbTextureSmd.IsDisposed) return;
-        string? previous = (cmbTextureSmd.SelectedItem as TextureSmdItem)?.FullPath ?? activeTextureSmdPath;
         string? content = GetActiveContentPath();
         cmbTextureSmd.BeginUpdate();
         try
@@ -88,38 +89,25 @@ public partial class Form1
             cmbTextureSmd.Items.Clear();
             if (string.IsNullOrWhiteSpace(content) || !Directory.Exists(content))
             {
-                ResetTextureUi("Extraia um cenário para listar os arquivos SMD.");
+                ResetTextureUi("Extraia um cenario para listar as texturas.");
                 return;
             }
             foreach (string smd in Directory.GetFiles(content, "*.SMD", SearchOption.AllDirectories).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 cmbTextureSmd.Items.Add(new TextureSmdItem(smd, Path.GetRelativePath(content, smd)));
-
-            int index = -1;
-            if (!string.IsNullOrWhiteSpace(previous))
-            {
-                for (int i = 0; i < cmbTextureSmd.Items.Count; i++)
-                    if (cmbTextureSmd.Items[i] is TextureSmdItem item && item.FullPath.Equals(previous, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
-            }
-            if (index < 0 && !string.IsNullOrWhiteSpace(project.SelectedContentRelativePath) && project.SelectedContentRelativePath.EndsWith(".SMD", StringComparison.OrdinalIgnoreCase))
-            {
-                for (int i = 0; i < cmbTextureSmd.Items.Count; i++)
-                    if (cmbTextureSmd.Items[i] is TextureSmdItem item && item.RelativePath.Replace('\\', '/').Equals(project.SelectedContentRelativePath, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
-            }
-            if (cmbTextureSmd.Items.Count > 0) cmbTextureSmd.SelectedIndex = index >= 0 ? index : 0;
-            else ResetTextureUi("Nenhum SMD encontrado no Content atual.");
+            foreach (string eff in Directory.GetFiles(content, "*.EFF", SearchOption.AllDirectories).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                try
+                {
+                    foreach (EffTplPackageInfo package in EffTextureService.ReadPackages(eff))
+                        cmbTextureSmd.Items.Add(new TextureSmdItem(eff, Path.GetRelativePath(content, eff), package.PackageIndex, package.TextureCount));
+                }
+                catch { }
+            if (cmbTextureSmd.Items.Count > 0) cmbTextureSmd.SelectedIndex = 0;
+            else ResetTextureUi("Nenhum SMD ou EFF com texturas encontrado no Content atual.");
         }
         finally { cmbTextureSmd.EndUpdate(); }
     }
 
-    private void cmbTextureSmd_SelectedIndexChanged(object? sender, EventArgs e)
-    {
-        if (cmbTextureSmd.SelectedItem is not TextureSmdItem item) return;
-        activeTextureSmdPath = item.FullPath;
-        activeTextureTplPath = GetTplWorkPath(item.FullPath);
-        project.SelectedContentRelativePath = item.RelativePath.Replace('\\', '/');
-        if (!restoringSession) SaveProject();
-        UpdateTplSelectionInfo(item.FullPath);
-    }
+    private void cmbTextureSmd_SelectedIndexChanged(object? sender, EventArgs e) { }
 
     private async void btnTextureLoad_Click(object? sender, EventArgs e)
     {
@@ -129,62 +117,60 @@ public partial class Form1
 
     private async void btnTextureReload_Click(object? sender, EventArgs e)
     {
-        if (cmbTextureSmd.SelectedItem is not TextureSmdItem item) return;
-        if (File.Exists(GetTplWorkPath(item.FullPath)))
-        {
-            var answer = MessageBox.Show("Reler o TPL diretamente do SMD substituirá o TPL de trabalho atual. Continuar?", "Reler do SMD", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
-            if (answer != DialogResult.OK) return;
-        }
+        if (cmbTextureSmd.Items.Count == 0) return;
+        if (MessageBox.Show("Reler todas as texturas dos SMDs e EFFs substituir� os TPLs de trabalho atuais. Continuar?", "Reler fontes", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
         await LoadNativeTexturesAsync(true);
     }
 
     private async Task LoadNativeTexturesAsync(bool forceExtract)
     {
-        if (loadingTextures || cmbTextureSmd.SelectedItem is not TextureSmdItem item) return;
+        if (loadingTextures) return;
+        TextureSmdItem[] sources = cmbTextureSmd.Items.Cast<object>().OfType<TextureSmdItem>().ToArray();
+        if (sources.Length == 0) return;
         loadingTextures = true;
-        lblTextureLoading.Text = "Carregando texturas..."; lblTextureLoading.Visible = true; lblTextureLoading.BringToFront();
-        btnTextureLoad.Enabled = false;
-        btnTextureReload.Enabled = false;
+        lblTextureLoading.Text = "Carregando texturas...";
+        lblTextureLoading.Visible = true;
+        lblTextureLoading.BringToFront();
+        btnTextureLoad.Enabled = btnTextureReload.Enabled = false;
         try
         {
-            string tplPath = GetTplWorkPath(item.FullPath);
-            if (forceExtract || !File.Exists(tplPath))
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(tplPath)!);
-                await Task.Run(() => SmdTextureService.ExtractTpl(item.FullPath, tplPath));
-                ExtractLog("TPL preparado para edição nativa: " + tplPath);
-            }
-            activeTextureSmdPath = item.FullPath;
-            activeTextureTplPath = tplPath;
-            lblTplStatus.Text = "Lendo texturas...";
             ClearTexturePreview();
             lvTextures.Items.Clear();
             textureImages.Images.Clear();
-
-            IReadOnlyList<TextureInfo> catalog = await Task.Run(() => textureService.ReadCatalog(tplPath));
-            lblTextureLoading.Text = $"Carregando texturas...\n0 / {catalog.Count:N0}";
-            for (int i = 0; i < catalog.Count; i++)
+            textureOwners.Clear();
+            var catalogs = new List<(TextureSmdItem Source, string TplPath, IReadOnlyList<TextureInfo> Textures)>();
+            foreach (TextureSmdItem source in sources)
             {
-                if (cmbTextureSmd.SelectedItem is not TextureSmdItem currentItem || !currentItem.FullPath.Equals(item.FullPath, StringComparison.OrdinalIgnoreCase)) return;
-                TextureInfo info = catalog[i];
-                Bitmap thumb;
-                try { thumb = await Task.Run(() => textureService.CreateThumbnail(tplPath, info.Index, textureThumbnailSize)); }
-                catch
+                string tplPath = GetTplWorkPath(source);
+                if (forceExtract || !File.Exists(tplPath))
                 {
-                    thumb = new Bitmap(104, 104);
-                    using Graphics g = Graphics.FromImage(thumb); g.Clear(Color.FromArgb(35, 38, 44));
+                    Directory.CreateDirectory(Path.GetDirectoryName(tplPath)!);
+                    if (source.IsEff) await Task.Run(() => EffTextureService.ExtractTpl(source.FullPath, source.PackageIndex, tplPath));
+                    else await Task.Run(() => SmdTextureService.ExtractTpl(source.FullPath, tplPath));
                 }
-                string key = info.Index.ToString();
-                textureImages.Images.Add(key, thumb);
-                var listItem = new ListViewItem($"#{info.Index:D3}\n{info.Width}x{info.Height}") { ImageKey = key, Tag = info };
-                lvTextures.Items.Add(listItem);
-                lblTextureLoading.Text = $"Carregando texturas...\n{i + 1:N0} / {catalog.Count:N0}";
-                await Task.Yield();
+                IReadOnlyList<TextureInfo> catalog = await Task.Run(() => textureService.ReadCatalog(tplPath));
+                catalogs.Add((source, tplPath, catalog));
             }
-            lblTextureCount.Text = $"{catalog.Count:N0} texturas";
-            btnTextureExportAll.Enabled = catalog.Count > 0;
-            btnTextureReplaceAll.Enabled = catalog.Count > 0;
-            lblTplStatus.Text = $"TPL de trabalho: {Path.GetFileName(tplPath)}";
+            int total = catalogs.Sum(x => x.Textures.Count), loaded = 0;
+            foreach (var catalog in catalogs)
+                foreach (TextureInfo info in catalog.Textures)
+                {
+                    Bitmap thumb;
+                    try { thumb = await Task.Run(() => textureService.CreateThumbnail(catalog.TplPath, info.Index, textureThumbnailSize)); }
+                    catch { thumb = new Bitmap(104, 104); using Graphics g = Graphics.FromImage(thumb); g.Clear(Color.FromArgb(35, 38, 44)); }
+                    string key = catalog.Source.Key + "|" + info.Index;
+                    textureImages.Images.Add(key, thumb);
+                    string sourceLabel = catalog.Source.IsEff ? $"EFF TPL #{catalog.Source.PackageIndex:D3}" : "SMD";
+                    var listItem = new ListViewItem($"#{info.Index:D3} - {sourceLabel}\n{info.Width}x{info.Height}") { ImageKey = key, Tag = info };
+                    textureOwners[info] = catalog.Source;
+                    lvTextures.Items.Add(listItem);
+                    lblTextureLoading.Text = $"Carregando texturas...\n{++loaded:N0} / {total:N0}";
+                    await Task.Yield();
+                }
+            lblTextureCount.Text = $"{total:N0} texturas";
+            btnTextureExportAll.Enabled = total > 0;
+            btnTextureReplaceAll.Enabled = total > 0;
+            lblTplStatus.Text = $"{sources.Count(x => !x.IsEff)} SMD - {sources.Count(x => x.IsEff)} pacote(s) TPL em EFF";
             if (lvTextures.Items.Count > 0) lvTextures.Items[0].Selected = true;
         }
         catch (Exception ex)
@@ -196,8 +182,7 @@ public partial class Form1
         {
             loadingTextures = false;
             lblTextureLoading.Visible = false;
-            btnTextureLoad.Enabled = true;
-            btnTextureReload.Enabled = true;
+            btnTextureLoad.Enabled = btnTextureReload.Enabled = true;
         }
     }
 
@@ -208,32 +193,41 @@ public partial class Form1
         for(int i=0;i<cmbTextureSmd.Items.Count;i++)if(cmbTextureSmd.Items[i] is TextureSmdItem item&&item.FullPath.Equals(smdPath,StringComparison.OrdinalIgnoreCase)){cmbTextureSmd.SelectedIndex=i;break;}
         ShowPage(pnlTextures,btnNavTextures,"Texturas");RememberMainPage("Textures");
         await LoadNativeTexturesAsync(false);
-        ListViewItem? target=lvTextures.Items.Cast<ListViewItem>().FirstOrDefault(x=>x.Tag is TextureInfo info&&info.Index==textureIndex);
+        ListViewItem? target=lvTextures.Items.Cast<ListViewItem>().FirstOrDefault(x=>x.Tag is TextureInfo info&&info.Index==textureIndex&&textureOwners.TryGetValue(info,out TextureSmdItem? owner)&&owner.FullPath.Equals(smdPath,StringComparison.OrdinalIgnoreCase));
         if(target!=null){foreach(ListViewItem item in lvTextures.Items)item.Selected=false;target.Selected=true;target.Focused=true;target.EnsureVisible();lvTextures.Focus();}
     }
 
     private async void lvTextures_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        if (lvTextures.SelectedItems.Count != 1 || lvTextures.SelectedItems[0].Tag is not TextureInfo info || string.IsNullOrWhiteSpace(activeTextureTplPath))
+        int request = ++previewRequestId;
+        Image? previous = picTexturePreview.Image;
+        picTexturePreview.Image = null;
+        previous?.Dispose();
+        picTexturePreview.Zoom = 1f;
+        if (lvTextures.SelectedItems.Count != 1 || lvTextures.SelectedItems[0].Tag is not TextureInfo info || !textureOwners.TryGetValue(info, out TextureSmdItem? source))
         {
             btnTextureReplace.Enabled = false; btnTextureExport.Enabled = false; return;
         }
+        string tplPath = GetTplWorkPath(source);
+        int textureIndex = info.Index;
+        activeTextureSource = source;
+        activeTextureSmdPath = source.FullPath;
+        activeTextureTplPath = tplPath;
         btnTextureReplace.Enabled = true;
         btnTextureExport.Enabled = true;
-        lblTextureTitle.Text = $"Texture #{info.Index:D3}";
-        lblTextureMeta.Text = $"{info.Width} × {info.Height}  •  {info.BitDepthName}\n{info.InterlaceName}  •  Mipmaps: {info.MipmapCount}";
-        int request = ++previewRequestId;
+        lblTextureTitle.Text = $"Texture #{textureIndex:D3}";
+        string origin = source.IsEff ? $"EFF - TPL #{source.PackageIndex:D3}" : "SMD";
+        lblTextureMeta.Text = $"{origin} - {Path.GetFileName(source.FullPath)}\n{info.Width} x {info.Height} - {info.BitDepthName}\n{info.InterlaceName} - Mipmaps: {info.MipmapCount}";
+        lblTplStatus.Text = origin;
         try
         {
-            Bitmap bitmap = await Task.Run(() => textureService.Decode(activeTextureTplPath, info.Index));
+            Bitmap bitmap = await Task.Run(() => textureService.Decode(tplPath, textureIndex));
             if (request != previewRequestId) { bitmap.Dispose(); return; }
-            Image? old = picTexturePreview.Image;
             picTexturePreview.Image = bitmap;
-            old?.Dispose();
         }
         catch (Exception ex)
         {
-            if (request == previewRequestId) lblTextureMeta.Text += "\nPreview indisponível: " + ex.Message;
+            if (request == previewRequestId) lblTextureMeta.Text += "\nPreview indisponivel: " + ex.Message;
         }
     }
 
@@ -241,7 +235,7 @@ public partial class Form1
     {
         if (lvTextures.SelectedItems.Count != 1 || lvTextures.SelectedItems[0].Tag is not TextureInfo info || string.IsNullOrWhiteSpace(activeTextureTplPath)) return;
         using var dialog = new TextureMipmapDialog(activeTextureTplPath, info.Index, textureService);
-        dialog.ShowDialog(this);
+        dialog.ShowLocalizedDialog(this);
         if (!dialog.Modified) return;
         await SyncTextureTplToSmdAsync($"Mipmaps da textura #{info.Index:D3} atualizados.");
         await ReloadTextureCatalogKeepingSelectionAsync(info.Index);
@@ -251,14 +245,12 @@ public partial class Form1
     {
         if (lvTextures.SelectedItems.Count != 1 || lvTextures.SelectedItems[0].Tag is not TextureInfo info || string.IsNullOrWhiteSpace(activeTextureTplPath) || string.IsNullOrWhiteSpace(activeTextureSmdPath)) return;
         using var dialog = new OpenFileDialog { Filter = "Imagens (*.png;*.bmp;*.jpg;*.jpeg)|*.png;*.bmp;*.jpg;*.jpeg|Todos os arquivos (*.*)|*.*", CheckFileExists = true };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
         try
         {
             btnTextureReplace.Enabled = false;
             TextureInfo updated = await Task.Run(() => textureService.ReplaceFromImage(activeTextureTplPath, info.Index, dialog.FileName));
-            string backup = GetSmdBackupPath(activeTextureSmdPath);
-            await Task.Run(() => SmdTextureService.InjectTpl(activeTextureSmdPath, activeTextureTplPath, backup));
-            ExtractLog($"Textura #{info.Index:D3} substituída em {Path.GetFileName(activeTextureSmdPath)} e reinjetada no SMD.");
+            await SyncTextureTplToSmdAsync("TPL atualizado na fonte selecionada.");
             RefreshVisualEditorTexturesFromTextureManager();
             await RefreshTextureItemAsync(updated);
             await RefreshChangeStatusAsync();
@@ -273,9 +265,9 @@ public partial class Form1
     {
         if (string.IsNullOrWhiteSpace(activeTextureTplPath) || string.IsNullOrWhiteSpace(activeTextureSmdPath) || !File.Exists(activeTextureTplPath)) return;
         using var dialog = new FolderBrowserDialog { Description = "Selecione a pasta com os PNGs nomeados pelos índices das texturas" };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
 
-        TextureInfo[] textures = lvTextures.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<TextureInfo>().OrderBy(x => x.Index).ToArray();
+        TextureInfo[] textures = lvTextures.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<TextureInfo>().Where(x => activeTextureSource != null && textureOwners.TryGetValue(x, out TextureSmdItem? owner) && owner.Key == activeTextureSource.Key).OrderBy(x => x.Index).ToArray();
         if (textures.Length == 0) return;
         string[] pngs = Directory.GetFiles(dialog.SelectedPath, "*.png", SearchOption.TopDirectoryOnly);
         var matches = new List<(TextureInfo Texture, string Path)>();
@@ -290,7 +282,7 @@ public partial class Form1
             return;
         }
 
-        var answer = MessageBox.Show($"Foram encontrados {matches.Count} PNG(s) para {textures.Length} textura(s).\n\nSubstituir todas as correspondências e reinjetar o TPL no SMD?", "Substituir todas", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+        var answer = MessageBox.Show($"Foram encontrados {matches.Count} PNG(s) para {textures.Length} textura(s).\n\nSubstituir todas as correspondências no pacote selecionado?", "Substituir todas", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
         if (answer != DialogResult.OK) return;
 
         btnTextureReplaceAll.Enabled = false;
@@ -319,9 +311,7 @@ public partial class Form1
 
             if (replaced > 0)
             {
-                string backup = GetSmdBackupPath(activeTextureSmdPath);
-                await Task.Run(() => SmdTextureService.InjectTpl(activeTextureSmdPath, activeTextureTplPath, backup));
-                ExtractLog($"Substituição em lote: {replaced} textura(s) reinjetadas em {Path.GetFileName(activeTextureSmdPath)}.");
+            await SyncTextureTplToSmdAsync("TPL atualizado na fonte selecionada.");
                 RefreshVisualEditorTexturesFromTextureManager();
                 await LoadNativeTexturesAsync(false);
                 await RefreshChangeStatusAsync();
@@ -379,23 +369,28 @@ public partial class Form1
     {
         if (lvTextures.SelectedItems.Count != 1 || lvTextures.SelectedItems[0].Tag is not TextureInfo info || string.IsNullOrWhiteSpace(activeTextureTplPath)) return;
         using var dialog = new SaveFileDialog { Filter = "PNG (*.png)|*.png", FileName = $"texture_{info.Index:D3}.png" };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
         try { textureService.ExportPng(activeTextureTplPath, info.Index, dialog.FileName); ExtractLog("Textura exportada: " + dialog.FileName); }
         catch (Exception ex) { MessageBox.Show(ex.Message, "Exportar textura", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
     private async void btnTextureExportAll_Click(object? sender, EventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(activeTextureTplPath) || !File.Exists(activeTextureTplPath)) return;
+        if (lvTextures.Items.Count == 0) return;
         using var dialog = new FolderBrowserDialog { Description = "Selecione a pasta para exportar as texturas" };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
         try
         {
             btnTextureExportAll.Enabled = false;
-            var items = lvTextures.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<TextureInfo>().ToArray();
+            var items = lvTextures.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<TextureInfo>().Where(textureOwners.ContainsKey).ToArray();
             await Task.Run(() =>
             {
-                foreach (TextureInfo info in items) textureService.ExportPng(activeTextureTplPath, info.Index, Path.Combine(dialog.SelectedPath, $"texture_{info.Index:D3}_{info.Width}x{info.Height}.png"));
+                foreach (TextureInfo info in items)
+                {
+                    TextureSmdItem source = textureOwners[info];
+                    string prefix = source.IsEff ? $"{Path.GetFileNameWithoutExtension(source.FullPath)}_tpl_{source.PackageIndex:D3}" : Path.GetFileNameWithoutExtension(source.FullPath);
+                    textureService.ExportPng(GetTplWorkPath(source), info.Index, Path.Combine(dialog.SelectedPath, $"{prefix}_texture_{info.Index:D3}_{info.Width}x{info.Height}.png"));
+                }
             });
             ExtractLog($"{items.Length} textura(s) exportada(s) para {dialog.SelectedPath}");
         }
@@ -405,13 +400,8 @@ public partial class Form1
 
     private void btnTextureOpenExternal_Click(object? sender, EventArgs e)
     {
-        if (cmbTextureSmd.SelectedItem is not TextureSmdItem item) return;
-        string tplPath = GetTplWorkPath(item.FullPath);
-        try
-        {
-            if (!File.Exists(tplPath)) { Directory.CreateDirectory(Path.GetDirectoryName(tplPath)!); SmdTextureService.ExtractTpl(item.FullPath, tplPath); }
-            LaunchTplManager(tplPath);
-        }
+        if (activeTextureSource == null || string.IsNullOrWhiteSpace(activeTextureTplPath)) return;
+        try { LaunchTplManager(activeTextureTplPath); }
         catch (Exception ex) { MessageBox.Show(ex.Message, "TPL Manager", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
@@ -436,30 +426,37 @@ public partial class Form1
         return Path.Combine(root, "Mods", scenario, "Textures", Path.GetFileNameWithoutExtension(smdPath) + ".tpl");
     }
 
+    private string GetTplWorkPath(TextureSmdItem item)
+    {
+        string path=GetTplWorkPath(item.FullPath);
+        return item.IsEff?Path.Combine(Path.GetDirectoryName(path)!,Path.GetFileNameWithoutExtension(path)+$"_eff_{item.PackageIndex:D3}.tpl"):path;
+    }
+
     private string GetSmdBackupPath(string smdPath, string? datName = null)
     {
         string root = project.RootPath ?? Path.GetDirectoryName(smdPath)!;
         datName ??= project.ActiveDatName;
         string scenario = !string.IsNullOrWhiteSpace(datName) ? Path.GetFileNameWithoutExtension(datName) : "Scenario";
-        string name = Path.GetFileNameWithoutExtension(smdPath) + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".SMD";
+        string name = Path.GetFileNameWithoutExtension(smdPath) + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + Path.GetExtension(smdPath);
         return Path.Combine(root, "Mods", scenario, "Backups", name);
     }
 
-    private void UpdateTplSelectionInfo(string? smdPath)
+    private void UpdateTplSelectionInfo(TextureSmdItem item)
     {
-        if (string.IsNullOrWhiteSpace(smdPath) || !File.Exists(smdPath)) { lblTplStatus.Text = "Selecione um DAT para começar."; return; }
+        if (!File.Exists(item.FullPath)) { lblTplStatus.Text = "Selecione um DAT para comecar."; return; }
         try
         {
-            var info = SmdTextureService.ReadInfo(smdPath);
-            string tplPath = GetTplWorkPath(smdPath);
-            lblTplStatus.Text = $"TPL interno: {FormatBytes(info.TplSize)} • {(File.Exists(tplPath) ? "TPL de trabalho pronto" : "ainda não carregado")}";
+            string tplPath = GetTplWorkPath(item);
+            long size = item.IsEff ? EffTextureService.ReadPackages(item.FullPath)[item.PackageIndex].Length : SmdTextureService.ReadInfo(item.FullPath).TplSize;
+            string source = item.IsEff ? $"EFF - TPL #{item.PackageIndex:D3}" : "TPL interno";
+            lblTplStatus.Text = $"{source}: {FormatBytes(size)} - {(File.Exists(tplPath) ? "TPL de trabalho pronto" : "ainda nao carregado")}";
         }
-        catch (Exception ex) { lblTplStatus.Text = "Não foi possível ler o TPL: " + ex.Message; }
+        catch (Exception ex) { lblTplStatus.Text = "Nao foi possivel ler o TPL: " + ex.Message; }
     }
 
     private void ResetTextureUi(string message)
     {
-        activeTextureTplPath = null; activeTextureSmdPath = null;
+        activeTextureTplPath = null; activeTextureSmdPath = null; activeTextureSource = null; textureOwners.Clear();
         if (lblTextureLoading != null) lblTextureLoading.Visible = false;
         lvTextures?.Items.Clear(); textureImages?.Images.Clear();
         lblTextureCount.Text = "0 texturas"; lblTplStatus.Text = message;
@@ -487,18 +484,18 @@ public partial class Form1
 
     private async Task ReloadTextureThumbnailsAsync()
     {
-        if (loadingTextures || string.IsNullOrWhiteSpace(activeTextureTplPath) || !File.Exists(activeTextureTplPath)) return;
+        if (loadingTextures || lvTextures.Items.Count == 0) return;
         int request = ++thumbnailRequestId;
-        string tpl = activeTextureTplPath;
         var generated = new List<(ListViewItem Item, string Key, Bitmap Bitmap)>();
         foreach (ListViewItem item in lvTextures.Items)
         {
-            if (item.Tag is not TextureInfo info) continue;
+            if (item.Tag is not TextureInfo info || !textureOwners.TryGetValue(info, out TextureSmdItem? source)) continue;
             try
             {
-                Bitmap thumb = await Task.Run(() => textureService.CreateThumbnail(tpl, info.Index, textureThumbnailSize));
+                string key = source.Key + "|" + info.Index;
+                Bitmap thumb = await Task.Run(() => textureService.CreateThumbnail(GetTplWorkPath(source), info.Index, textureThumbnailSize));
                 if (request != thumbnailRequestId) { thumb.Dispose(); foreach (var entry in generated) entry.Bitmap.Dispose(); return; }
-                generated.Add((item, info.Index.ToString(), thumb));
+                generated.Add((item, key, thumb));
             }
             catch { }
         }
@@ -576,7 +573,7 @@ public partial class Form1
     {
         if (!TryGetSelectedTexture(out TextureInfo info) || string.IsNullOrWhiteSpace(activeTextureTplPath)) return;
         using var dialog = new TextureResizeDialog(info.Width, info.Height);
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
         try
         {
             using Bitmap source = textureService.Decode(activeTextureTplPath, info.Index);
@@ -626,7 +623,7 @@ public partial class Form1
         if (string.IsNullOrWhiteSpace(activeTextureTplPath) || string.IsNullOrWhiteSpace(activeTextureSmdPath)) return;
         string label = colors == 16 ? "4-bit" : "8-bit";
         if (MessageBox.Show($"Converter todas as texturas compatíveis para {label}?", "Bit depth em lote", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
-        TextureInfo[] items = lvTextures.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<TextureInfo>().ToArray();
+        TextureInfo[] items = lvTextures.Items.Cast<ListViewItem>().Select(x => x.Tag).OfType<TextureInfo>().Where(x => activeTextureSource != null && textureOwners.TryGetValue(x, out TextureSmdItem? owner) && owner.Key == activeTextureSource.Key).ToArray();
         int changed = 0; var failures = new List<string>(); lblTextureLoading.Visible = true; lblTextureLoading.BringToFront();
         try
         {
@@ -653,9 +650,12 @@ public partial class Form1
 
     private async Task SyncTextureTplToSmdAsync(string log)
     {
-        if (string.IsNullOrWhiteSpace(activeTextureTplPath) || string.IsNullOrWhiteSpace(activeTextureSmdPath)) return;
-        string backup = GetSmdBackupPath(activeTextureSmdPath);
-        await Task.Run(() => SmdTextureService.InjectTpl(activeTextureSmdPath, activeTextureTplPath, backup));
+        if (string.IsNullOrWhiteSpace(activeTextureTplPath) || activeTextureSource == null) return;
+        string backup = GetSmdBackupPath(activeTextureSource.FullPath);
+        if (activeTextureSource.IsEff)
+            await Task.Run(() => EffTextureService.InjectTpl(activeTextureSource.FullPath, activeTextureSource.PackageIndex, activeTextureTplPath, backup));
+        else
+            await Task.Run(() => SmdTextureService.InjectTpl(activeTextureSource.FullPath, activeTextureTplPath, backup));
         ExtractLog(log);
         RefreshVisualEditorTexturesFromTextureManager();
         await RefreshChangeStatusAsync(); _ = RefreshTrackedDatsAsync();
@@ -663,9 +663,10 @@ public partial class Form1
 
     private async Task ReloadTextureCatalogKeepingSelectionAsync(int index)
     {
+        string? sourceKey = activeTextureSource?.Key;
         await LoadNativeTexturesAsync(false);
         foreach (ListViewItem item in lvTextures.Items)
-            if (item.Tag is TextureInfo info && info.Index == index) { item.Selected = true; item.EnsureVisible(); break; }
+            if (item.Tag is TextureInfo info && info.Index == index && textureOwners.TryGetValue(info, out TextureSmdItem? owner) && owner.Key == sourceKey) { item.Selected = true; item.EnsureVisible(); break; }
     }
 
     private sealed record TextureDatItem(string DatName, string ContentPath)
@@ -673,8 +674,10 @@ public partial class Form1
         public override string ToString() => DatName;
     }
 
-    private sealed record TextureSmdItem(string FullPath, string RelativePath)
+    private sealed record TextureSmdItem(string FullPath, string RelativePath, int PackageIndex = -1, int TextureCount = 0)
     {
-        public override string ToString() => RelativePath;
+        public bool IsEff => PackageIndex >= 0;
+        public string Key => FullPath + "|" + PackageIndex;
+        public override string ToString() => IsEff ? $"{RelativePath} - TPL #{PackageIndex:D3} ({TextureCount} texturas)" : RelativePath;
     }
 }

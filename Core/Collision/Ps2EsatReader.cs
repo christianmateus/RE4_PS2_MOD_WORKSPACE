@@ -73,6 +73,7 @@ public static class Ps2EsatReader
         ReadVectors(reader, mesh.Positions, positionCount);
         mesh.OriginalPositions.AddRange(mesh.Positions);
         ReadVectors(reader, mesh.Normals, normalCount);
+        mesh.OriginalNormals.AddRange(mesh.Normals);
         ReadVectors(reader, mesh.EdgeVectors, edgeCount);
 
         for (int i = 0; i < faceCount; i++)
@@ -83,6 +84,7 @@ public static class Ps2EsatReader
             if (v0 >= positionCount || v1 >= positionCount || v2 >= positionCount || normal >= normalCount || e0 >= edgeCount || e1 >= edgeCount || e2 >= edgeCount)
                 throw new InvalidDataException($"Bloco #{index}, face #{i}: índice fora dos limites.");
             mesh.Faces.Add(new EsatFace(v0, v1, v2, normal, e0, e1, e2, unknown, blue, green, red, connectivity));
+            mesh.OriginalFaces.Add(mesh.Faces[^1]);
         }
 
         for (int i = 0; i < groupCount; i++) mesh.Groups.Add(ReadGroup(reader, end, faceCount, index, i));

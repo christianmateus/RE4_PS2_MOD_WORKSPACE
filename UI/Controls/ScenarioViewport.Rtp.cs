@@ -10,22 +10,27 @@ public sealed partial class ScenarioViewport
     private bool rtpGpuDirty;
     private int rtpConnectionsVao, rtpConnectionsVbo, rtpConnectionsVertexCount;
     private int rtpNodesVao, rtpNodesVbo, rtpNodesVertexCount;
+    private int rtpSelectedNodesVao, rtpSelectedNodesVbo, rtpSelectedNodesVertexCount;
     private readonly int[] rtpGizmoVaos=new int[3],rtpGizmoVbos=new int[3],rtpGizmoVertexCounts=new int[3];
     private int selectedRtpNode=-1,rtpDragAxis;
+    private readonly HashSet<int> selectedRtpNodes=[];
     private Point rtpDragMouse;
     private NVector3 rtpDragStart;
 
     public bool RtpVisible { get; set; }
     public RtpScene? RtpScene => rtpScene;
     public int SelectedRtpNodeIndex => selectedRtpNode;
+    public IReadOnlyCollection<int> SelectedRtpNodeIndices => selectedRtpNodes;
     public bool IsRtpDragging => rtpDragAxis != 0;
     public event Action<RtpNode?>? RtpNodeSelected;
+    public event Action<IReadOnlyList<RtpNode>>? RtpSelectionChanged;
     public event Action? RtpSceneEdited;
 
     public void SetRtpScene(RtpScene? value)
     {
         rtpScene = value;
         selectedRtpNode = -1;
+        selectedRtpNodes.Clear();
         rtpGpuDirty = true;
         Invalidate();
     }
@@ -33,10 +38,11 @@ public sealed partial class ScenarioViewport
     private void UploadRtp()
     {
         rtpGpuDirty = false;
-        rtpConnectionsVertexCount = rtpNodesVertexCount = 0;
+        rtpConnectionsVertexCount = rtpNodesVertexCount = rtpSelectedNodesVertexCount = 0;
         if (rtpScene == null || !glReady) return;
         if (rtpConnectionsVao == 0) { rtpConnectionsVao = GL.GenVertexArray(); rtpConnectionsVbo = GL.GenBuffer(); }
         if (rtpNodesVao == 0) { rtpNodesVao = GL.GenVertexArray(); rtpNodesVbo = GL.GenBuffer(); }
+        if (rtpSelectedNodesVao == 0) { rtpSelectedNodesVao = GL.GenVertexArray(); rtpSelectedNodesVbo = GL.GenBuffer(); }
         for(int i=0;i<3;i++){if(rtpGizmoVaos[i]==0){rtpGizmoVaos[i]=GL.GenVertexArray();rtpGizmoVbos[i]=GL.GenBuffer();}}
 
         var lines = new List<float>();
@@ -55,12 +61,13 @@ public sealed partial class ScenarioViewport
         foreach (RtpNode node in rtpScene.Nodes)
         {
             NVector3 p = node.Position;
-            List<float> target=node.Index==selectedRtpNode?selectedMarkers:markers;
+            List<float> target=selectedRtpNodes.Contains(node.Index)?selectedMarkers:markers;
             AddRtpSegment(target, p + new NVector3(-markerRadius, 0, 0), p + new NVector3(markerRadius, 0, 0));
             AddRtpSegment(target, p + new NVector3(0, -markerRadius, 0), p + new NVector3(0, markerRadius, 0));
             AddRtpSegment(target, p + new NVector3(0, 0, -markerRadius), p + new NVector3(0, 0, markerRadius));
         }
         UploadLineBuffer(rtpNodesVao, rtpNodesVbo, markers, out rtpNodesVertexCount);
+        UploadLineBuffer(rtpSelectedNodesVao, rtpSelectedNodesVbo, selectedMarkers, out rtpSelectedNodesVertexCount);
         var axes=new[]{new List<float>(),new List<float>(),new List<float>()};
         if(selectedRtpNode>=0&&selectedRtpNode<rtpScene.Nodes.Count){NVector3 p=rtpScene.Nodes[selectedRtpNode].Position;float len=Math.Clamp(markerRadius*4f,3f,10f);AddRtpArrow(axes[0],p,NVector3.UnitX,len);AddRtpArrow(axes[1],p,NVector3.UnitY,len);AddRtpArrow(axes[2],p,NVector3.UnitZ,len);}
         for(int i=0;i<3;i++)UploadLineBuffer(rtpGizmoVaos[i],rtpGizmoVbos[i],axes[i],out rtpGizmoVertexCounts[i]);
@@ -92,6 +99,12 @@ public sealed partial class ScenarioViewport
             GL.BindVertexArray(rtpNodesVao); GL.LineWidth(4f);
             GL.DrawArrays(PrimitiveType.Lines, 0, rtpNodesVertexCount);
         }
+        if (rtpSelectedNodesVertexCount > 0)
+        {
+            GL.Uniform3(uColor, 1f, 0.25f, 0.08f);
+            GL.BindVertexArray(rtpSelectedNodesVao); GL.LineWidth(6f);
+            GL.DrawArrays(PrimitiveType.Lines, 0, rtpSelectedNodesVertexCount);
+        }
         var colors=new[]{(1f,.15f,.12f),(.2f,.95f,.25f),(.12f,.48f,1f)};for(int i=0;i<3;i++)if(rtpGizmoVertexCounts[i]>0){GL.Uniform3(uColor,colors[i].Item1,colors[i].Item2,colors[i].Item3);GL.BindVertexArray(rtpGizmoVaos[i]);GL.LineWidth(5f);GL.DrawArrays(PrimitiveType.Lines,0,rtpGizmoVertexCounts[i]);}
         GL.LineWidth(1f); GL.Enable(EnableCap.CullFace);
     }
@@ -103,17 +116,45 @@ public sealed partial class ScenarioViewport
     private bool TryBeginRtpDrag(Point mouse)
     {if(!RtpVisible||rtpScene==null||selectedRtpNode<0||selectedRtpNode>=rtpScene.Nodes.Count)return false;RtpNode node=rtpScene.Nodes[selectedRtpNode];int axis=PickRtpAxis(mouse,node);if(axis==0)return false;rtpDragAxis=axis;rtpDragMouse=mouse;rtpDragStart=node.Position;return true;}
     private void ClearRtpSelectionOnMiss(Point mouse)
-    {if(RtpVisible&&rtpScene!=null&&selectedRtpNode>=0&&PickRtpNode(mouse)==null){selectedRtpNode=-1;rtpGpuDirty=true;RtpNodeSelected?.Invoke(null);Invalidate();}}
+    {if(RtpVisible&&rtpScene!=null&&selectedRtpNodes.Count>0&&PickRtpNode(mouse)==null)SetRtpSelection([]);}
     private void UpdateRtpDrag(Point mouse)
     {if(rtpScene==null||selectedRtpNode<0)return;RtpNode node=rtpScene.Nodes[selectedRtpNode];NVector3 axis=rtpDragAxis==1?NVector3.UnitX:rtpDragAxis==2?NVector3.UnitY:NVector3.UnitZ;float len=Math.Clamp((scene?.Radius??1000f)*.01f,3f,10f);if(TryProjectWorldToScreen(rtpDragStart,out PointF a)&&TryProjectWorldToScreen(rtpDragStart+axis*len,out PointF b)){System.Numerics.Vector2 screenAxis=new(b.X-a.X,b.Y-a.Y);float pixels=screenAxis.Length();if(pixels>.1f){screenAxis/=pixels;System.Numerics.Vector2 delta=new(mouse.X-rtpDragMouse.X,mouse.Y-rtpDragMouse.Y);node.Position=rtpDragStart+axis*(System.Numerics.Vector2.Dot(delta,screenAxis)*len/pixels);rtpGpuDirty=true;Invalidate();}}}
     private void EndRtpDrag(){if(rtpScene==null)return;rtpDragAxis=0;rtpScene.IsModified=true;RecalculateRtpDistances();RtpSceneEdited?.Invoke();rtpGpuDirty=true;}
-    public bool HandleRtpClick(Point mouse){if(!RtpVisible||rtpScene==null)return false;RtpNode? node=PickRtpNode(mouse);if(node==null){if(selectedRtpNode>=0){selectedRtpNode=-1;rtpGpuDirty=true;RtpNodeSelected?.Invoke(null);Invalidate();}return false;}SelectRtpNode(node.Index);return true;}
-    public void SelectRtpNode(int index)
-    {if(rtpScene==null||index<0||index>=rtpScene.Nodes.Count){selectedRtpNode=-1;RtpNodeSelected?.Invoke(null);}else{selectedRtpNode=index;RtpNodeSelected?.Invoke(rtpScene.Nodes[index]);}rtpGpuDirty=true;Invalidate();}
+    public bool HandleRtpClick(Point mouse)
+    {
+        if(!RtpVisible||rtpScene==null)return false;
+        RtpNode? node=PickRtpNode(mouse);
+        if(node==null){SetRtpSelection([]);return false;}
+        SelectRtpNode(node.Index,(ModifierKeys&Keys.Control)==Keys.Control);
+        return true;
+    }
+    public void SelectRtpNode(int index,bool additive=false)
+    {
+        if(rtpScene==null||index<0||index>=rtpScene.Nodes.Count){SetRtpSelection([]);return;}
+        if(!additive)selectedRtpNodes.Clear();
+        if(additive&&selectedRtpNodes.Contains(index))selectedRtpNodes.Remove(index);
+        else selectedRtpNodes.Add(index);
+        selectedRtpNode=selectedRtpNodes.Contains(index)?index:selectedRtpNodes.LastOrDefault(-1);
+        NotifyRtpSelection();
+    }
+    public void SetRtpSelection(IEnumerable<int> indices)
+    {
+        selectedRtpNodes.Clear();
+        if(rtpScene!=null)foreach(int index in indices)if(index>=0&&index<rtpScene.Nodes.Count)selectedRtpNodes.Add(index);
+        selectedRtpNode=selectedRtpNodes.LastOrDefault(-1);
+        NotifyRtpSelection();
+    }
+    private void NotifyRtpSelection()
+    {
+        rtpGpuDirty=true;
+        RtpNodeSelected?.Invoke(rtpScene!=null&&selectedRtpNode>=0?rtpScene.Nodes[selectedRtpNode]:null);
+        RtpSelectionChanged?.Invoke(rtpScene==null?[]:selectedRtpNodes.OrderBy(x=>x).Select(x=>rtpScene.Nodes[x]).ToArray());
+        Invalidate();
+    }
     public bool DuplicateSelectedRtpNodeInFront()=>DuplicateSelectedRtpNode(GetForward()*4f);
     public bool AddChildToSelectedRtpNodeInFront()=>AddChildToSelectedRtpNode(GetForward()*4f);
     public bool DuplicateSelectedRtpNode(NVector3 offset)
-    {if(rtpScene==null||selectedRtpNode<0||rtpScene.Nodes.Count>=255)return false;int source=selectedRtpNode,newIndex=rtpScene.Nodes.Count;rtpScene.Nodes.Add(new RtpNode(newIndex,rtpScene.Nodes[source].Position+offset));foreach(RtpConnection c in rtpScene.Connections.Where(x=>x.From==source).ToArray())rtpScene.Connections.Add(new RtpConnection(newIndex,c.To,c.Distance));foreach(RtpConnection c in rtpScene.Connections.Where(x=>x.To==source).ToArray())rtpScene.Connections.Add(new RtpConnection(c.From,newIndex,c.Distance));selectedRtpNode=newIndex;rtpScene.IsModified=true;RecalculateRtpDistances();rtpGpuDirty=true;RtpNodeSelected?.Invoke(rtpScene.Nodes[newIndex]);RtpSceneEdited?.Invoke();Invalidate();return true;}
+    {if(rtpScene==null||selectedRtpNode<0||rtpScene.Nodes.Count>=255)return false;int source=selectedRtpNode,newIndex=rtpScene.Nodes.Count;rtpScene.Nodes.Add(new RtpNode(newIndex,rtpScene.Nodes[source].Position+offset));foreach(RtpConnection c in rtpScene.Connections.Where(x=>x.From==source).ToArray())rtpScene.Connections.Add(new RtpConnection(newIndex,c.To,c.Distance));foreach(RtpConnection c in rtpScene.Connections.Where(x=>x.To==source).ToArray())rtpScene.Connections.Add(new RtpConnection(c.From,newIndex,c.Distance));selectedRtpNodes.Clear();selectedRtpNodes.Add(newIndex);selectedRtpNode=newIndex;rtpScene.IsModified=true;RecalculateRtpDistances();rtpGpuDirty=true;RtpNodeSelected?.Invoke(rtpScene.Nodes[newIndex]);RtpSceneEdited?.Invoke();Invalidate();return true;}
     public bool AddChildToSelectedRtpNode(NVector3 offset)
     {
         if(rtpScene==null||selectedRtpNode<0||selectedRtpNode>=rtpScene.Nodes.Count||rtpScene.Nodes.Count>=255)return false;
@@ -123,11 +164,22 @@ public sealed partial class ScenarioViewport
         ushort distance=Ps2RtpWriter.CalculateDistance(rtpScene.Nodes[parent].Position,node.Position);
         rtpScene.Connections.Add(new RtpConnection(parent,child,distance));
         rtpScene.Connections.Add(new RtpConnection(child,parent,distance));
-        selectedRtpNode=child;rtpScene.IsModified=true;rtpGpuDirty=true;
+        selectedRtpNodes.Clear();selectedRtpNodes.Add(child);selectedRtpNode=child;rtpScene.IsModified=true;rtpGpuDirty=true;
         RtpNodeSelected?.Invoke(node);RtpSceneEdited?.Invoke();Invalidate();return true;
     }
+    public bool ConnectSelectedRtpNodes()
+    {
+        if(rtpScene==null||selectedRtpNodes.Count!=2)return false;
+        int[] pair=selectedRtpNodes.ToArray();int a=pair[0],b=pair[1];
+        ushort distance=Ps2RtpWriter.CalculateDistance(rtpScene.Nodes[a].Position,rtpScene.Nodes[b].Position);
+        bool changed=false;
+        if(!rtpScene.Connections.Any(x=>x.From==a&&x.To==b)){rtpScene.Connections.Add(new RtpConnection(a,b,distance));changed=true;}
+        if(!rtpScene.Connections.Any(x=>x.From==b&&x.To==a)){rtpScene.Connections.Add(new RtpConnection(b,a,distance));changed=true;}
+        if(!changed)return false;
+        rtpScene.IsModified=true;rtpGpuDirty=true;RtpSceneEdited?.Invoke();Invalidate();return true;
+    }
     public bool DeleteSelectedRtpNode()
-    {if(rtpScene==null||selectedRtpNode<0||rtpScene.Nodes.Count<=1)return false;int removed=selectedRtpNode;rtpScene.Nodes.RemoveAt(removed);for(int i=0;i<rtpScene.Nodes.Count;i++)rtpScene.Nodes[i].Index=i;var remapped=rtpScene.Connections.Where(x=>x.From!=removed&&x.To!=removed).Select(x=>new RtpConnection(x.From>removed?x.From-1:x.From,x.To>removed?x.To-1:x.To,x.Distance)).Distinct().ToList();rtpScene.Connections.Clear();rtpScene.Connections.AddRange(remapped);selectedRtpNode=-1;rtpScene.IsModified=true;rtpGpuDirty=true;RtpNodeSelected?.Invoke(null);RtpSceneEdited?.Invoke();Invalidate();return true;}
+    {if(rtpScene==null||selectedRtpNode<0||rtpScene.Nodes.Count<=1)return false;int removed=selectedRtpNode;rtpScene.Nodes.RemoveAt(removed);for(int i=0;i<rtpScene.Nodes.Count;i++)rtpScene.Nodes[i].Index=i;var remapped=rtpScene.Connections.Where(x=>x.From!=removed&&x.To!=removed).Select(x=>new RtpConnection(x.From>removed?x.From-1:x.From,x.To>removed?x.To-1:x.To,x.Distance)).Distinct().ToList();rtpScene.Connections.Clear();rtpScene.Connections.AddRange(remapped);selectedRtpNodes.Clear();selectedRtpNode=-1;rtpScene.IsModified=true;rtpGpuDirty=true;RtpNodeSelected?.Invoke(null);RtpSceneEdited?.Invoke();Invalidate();return true;}
     private void RecalculateRtpDistances(){if(rtpScene==null)return;for(int i=0;i<rtpScene.Connections.Count;i++){RtpConnection c=rtpScene.Connections[i];rtpScene.Connections[i]=c with{Distance=Ps2RtpWriter.CalculateDistance(rtpScene.Nodes[c.From].Position,rtpScene.Nodes[c.To].Position)};}}
 
     private void DisposeRtpGpu()
@@ -136,7 +188,9 @@ public sealed partial class ScenarioViewport
         if (rtpConnectionsVao != 0) GL.DeleteVertexArray(rtpConnectionsVao);
         if (rtpNodesVbo != 0) GL.DeleteBuffer(rtpNodesVbo);
         if (rtpNodesVao != 0) GL.DeleteVertexArray(rtpNodesVao);
+        if (rtpSelectedNodesVbo != 0) GL.DeleteBuffer(rtpSelectedNodesVbo);
+        if (rtpSelectedNodesVao != 0) GL.DeleteVertexArray(rtpSelectedNodesVao);
         for(int i=0;i<3;i++){if(rtpGizmoVbos[i]!=0)GL.DeleteBuffer(rtpGizmoVbos[i]);if(rtpGizmoVaos[i]!=0)GL.DeleteVertexArray(rtpGizmoVaos[i]);}
-        rtpConnectionsVbo = rtpConnectionsVao = rtpNodesVbo = rtpNodesVao = 0;
+        rtpConnectionsVbo = rtpConnectionsVao = rtpNodesVbo = rtpNodesVao = rtpSelectedNodesVbo = rtpSelectedNodesVao = 0;
     }
 }

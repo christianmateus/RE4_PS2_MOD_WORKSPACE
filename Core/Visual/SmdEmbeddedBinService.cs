@@ -43,6 +43,22 @@ public static class SmdEmbeddedBinService
     {
         if(bin.Length<0x20)throw new InvalidDataException("BIN inválido.");ushort count=BitConverter.ToUInt16(bin,0x0A);uint materialOffset=BitConverter.ToUInt32(bin,0x0C);if(count==0||materialOffset==0||materialOffset+count*16L>bin.Length)throw new InvalidDataException("O BIN convertido não possui materiais editáveis.");for(int i=0;i<count;i++)bin[checked((int)materialOffset+i*16+1)]=textureIndex;
     }
+    public static void RemapBinMaterialTextures(byte[] bin,IReadOnlyDictionary<byte,byte> mapping)
+    {
+        if(mapping.Count==0)return;if(bin.Length<0x20)throw new InvalidDataException("BIN inválido.");ushort count=BitConverter.ToUInt16(bin,0x0A);uint materialOffset=BitConverter.ToUInt32(bin,0x0C);if(materialOffset==0||materialOffset+count*16L>bin.Length)throw new InvalidDataException("Tabela de materiais BIN inválida.");for(int i=0;i<count;i++){int offset=checked((int)materialOffset+i*16+1);if(mapping.TryGetValue(bin[offset],out byte replacement))bin[offset]=replacement;}
+    }
+    public static IReadOnlyList<byte> ReadBinMaterialTextures(byte[] bin)
+    {
+        (int offset,int count)=LocateMaterials(bin);var result=new byte[count];for(int i=0;i<count;i++)result[i]=bin[offset+i*16+1];return result;
+    }
+    public static void SetBinMaterialTextureAt(byte[] bin,int materialIndex,byte textureIndex)
+    {
+        (int offset,int count)=LocateMaterials(bin);if(materialIndex<0||materialIndex>=count)throw new ArgumentOutOfRangeException(nameof(materialIndex));bin[offset+materialIndex*16+1]=textureIndex;
+    }
+    private static (int Offset,int Count) LocateMaterials(byte[] bin)
+    {
+        if(bin.Length<0x20)throw new InvalidDataException("BIN inválido.");int count=BitConverter.ToUInt16(bin,0x0A);int offset=checked((int)BitConverter.ToUInt32(bin,0x0C));if(count<1||offset<0x10||offset+count*16L>bin.Length)throw new InvalidDataException("Tabela de materiais BIN inválida.");return(offset,count);
+    }
     public static void SetBinVertexPositions(string smdPath,byte binId,int binCount,IReadOnlyDictionary<int,(System.Numerics.Vector3 Position,float Factor)> edits)
     {
         byte[] bin=Extract(smdPath,binId,binCount);foreach(var pair in edits){int o=pair.Key;if(o<0||o+6>bin.Length)throw new InvalidDataException("Offset de vértice BIN inválido.");float factor=MathF.Abs(pair.Value.Factor)<.0000001f?1f:pair.Value.Factor;short V(float value)=>checked((short)Math.Clamp((int)MathF.Round(value*100f/factor),short.MinValue,short.MaxValue));BitConverter.GetBytes(V(pair.Value.Position.X)).CopyTo(bin,o);BitConverter.GetBytes(V(pair.Value.Position.Y)).CopyTo(bin,o+2);BitConverter.GetBytes(V(pair.Value.Position.Z)).CopyTo(bin,o+4);}Replace(smdPath,binId,binCount,bin);

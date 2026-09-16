@@ -12,7 +12,8 @@ public static class Ps2ScenarioReader
         using var reader = new BinaryReader(stream);
         List<LocalTriangle> local = ReadBinTriangles(reader, 0, data.Length, 0, useRegularUvLayout);
         return local.Select(t => new ScenarioTriangle(t.A, t.B, t.C, t.UvA, t.UvB, t.UvC,
-            t.TextureIndex < 0 ? -1 : t.TextureIndex + textureIndexBase)).ToArray();
+            t.TextureIndex < 0 ? -1 : t.TextureIndex + textureIndexBase,
+            t.OffsetA,t.OffsetB,t.OffsetC,t.Factor,t.StripFlagOffset)).ToArray();
     }
 
     private sealed class SmdEntry

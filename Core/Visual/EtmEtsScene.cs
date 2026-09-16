@@ -12,7 +12,10 @@ public sealed class EtmCatalog
     public IReadOnlyDictionary<byte, IReadOnlyList<EtmModelPart>> ModelParts { get; init; } = new Dictionary<byte, IReadOnlyList<EtmModelPart>>();
 }
 
-public sealed record EtmResource(int FileOrder, uint Type, string Name, byte[] Data);
+public sealed record EtmResource(int FileOrder, uint Type, string Name, byte[] Data)
+{
+    public EtmResource(int fileOrder,int type,string name,byte[] data):this(fileOrder,checked((uint)type),name,data){}
+}
 public sealed record EtmModelPart(EtmResource Bin, EtmResource? Effect, EtmResource? TextureFallback, IReadOnlyList<ScenarioTriangle> Triangles);
 public sealed record EtmObjectDefinition(byte Id, IReadOnlyList<EtmResource> Resources)
 {

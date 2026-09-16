@@ -92,6 +92,31 @@ public static partial class NativeDatService
 
     public static DatArchive Read(string datPath) => Parse(File.ReadAllBytes(datPath), datPath);
 
+    public static DatEntry ReadOriginalEntry(string datPath, string contentDirectory, string extractedFilePath)
+    {
+        if (!File.Exists(datPath)) throw new FileNotFoundException("DAT original não encontrado.", datPath);
+        if (!Directory.Exists(contentDirectory)) throw new DirectoryNotFoundException("A pasta Content do DAT não foi encontrada: " + contentDirectory);
+
+        string baseName = Path.GetFileNameWithoutExtension(datPath);
+        string idxPath = Path.Combine(contentDirectory, baseName + ".idx");
+        if (!File.Exists(idxPath)) throw new FileNotFoundException("Manifesto IDX do DAT não encontrado.", idxPath);
+
+        string targetPath = Path.GetFullPath(extractedFilePath);
+        ManifestEntry? manifestEntry = ReadManifest(idxPath).FirstOrDefault(entry =>
+            string.Equals(ResolveManifestPath(contentDirectory, entry.RelativePath), targetPath, StringComparison.OrdinalIgnoreCase));
+        if (manifestEntry is null)
+            throw new InvalidDataException("O arquivo selecionado não corresponde a nenhuma entrada do DAT original.");
+
+        DatArchive archive = Read(datPath);
+        if (manifestEntry.Index >= archive.Entries.Count)
+            throw new InvalidDataException($"A entrada #{manifestEntry.Index} não existe no DAT original.");
+
+        DatEntry entry = archive.Entries[manifestEntry.Index];
+        if (!string.Equals(entry.Type, manifestEntry.Type, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"O tipo da entrada #{entry.Index} não corresponde ao manifesto IDX.");
+        return entry;
+    }
+
     private static DatArchive Parse(byte[] data, string sourcePath)
     {
         if (data.Length < FixedHeaderSize) throw new InvalidDataException("DAT menor que o cabeçalho mínimo de 0x10 bytes.");

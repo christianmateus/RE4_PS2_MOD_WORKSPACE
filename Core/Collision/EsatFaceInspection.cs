@@ -4,12 +4,13 @@ using System.Numerics;
 namespace RE4_PS2_MOD_WORKSPACE.Core.Collision;
 
 public enum EsatFaceCategory { Floor, Slope, Wall }
+public enum SatTraversalType { Comum, ClimbUp, JumpOver, JumpDown, JumpOut, JumpOver2 }
 
 public sealed class EsatFaceInspection
 {
     [Browsable(false)] public required EsatFile File { get; init; }
     [Browsable(false)] public required EsatMesh Mesh { get; init; }
-    [Browsable(false)] public required EsatFace Face { get; init; }
+    [Browsable(false)] public required EsatFace Face { get; set; }
 
     [Category("Face"), DisplayName("Arquivo")] public string FileType => File.Kind.ToString().ToUpperInvariant();
     [Category("Face"), DisplayName("Submesh")] public int MeshIndex { get; init; }
@@ -24,6 +25,26 @@ public sealed class EsatFaceInspection
     [Category("Posições"), DisplayName("V2")] public Vector3 Vertex2 => Mesh.Positions[Face.Vertex2] / 100f;
     [Category("Posições"), DisplayName("Normal da face")] public Vector3 Normal => Mesh.Normals[Face.Normal];
 
+    [Category("Colisão SAT"), DisplayName("Tipo de travessia"), Description("Presets reproduzem os flags observados nos SATs originais.")]
+    public SatTraversalType TraversalType
+    {
+        get
+        {
+            if(File.Kind!=EsatKind.Sat)return SatTraversalType.Comum;
+            if((Face.Green&0x10)!=0)return SatTraversalType.ClimbUp;
+            if((Face.Blue&0x20)!=0)return SatTraversalType.JumpOver;
+            if((Face.Red&0x90)==0x90)return SatTraversalType.JumpDown;
+            if((Face.Green&0x04)!=0)return SatTraversalType.JumpOut;
+            if((Face.Red&0x08)!=0)return SatTraversalType.JumpOver2;
+            return SatTraversalType.Comum;
+        }
+        set
+        {
+            if(File.Kind!=EsatKind.Sat)return;byte blue=(byte)(Face.Blue&~0x20),green=(byte)(Face.Green&~0x14),red=(byte)(Face.Red&~0x98);
+            switch(value){case SatTraversalType.ClimbUp:green|=0x10;break;case SatTraversalType.JumpOver:blue|=0x20;break;case SatTraversalType.JumpDown:red|=0x90;break;case SatTraversalType.JumpOut:green|=0x04;break;case SatTraversalType.JumpOver2:red|=0x08;break;}
+            Face=Face with{Blue=blue,Green=green,Red=red};Mesh.Faces[FaceIndex]=Face;
+        }
+    }
     [Category("Flags brutas"), DisplayName("BB (Blue)")] public string Blue => $"0x{Face.Blue:X2}";
     [Category("Flags brutas"), DisplayName("GG (Green)")] public string Green => $"0x{Face.Green:X2}";
     [Category("Flags brutas"), DisplayName("RR (Red)")] public string Red => $"0x{Face.Red:X2}";
@@ -53,7 +74,7 @@ public static class EsatFlagCatalog
         if (kind == EsatKind.Sat)
         {
             Add(face.Red, 0x04, "Fall Fence", names); Add(face.Red, 0x08, "Jump Over", names); Add(face.Red, 0x10, "Fall", names); Add(face.Red, 0x20, "Up", names); Add(face.Red, 0x40, "Player No Hit", names); Add(face.Red, 0x80, "Camera No Hit", names);
-            Add(face.Green, 0x04, "Only Camera Hit", names); Add(face.Green, 0x08, "Cliff", names); Add(face.Green, 0x10, "Up 2", names); Add(face.Green, 0x20, "Down", names); Add(face.Green, 0x40, "Enemy No Hit", names); Add(face.Green, 0x80, "Small No Hit", names);
+            Add(face.Green, 0x04, "Only Camera Hit", names); Add(face.Green, 0x08, "Cliff", names); Add(face.Green, 0x10, "Climb Up", names); Add(face.Green, 0x20, "Down", names); Add(face.Green, 0x40, "Enemy No Hit", names); Add(face.Green, 0x80, "Small No Hit", names);
             Add(face.Blue, 0x04, "No Effect Set", names); Add(face.Blue, 0x08, "Hide", names); Add(face.Blue, 0x10, "Down 2", names); Add(face.Blue, 0x20, "Fence", names); Add(face.Blue, 0x40, "Route No Hit", names); Add(face.Blue, 0x80, "Steps", names);
         }
         else

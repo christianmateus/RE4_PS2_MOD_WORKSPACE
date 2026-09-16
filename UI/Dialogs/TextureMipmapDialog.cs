@@ -2,7 +2,7 @@ using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 
 namespace RE4_PS2_MOD_WORKSPACE;
 
-public sealed class TextureMipmapDialog : Form
+public sealed class TextureMipmapDialog : AppForm
 {
     private readonly string path;
     private readonly int index;
@@ -84,7 +84,7 @@ public sealed class TextureMipmapDialog : Form
     private string? PickPng()
     {
         using var dialog = new OpenFileDialog { Filter = "PNG (*.png)|*.png", CheckFileExists = true };
-        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+        return dialog.ShowLocalizedDialog(this) == DialogResult.OK ? dialog.FileName : null;
     }
 
     private static void SetImage(AlphaPreviewBox box, Image? image)

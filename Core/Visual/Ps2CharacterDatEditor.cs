@@ -291,6 +291,23 @@ public static class Ps2CharacterDatEditor
         CommitTpl(datPath, dat, start, length, bin);
     }
 
+    /// <summary>Transforms referenced vertices in a standalone BIN using the same
+    /// segment-wide adaptive-factor protection as the character editor.</summary>
+    public static byte[] TransformStandaloneBinVertices(byte[] source, IReadOnlyCollection<int> sourceVertexOffsets, Vector3 translation, Vector3 rotationDegrees, Vector3 scale)
+    {
+        ArgumentNullException.ThrowIfNull(source);ArgumentNullException.ThrowIfNull(sourceVertexOffsets);
+        if(sourceVertexOffsets.Count==0)throw new InvalidOperationException("Nenhum vértice foi selecionado.");
+        byte[] bin=(byte[])source.Clone();List<BinVertexSegment> segments=FindBinVertexSegments(bin);
+        Dictionary<int,float> available=segments.SelectMany(segment=>segment.VertexOffsets.Select(offset=>(offset,segment.Factor))).GroupBy(x=>x.offset).ToDictionary(x=>x.Key,x=>x.First().Factor);
+        var vertices=sourceVertexOffsets.Distinct().Where(available.ContainsKey).Select(offset=>(Offset:offset,Factor:available[offset])).ToList();
+        if(vertices.Count==0)throw new InvalidDataException("Os componentes selecionados não possuem referências estruturais válidas neste BIN.");
+        Vector3 Read((int Offset,float Factor) v)=>new(BitConverter.ToInt16(bin,v.Offset)*v.Factor/100f,BitConverter.ToInt16(bin,v.Offset+2)*v.Factor/100f,BitConverter.ToInt16(bin,v.Offset+4)*v.Factor/100f);
+        Vector3 pivot=vertices.Select(Read).Aggregate(Vector3.Zero,(sum,value)=>sum+value)/vertices.Count;
+        Quaternion rotation=Quaternion.CreateFromYawPitchRoll(rotationDegrees.Y*MathF.PI/180f,rotationDegrees.X*MathF.PI/180f,rotationDegrees.Z*MathF.PI/180f);
+        var transformed=new Dictionary<int,Vector3>();foreach(var vertex in vertices)transformed[vertex.Offset]=Vector3.Transform((Read(vertex)-pivot)*scale,rotation)+pivot+translation;
+        WriteVerticesWithAdaptiveFactors(bin,segments,transformed);return bin;
+    }
+
     public static int DeleteBinFaces(string datPath, int entryIndex, IReadOnlyCollection<int> stripFlagOffsets)
     {
         byte[] dat = File.ReadAllBytes(datPath);

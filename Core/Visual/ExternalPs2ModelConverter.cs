@@ -7,7 +7,7 @@ using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
-public readonly record struct ExternalModelStats(int Vertices, int Faces)
+public readonly record struct ExternalModelStats(int Vertices, int Faces, int Uvs=0, int Materials=0, bool HasSkeleton=false)
 {
     public const int SafeVertexLimit = 6000;
     public const int SafeFaceLimit = 8000;
@@ -29,13 +29,40 @@ public static class ExternalPs2ModelConverter
         };
     }
 
+    public static IReadOnlyList<ScenarioTriangle> ReadPreview(string path)
+    {
+        string extension=Path.GetExtension(path).ToLowerInvariant();
+        return extension==".obj"?ReadObjPreview(path):extension==".smd"?ReadSmdPreview(path):Array.Empty<ScenarioTriangle>();
+    }
+
+    private static IReadOnlyList<ScenarioTriangle> ReadObjPreview(string path)
+    {
+        var vertices=new List<Vector3>();var result=new List<ScenarioTriangle>();
+        foreach(string raw in File.ReadLines(path)){string[] f=raw.Trim().Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries);if(f.Length==0)continue;if(f[0]=="v"&&f.Length>=4&&float.TryParse(f[1],NumberStyles.Float,CultureInfo.InvariantCulture,out float x)&&float.TryParse(f[2],NumberStyles.Float,CultureInfo.InvariantCulture,out float y)&&float.TryParse(f[3],NumberStyles.Float,CultureInfo.InvariantCulture,out float z))vertices.Add(new(x,y,z));else if(f[0]=="f"&&f.Length>=4){var ids=new List<int>();for(int i=1;i<f.Length;i++){string token=f[i].Split('/')[0];if(int.TryParse(token,out int id))ids.Add(id<0?vertices.Count+id:id-1);}for(int i=1;i+1<ids.Count;i++)if(ids[0]>=0&&ids[0]<vertices.Count&&ids[i]>=0&&ids[i]<vertices.Count&&ids[i+1]>=0&&ids[i+1]<vertices.Count)result.Add(new ScenarioTriangle(vertices[ids[0]],vertices[ids[i]],vertices[ids[i+1]],Vector2.Zero,Vector2.Zero,Vector2.Zero,0));}}
+        return result;
+    }
+    private static IReadOnlyList<ScenarioTriangle> ReadSmdPreview(string path)
+    {
+        var points=new List<Vector3>();bool triangles=false;foreach(string raw in File.ReadLines(path)){string line=raw.Trim();if(!triangles){if(line.Equals("triangles",StringComparison.OrdinalIgnoreCase))triangles=true;continue;}if(line.Equals("end",StringComparison.OrdinalIgnoreCase))break;string[] f=line.Split((char[]?)null,StringSplitOptions.RemoveEmptyEntries);if(f.Length>=4&&int.TryParse(f[0],out _)&&float.TryParse(f[1],NumberStyles.Float,CultureInfo.InvariantCulture,out float x)&&float.TryParse(f[2],NumberStyles.Float,CultureInfo.InvariantCulture,out float y)&&float.TryParse(f[3],NumberStyles.Float,CultureInfo.InvariantCulture,out float z))points.Add(new(x,y,z));}var result=new List<ScenarioTriangle>();for(int i=0;i+2<points.Count;i+=3)result.Add(new ScenarioTriangle(points[i],points[i+1],points[i+2],Vector2.Zero,Vector2.Zero,Vector2.Zero,0));return result;
+    }
+
+    public static Vector3 TransformPreviewPoint(Vector3 point,IReadOnlyList<ScenarioTriangle> source,IReadOnlyList<ScenarioTriangle> receiver,ExternalModelImportOptions options)
+    {
+        Vector3[] sp=source.SelectMany(t=>new[]{t.A,t.B,t.C}).ToArray(),tp=receiver.SelectMany(t=>new[]{t.A,t.B,t.C}).ToArray();if(sp.Length==0)return point;
+        Vector3 smin=sp.Aggregate(new Vector3(float.PositiveInfinity),Vector3.Min),smax=sp.Aggregate(new Vector3(float.NegativeInfinity),Vector3.Max),sc=(smin+smax)*.5f;float fit=1;Vector3 center=sc;
+        if(options.AutoFit&&tp.Length>0){Vector3 tmin=tp.Aggregate(new Vector3(float.PositiveInfinity),Vector3.Min),tmax=tp.Aggregate(new Vector3(float.NegativeInfinity),Vector3.Max);float se=Math.Max((smax-smin).X,Math.Max((smax-smin).Y,(smax-smin).Z)),te=Math.Max((tmax-tmin).X,Math.Max((tmax-tmin).Y,(tmax-tmin).Z));if(se>.000001f)fit=te/se;center=(tmin+tmax)*.5f;}
+        Quaternion q=Quaternion.CreateFromYawPitchRoll(options.RotationDegrees.Y*MathF.PI/180f,options.RotationDegrees.X*MathF.PI/180f,options.RotationDegrees.Z*MathF.PI/180f);return Vector3.Transform((point-sc)*(fit*options.Scale),q)+center+options.Translation;
+    }
+
     private static ExternalModelStats AnalyzeObj(string path)
     {
-        int vertices = 0, faces = 0;
+        int vertices = 0, faces = 0,uvs=0;var materials=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (string raw in File.ReadLines(path))
         {
             string line = raw.TrimStart();
             if (line.StartsWith("v ", StringComparison.Ordinal)) vertices++;
+            else if(line.StartsWith("vt ",StringComparison.Ordinal))uvs++;
+            else if(line.StartsWith("usemtl ",StringComparison.Ordinal))materials.Add(line[7..].Trim());
             else if (line.StartsWith("f ", StringComparison.Ordinal))
             {
                 int corners = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length - 1;
@@ -43,7 +70,7 @@ public static class ExternalPs2ModelConverter
             }
         }
         if (vertices == 0 || faces == 0) throw new InvalidDataException("O OBJ não contém vértices e faces utilizáveis.");
-        return new ExternalModelStats(vertices, faces);
+        return new ExternalModelStats(vertices, faces,uvs,materials.Count,false);
     }
 
     private static ExternalModelStats AnalyzeSmd(string path)
@@ -58,10 +85,10 @@ public static class ExternalPs2ModelConverter
         }
         int faces = vertexRecords / 3;
         if (faces == 0) throw new InvalidDataException("O SMD não contém triângulos utilizáveis.");
-        return new ExternalModelStats(vertexRecords, faces);
+        return new ExternalModelStats(vertexRecords, faces,vertexRecords,0,true);
     }
 
-    public static async Task<string> ConvertAsync(string converterPath, string modelPath, byte[] receiverTemplateBin, bool autoWeightObj = false, CancellationToken cancellationToken = default)
+    public static async Task<string> ConvertAsync(string converterPath, string modelPath, byte[] receiverTemplateBin, bool autoWeightObj = false, CancellationToken cancellationToken = default,ExternalModelImportOptions? options=null)
     {
         if (!File.Exists(converterPath)) throw new FileNotFoundException("RE4 PS2 BIN Tool não encontrada.", converterPath);
         string temporary = Path.Combine(Path.GetTempPath(), "re4_external_model_" + Guid.NewGuid().ToString("N"));
@@ -72,7 +99,7 @@ public static class ExternalPs2ModelConverter
             File.Copy(modelPath, stagedModel, true);
             if (Path.GetExtension(stagedModel).Equals(".obj", StringComparison.OrdinalIgnoreCase))
             {
-                FitObjToReceiver(stagedModel, receiverTemplateBin);
+                PrepareObj(stagedModel,receiverTemplateBin,options??new ExternalModelImportOptions());
                 if (autoWeightObj)
                 {
                     string weighted = Path.Combine(temporary, Path.GetFileNameWithoutExtension(stagedModel) + "_weighted.smd");
@@ -180,7 +207,7 @@ public static class ExternalPs2ModelConverter
         sw.WriteLine("end");
     }
 
-    private static void FitObjToReceiver(string objPath, byte[] receiverTemplateBin)
+    private static void PrepareObj(string objPath,byte[] receiverTemplateBin,ExternalModelImportOptions options)
     {
         string[] lines = File.ReadAllLines(objPath);
         var positions = new List<Vector3>();
@@ -198,17 +225,20 @@ public static class ExternalPs2ModelConverter
         float sourceExtent = Math.Max(sourceSize.X, Math.Max(sourceSize.Y, sourceSize.Z));
         float targetExtent = Math.Max(targetSize.X, Math.Max(targetSize.Y, targetSize.Z));
         if (sourceExtent < 0.000001f || targetExtent < 0.000001f) return;
-        float scale = targetExtent / sourceExtent;
+        float scale = (options.AutoFit?targetExtent/sourceExtent:1f)*options.Scale;
         Vector3 sourceCenter = (sourceMin + sourceMax) * 0.5f, targetCenter = (targetMin + targetMax) * 0.5f;
+        Quaternion rotation=Quaternion.CreateFromYawPitchRoll(options.RotationDegrees.Y*MathF.PI/180f,options.RotationDegrees.X*MathF.PI/180f,options.RotationDegrees.Z*MathF.PI/180f);
         for (int i = 0; i < lines.Length; i++)
         {
             string prefixTrimmed = lines[i].TrimStart();
             if (!prefixTrimmed.StartsWith("v ", StringComparison.Ordinal)) continue;
             string[] fields = prefixTrimmed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (fields.Length < 4 || !float.TryParse(fields[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x) || !float.TryParse(fields[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y) || !float.TryParse(fields[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float z)) continue;
-            Vector3 p = (new Vector3(x, y, z) - sourceCenter) * scale + targetCenter;
+            Vector3 p = Vector3.Transform((new Vector3(x, y, z) - sourceCenter) * scale,rotation)+(options.AutoFit?targetCenter:sourceCenter)+options.Translation;
             lines[i] = $"v {p.X.ToString("R", CultureInfo.InvariantCulture)} {p.Y.ToString("R", CultureInfo.InvariantCulture)} {p.Z.ToString("R", CultureInfo.InvariantCulture)}" + (fields.Length > 4 ? " " + string.Join(' ', fields.Skip(4)) : "");
         }
         File.WriteAllLines(objPath, lines);
     }
 }
+
+public sealed record ExternalModelImportOptions(bool AutoFit=true,float Scale=1f,Vector3 Translation=default,Vector3 RotationDegrees=default);

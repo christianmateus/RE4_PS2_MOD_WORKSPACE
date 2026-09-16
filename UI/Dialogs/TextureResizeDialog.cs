@@ -7,7 +7,7 @@ public enum TextureResizeResampling
     Bicubic
 }
 
-public sealed class TextureResizeDialog : Form
+public sealed class TextureResizeDialog : AppForm
 {
     private readonly NumericUpDown width = new() { Minimum = 1, Maximum = 4096, Width = 110 };
     private readonly NumericUpDown height = new() { Minimum = 1, Maximum = 4096, Width = 110 };

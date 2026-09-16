@@ -40,7 +40,12 @@ public partial class Form1
     {
         string? path = GetSelectedContentFile();
         if (path == null || !File.Exists(path)) return;
-        if (Path.GetExtension(path).Equals(".SMD", StringComparison.OrdinalIgnoreCase))
+        if (Path.GetExtension(path).Equals(".ETM", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(path).Equals(".ITM", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(path).Equals(".BIN", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenAssetModelEditor(path);
+            return;
+        }
+        if (Path.GetExtension(path).Equals(".SMD", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(path).Equals(".EFF", StringComparison.OrdinalIgnoreCase))
         {
             btnNavTextures_Click(null, EventArgs.Empty);
             for (int i = 0; i < cmbTextureSmd.Items.Count; i++)
@@ -50,6 +55,18 @@ public partial class Form1
             return;
         }
         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+    }
+
+    private void OpenAssetModelEditor(string? initialPath = null)
+    {
+        var editor = new AssetModelEditorForm(project.RootPath,project.IsoPath,project.ActiveAfsPath,RegisterWeaponPackages,settings.Ps2BinToolPath,path=>{settings.Ps2BinToolPath=path;SaveSettings();});
+        if (!string.IsNullOrWhiteSpace(initialPath) && File.Exists(initialPath)) editor.LoadPackage(initialPath);
+        editor.Show(this);
+    }
+
+    private void RegisterWeaponPackages(IReadOnlyList<WeaponWorkspacePackage> packages)
+    {
+        if(packages.Count==0)return;foreach(var package in packages){DatProjectState state=GetDatState(package.DatName,true)!;state.OriginalDatPath=package.OriginalDatPath;state.ContentPath=package.ContentPath;state.BuildDatPath=null;state.AfsPath=project.ActiveAfsPath;state.LastBuildUtc=null;var snapshot=ChangeDetectionService.Capture(package.ContentPath);ChangeDetectionService.Save(GetChangeStatePath(package.DatName),snapshot);}WeaponWorkspacePackage active=packages[^1];project.ActiveDatName=active.DatName;project.ActiveDatPath=active.OriginalDatPath;project.ActiveContentPath=active.ContentPath;project.ActiveBuildDatPath=null;project.LastBuildUtc=null;SaveProject();ApplyDataToUi();RefreshExtractedContent();UpdateBuildUi();_=RefreshTrackedDatsAsync();
     }
 
     private void gridAssets_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
@@ -76,7 +93,7 @@ public partial class Form1
             CheckFileExists = true,
             Multiselect = false
         };
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
 
         string source = Path.GetFullPath(dialog.FileName);
         string destination = Path.GetFullPath(target);
@@ -124,33 +141,54 @@ public partial class Form1
         return Path.Combine(workspace, ".workspace", "backups", "assets", dat, relative + ".bak");
     }
 
-    private string? GetAssetBackupPathSafe(string? assetPath)
+    private string? GetActiveOriginalDatPath()
     {
-        if (string.IsNullOrWhiteSpace(assetPath)) return null;
-        try { return GetAssetBackupPath(assetPath); }
-        catch { return null; }
+        DatProjectState? state = string.IsNullOrWhiteSpace(project.ActiveDatName)
+            ? null
+            : GetDatState(project.ActiveDatName, false);
+        string? path = state?.OriginalDatPath;
+        if (string.IsNullOrWhiteSpace(path)) path = project.ActiveDatPath;
+        return string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
     }
 
     private void restoreAsset_Click(object? sender, EventArgs e)
     {
         string? target = GetSelectedContentFile();
-        string? backup = GetAssetBackupPathSafe(target);
-        if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(backup) || !File.Exists(backup))
+        string? content = GetActiveContentPath();
+        string? originalDat = GetActiveOriginalDatPath();
+        if (string.IsNullOrWhiteSpace(target)) return;
+        if (string.IsNullOrWhiteSpace(content) || string.IsNullOrWhiteSpace(originalDat) || !File.Exists(originalDat))
         {
-            MessageBox.Show("Não existe um backup original para este arquivo.", "Restaurar original", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(
+                LanguageService.T("assets.restore.original_dat_missing"),
+                LanguageService.T("assets.restore.title"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
             return;
         }
-        if (MessageBox.Show($"Restaurar a primeira versão preservada de {Path.GetFileName(target)}?\n\nAs alterações atuais desse arquivo serão descartadas.", "RESTAURAR ARQUIVO ORIGINAL", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (MessageBox.Show(
+                LanguageService.T("assets.restore.confirm", Path.GetFileName(target), Path.GetFileName(originalDat)),
+                LanguageService.T("assets.restore.title"),
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning) != DialogResult.Yes) return;
+
+        string temporaryPath = target + ".restore-" + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.Copy(backup, target, overwrite: true);
-            ExtractLog($"Arquivo original restaurado: {Path.GetFileName(target)}");
+            DatEntry originalEntry = NativeDatService.ReadOriginalEntry(originalDat, content, target);
+            File.WriteAllBytes(temporaryPath, originalEntry.Data);
+            File.Move(temporaryPath, target, overwrite: true);
+            ExtractLog($"Arquivo restaurado do DAT original: {Path.GetFileName(target)} • entrada #{originalEntry.Index}");
             RefreshExtractedContentPreserveSelection(target);
         }
         catch (Exception ex)
         {
             ExtractLog("ERRO AO RESTAURAR ARQUIVO: " + ex.Message);
             MessageBox.Show(ex.Message, "Erro ao restaurar arquivo", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
         }
     }
 
@@ -234,7 +272,7 @@ public partial class Form1
             gridAssets.DataSource = assetBinding;
             if (gridAssets.Columns["Size"] != null) gridAssets.Columns["Size"]!.DefaultCellStyle.Format = "#";
             ApplyAssetFilter();
-            RefreshTextureSmdList();
+            if (pnlTextures?.Visible == true) RefreshTextureSmdList();
         }
         catch (Exception ex)
         {

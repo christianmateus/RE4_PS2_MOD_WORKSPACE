@@ -1,7 +1,29 @@
-﻿namespace RE4_PS2_MOD_WORKSPACE;
+namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
+
+    private void OpenExecutableEditor()
+    {
+        string? executable = null;
+        if (!string.IsNullOrWhiteSpace(project.RootPath))
+        {
+            string build = Path.Combine(project.RootPath, "Build");
+            var candidates = new[] { "SLUS_211.34", "SLES_537.02", "SLPS_000.00_original", "SLPS_000.00" }
+                .Select(name => Path.Combine(build, name)).Where(File.Exists).ToArray();
+            executable = candidates.Length == 1 ? candidates[0] : null;
+        }
+        string? buildIso = null;
+        if (!string.IsNullOrWhiteSpace(project.RootPath))
+        {
+            string conventional = Path.Combine(project.RootPath, "Build", "RE4_PS2_MOD.iso");
+            buildIso = !string.IsNullOrWhiteSpace(project.ActiveBuildIsoPath) && File.Exists(project.ActiveBuildIsoPath)
+                ? project.ActiveBuildIsoPath
+                : File.Exists(conventional) ? conventional : null;
+        }
+        using var editor = new ExecutableEditorForm(executable, buildIso, settings.CreateIsoBackup);
+        editor.ShowDialog(this);
+    }
 
     private void btnBrowseTpl_Click(object? sender, EventArgs e) => PickTool(txtTplManager, v => settings.TplManagerPath = v);
 
