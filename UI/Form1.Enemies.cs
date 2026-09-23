@@ -71,7 +71,6 @@ public partial class Form1
         PopulateVisualEnemyLocationFilter(project.ActiveDatName);
         RefreshVisualEnemyEntryList(selectedIndices);
         if (visualViewport != null && !visualViewport.IsDisposed) visualViewport.RefreshEnemyGeometry(GetSelectedEnemyEntries().FirstOrDefault());
-        RefreshVisualEnemyModelParts(GetVisualSelectedEnemies().FirstOrDefault());
         UpdateVisualStatus();
     }
 
@@ -373,8 +372,6 @@ public partial class Form1
     private bool EnemyEntryPassesManagerFilter(EslEnemyEntry e)
     {
         if (chkEnemyActiveOnly.Checked && e.Active == 0) return false;
-        if (cmbEnemyLocationFilter.SelectedItem is EnemyLocationFilter f && f.StageId.HasValue && f.RoomId.HasValue)
-            return e.StageID == f.StageId.Value && e.RoomID == f.RoomId.Value;
         return true;
     }
 
@@ -415,7 +412,7 @@ public partial class Form1
         IEnumerable<EslEnemyEntry> source = selectedEnemyScene.Entries;
         if (stage.HasValue && room.HasValue) source = source.Where(x => x.StageID == stage.Value && x.RoomID == room.Value);
         byte[] needed = source.Select(x => x.EnemyType).Distinct().Where(x => !visualEnemyModelCache.ContainsKey(x) && !visualEnemyModelFailed.Contains(x)).OrderBy(x => x).ToArray();
-        if (needed.Length == 0) { visualViewport.SetEnemyModels(visualEnemyModelCache); visualViewport.SetEnemyAttachmentAnimation(null, 0f); RefreshVisualEnemyModelParts(GetVisualSelectedEnemies().FirstOrDefault()); RefreshVisualEnemyAnimationChoices(); return; }
+        if (needed.Length == 0) { visualViewport.SetEnemyModels(visualEnemyModelCache); visualViewport.SetEnemyAttachmentAnimation(null, 0f); RefreshVisualEnemyAnimationChoices(); return; }
 
         loadingVisualEnemyModels = true;
         try
@@ -447,7 +444,6 @@ public partial class Form1
             }
             visualViewport.SetEnemyModels(visualEnemyModelCache);
             visualViewport.SetEnemyAttachmentAnimation(null, 0f);
-            RefreshVisualEnemyModelParts(GetVisualSelectedEnemies().FirstOrDefault());
             RefreshVisualEnemyAnimationChoices();
             UpdateVisualStatus();
         }
@@ -459,7 +455,6 @@ public partial class Form1
         visualEnemyModelCache.Clear();
         visualEnemyModelFailed.Clear();
         visualViewport?.SetEnemyModels(visualEnemyModelCache);
-        RefreshVisualEnemyModelParts(null);
         RefreshVisualEnemyAnimationChoices();
     }
 

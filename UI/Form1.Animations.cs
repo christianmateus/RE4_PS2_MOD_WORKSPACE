@@ -16,11 +16,12 @@ public partial class Form1
     private int animationLabWeaponPartBinIndex=-1;
     private Dictionary<string,string> animationNames = new(StringComparer.OrdinalIgnoreCase);
     private string? animationNamesFile;
+    private bool refreshingAnimationChoices;
+    private bool applyingAnimationLabSettings;
 
     private void btnNavAnimations_Click(object? sender, EventArgs e)
     {
-        SaveVisualCameraIfLeaving(); ShowPage(pnlAnimations, btnNavAnimations, "Animações"); RememberMainPage("Animations"); RefreshAnimationFiles();
-        if(animationLabModel==null&&FindAnimationLaboratoryDat() is string labDat)LoadAnimationLaboratoryModel(labDat,false);
+        SaveVisualCameraIfLeaving(); ShowPage(pnlAnimations, btnNavAnimations, "Animações"); RememberMainPage("Animations"); RefreshAnimationDatFiles(true);
     }
 
     private void btnAnimationBrowse_Click(object? sender, EventArgs e)
@@ -28,7 +29,7 @@ public partial class Form1
         using var dlg = new OpenFileDialog { Filter = "Resident Evil 4 FCV (*.fcv)|*.fcv|Todos os arquivos (*.*)|*.*", Title = "Abrir animação FCV" };
         if (dlg.ShowLocalizedDialog(this) == DialogResult.OK) LoadFcv(dlg.FileName);
     }
-    private void btnAnimationRefresh_Click(object? sender, EventArgs e) => RefreshAnimationFiles();
+    private void btnAnimationRefresh_Click(object? sender, EventArgs e){RefreshAnimationDatFiles(false);RefreshAnimationFiles();}
     private void btnAnimationExportSmd_Click(object? sender,EventArgs e)
     {
         if(currentFcv==null||animationLabModel?.Skeleton==null){MessageBox.Show(this,"Abra um FCV e o DAT correspondente antes de exportar.","Exportar para Blender",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
@@ -39,15 +40,25 @@ public partial class Form1
     {
         if(currentFcv==null||animationLabModel?.Skeleton==null){MessageBox.Show(this,"Abra o FCV original e o DAT correspondente; eles serao usados como molde.","Importar do Blender",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
         using var open=new OpenFileDialog{Title="Importar animacao editada do Blender",Filter="Source Model Animation (*.smd)|*.smd",InitialDirectory=Path.GetDirectoryName(currentFcv.FilePath)};if(open.ShowLocalizedDialog(this)!=DialogResult.OK)return;
-        try{FcvSmdImportResult imported=FcvSmdRoundTrip.Import(open.FileName,animationLabModel.Skeleton,currentFcv);using var save=new SaveFileDialog{Title="Salvar novo FCV",Filter="Resident Evil 4 FCV (*.fcv)|*.fcv",FileName=Path.GetFileNameWithoutExtension(currentFcv.FilePath)+"_edited.fcv",InitialDirectory=Path.GetDirectoryName(currentFcv.FilePath)};if(save.ShowLocalizedDialog(this)!=DialogResult.OK)return;FcvWriter.Write(save.FileName,imported.Animation);LoadFcv(save.FileName);RefreshAnimationFiles();lblAnimationStatus.Text=$"FCV importado: {imported.RotationTracksUpdated} tracks, {imported.FramesRead} frames.";ExtractLog($"Blender: {open.FileName} convertido para {save.FileName}");MessageBox.Show(this,$"Novo FCV salvo.\n\nFrames: {imported.FramesRead}\nRotacoes: {imported.RotationTracksUpdated}\nRaiz: {(imported.RootTranslationUpdated?"atualizada":"preservada")}","Importar do Blender",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch(Exception ex){MessageBox.Show(this,ex.Message,"Importar do Blender",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        try{FcvSmdImportResult imported=FcvSmdRoundTrip.Import(open.FileName,animationLabModel.Skeleton,currentFcv);using var save=new SaveFileDialog{Title="Salvar novo FCV",Filter="Resident Evil 4 FCV (*.fcv)|*.fcv",FileName=Path.GetFileNameWithoutExtension(currentFcv.FilePath)+"_edited.fcv",InitialDirectory=Path.GetDirectoryName(currentFcv.FilePath)};if(save.ShowLocalizedDialog(this)!=DialogResult.OK)return;FcvWriter.Write(save.FileName,imported.Animation);settings.LastAnimationFcvFile=Path.GetFileName(save.FileName);LoadFcv(save.FileName);RefreshAnimationFiles();lblAnimationStatus.Text=$"FCV importado: {imported.RotationTracksUpdated} rotações, {imported.IkTargetsUpdated} alvos IK, {imported.FramesRead} frames.";ExtractLog($"Blender: {open.FileName} convertido para {save.FileName}");MessageBox.Show(this,$"Novo FCV salvo.\n\nFrames: {imported.FramesRead}\nRotações: {imported.RotationTracksUpdated}\nAlvos IK: {imported.IkTargetsUpdated}\nRaiz: {(imported.RootTranslationUpdated?"atualizada":"preservada")}","Importar do Blender",MessageBoxButtons.OK,MessageBoxIcon.Information);}catch(Exception ex){MessageBox.Show(this,ex.Message,"Importar do Blender",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }
-    private void cmbAnimationFiles_SelectedIndexChanged(object? sender, EventArgs e) { if (cmbAnimationFiles.SelectedItem is AnimationFileItem item) LoadFcv(item); }
+    private void cmbAnimationFiles_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if(refreshingAnimationChoices)return;
+        if(cmbAnimationFiles.SelectedItem is AnimationFileItem item){settings.LastAnimationFcvFile=Path.GetFileName(item.Path);if(!restoringSession)SaveSettings();LoadFcv(item);}
+    }
+    private void cmbAnimationDatFiles_SelectedIndexChanged(object? sender,EventArgs e)
+    {
+        if(refreshingAnimationChoices)return;
+        if(cmbAnimationDatFiles.SelectedItem is AnimationDatItem item&&!string.Equals(animationLabDatPath,item.Path,StringComparison.OrdinalIgnoreCase))LoadAnimationLaboratoryModel(item.Path,true);
+    }
     private void gridAnimationTracks_SelectionChanged(object? sender, EventArgs e) => ShowSelectedFcvTrack();
-    private void tabAnimationAxis_SelectedIndexChanged(object? sender, EventArgs e) => ShowSelectedFcvTrack();
+    private void tabAnimationAxis_SelectedIndexChanged(object? sender, EventArgs e){ShowSelectedFcvTrack();settings.AnimationInspectorAxisIndex=tabAnimationAxis.SelectedIndex;if(!applyingAnimationLabSettings&&!restoringSession)SaveSettings();}
 
     private void RefreshAnimationFiles()
     {
-        string? selected = (cmbAnimationFiles.SelectedItem as AnimationFileItem)?.Path; cmbAnimationFiles.BeginUpdate(); cmbAnimationFiles.Items.Clear();
+        string? selected = (cmbAnimationFiles.SelectedItem as AnimationFileItem)?.Path;
+        refreshingAnimationChoices=true;cmbAnimationFiles.BeginUpdate(); cmbAnimationFiles.Items.Clear();
         if(!string.IsNullOrWhiteSpace(animationLabDatPath))
         {
             string stem=Path.GetFileNameWithoutExtension(animationLabDatPath);
@@ -72,10 +83,17 @@ public partial class Form1
         cmbAnimationFiles.EndUpdate();
         if (cmbAnimationFiles.Items.Count > 0)
         {
-            int index = 0; if (selected != null) for (int i = 0; i < cmbAnimationFiles.Items.Count; i++) if ((cmbAnimationFiles.Items[i] as AnimationFileItem)?.Path == selected) { index = i; break; }
-            cmbAnimationFiles.SelectedIndex = index; lblAnimationStatus.Text = $"{cmbAnimationFiles.Items.Count} FCV(s) encontrado(s) no workspace.";
+            int index = 0;
+            for(int i=0;i<cmbAnimationFiles.Items.Count;i++)
+            {
+                AnimationFileItem? item=cmbAnimationFiles.Items[i] as AnimationFileItem;
+                if((selected!=null&&string.Equals(item?.Path,selected,StringComparison.OrdinalIgnoreCase))||(selected==null&&!string.IsNullOrWhiteSpace(settings.LastAnimationFcvFile)&&string.Equals(Path.GetFileName(item?.Path),settings.LastAnimationFcvFile,StringComparison.OrdinalIgnoreCase))){index=i;break;}
+            }
+            cmbAnimationFiles.SelectedIndex=index; lblAnimationStatus.Text = $"{cmbAnimationFiles.Items.Count} FCV(s) encontrado(s) no workspace.";
         }
         else lblAnimationStatus.Text = animationLabDatPath==null ? "Abra um DAT no Laboratório 3D para listar suas animações." : $"Nenhum FCV de {Path.GetFileName(animationLabDatPath)} foi encontrado.";
+        refreshingAnimationChoices=false;
+        if(cmbAnimationFiles.SelectedItem is AnimationFileItem chosen&&(currentFcv==null||!string.Equals(Path.GetFileName(currentFcv.FilePath),Path.GetFileName(chosen.Path),StringComparison.OrdinalIgnoreCase)))LoadFcv(chosen);
     }
 
     private static int AnimationFileNumber(string path){string stem=Path.GetFileNameWithoutExtension(path);int separator=stem.LastIndexOf('_');return separator>=0&&int.TryParse(stem[(separator+1)..],out int number)?number:int.MaxValue;}
@@ -126,29 +144,48 @@ public partial class Form1
     {
         using var dlg=new OpenFileDialog{Filter="Enemy DAT (*.dat)|*.dat|Todos os arquivos (*.*)|*.*",Title="Abrir modelo para o laboratório"};
         if(currentFcv!=null) dlg.InitialDirectory=Path.GetDirectoryName(currentFcv.FilePath);
-        if(dlg.ShowLocalizedDialog(this)==DialogResult.OK) LoadAnimationLaboratoryModel(dlg.FileName,true);
+        if(dlg.ShowLocalizedDialog(this)==DialogResult.OK){LoadAnimationLaboratoryModel(dlg.FileName,true);RefreshAnimationDatFiles(false);SelectAnimationDat(dlg.FileName);}
     }
 
-    private void btnAnimationLabAutoDat_Click(object? sender, EventArgs e)
+    private void RefreshAnimationDatFiles(bool loadSelection)
     {
-        string? path=FindAnimationLaboratoryDat();
-        if(path==null){MessageBox.Show(this,"Não encontrei em22.dat no workspace nem junto do FCV selecionado.","Laboratório 3D",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-        LoadAnimationLaboratoryModel(path,true);
-    }
-
-    private string? FindAnimationLaboratoryDat()
-    {
-        if(!string.IsNullOrWhiteSpace(settings.LastAnimationDatPath)&&File.Exists(settings.LastAnimationDatPath))return settings.LastAnimationDatPath;
-        var directories=new List<string>();
-        if(currentFcv!=null&&Path.GetDirectoryName(currentFcv.FilePath) is string fcvDir)directories.Add(fcvDir);
-        if(!string.IsNullOrWhiteSpace(project.RootPath))directories.Add(project.RootPath);
-        foreach(string directory in directories.Distinct(StringComparer.OrdinalIgnoreCase))
+        string? wanted=animationLabDatPath??settings.LastAnimationDatPath;
+        var paths=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if(!string.IsNullOrWhiteSpace(project.RootPath)&&Directory.Exists(project.RootPath))
         {
-            if(!Directory.Exists(directory))continue;
-            try{string? found=Directory.EnumerateFiles(directory,"em22.dat",SearchOption.AllDirectories).FirstOrDefault();if(found!=null)return found;found=Directory.EnumerateFiles(directory,"EM22.DAT",SearchOption.AllDirectories).FirstOrDefault();if(found!=null)return found;}catch{ }
+            try
+            {
+                foreach(string path in Directory.EnumerateFiles(project.RootPath,"*.dat",SearchOption.AllDirectories))
+                {
+                    string file=Path.GetFileName(path);
+                    if(!System.Text.RegularExpressions.Regex.IsMatch(file,@"^(?:em|pl|wep)[0-9a-f]{2}\.dat$",System.Text.RegularExpressions.RegexOptions.IgnoreCase))continue;
+                    if(path.Contains($"{Path.DirectorySeparatorChar}OriginalDAT{Path.DirectorySeparatorChar}",StringComparison.OrdinalIgnoreCase))continue;
+                    paths.Add(Path.GetFullPath(path));
+                }
+            }
+            catch(Exception ex){ExtractLog("Laboratório 3D: não foi possível listar todos os DATs extraídos: "+ex.Message);}
         }
-        return null;
+        if(!string.IsNullOrWhiteSpace(wanted)&&File.Exists(wanted))paths.Add(Path.GetFullPath(wanted));
+        refreshingAnimationChoices=true;cmbAnimationDatFiles.BeginUpdate();cmbAnimationDatFiles.Items.Clear();
+        foreach(string path in paths.OrderBy(p=>Path.GetFileName(p),StringComparer.OrdinalIgnoreCase).ThenByDescending(p=>p.Contains($"{Path.DirectorySeparatorChar}Content{Path.DirectorySeparatorChar}",StringComparison.OrdinalIgnoreCase)))
+        {
+            string label=Path.GetFileName(path);
+            if(!string.IsNullOrWhiteSpace(project.RootPath))
+            {
+                string relative=Path.GetRelativePath(project.RootPath,path);
+                if(!relative.StartsWith(".."))label+=$"  —  {Path.GetDirectoryName(relative)}";
+            }
+            cmbAnimationDatFiles.Items.Add(new AnimationDatItem(path,label));
+        }
+        cmbAnimationDatFiles.EndUpdate();
+        int selected=-1;
+        if(wanted!=null)for(int i=0;i<cmbAnimationDatFiles.Items.Count;i++)if(cmbAnimationDatFiles.Items[i] is AnimationDatItem item&&string.Equals(item.Path,wanted,StringComparison.OrdinalIgnoreCase)){selected=i;break;}
+        if(selected<0&&cmbAnimationDatFiles.Items.Count>0)selected=0;
+        cmbAnimationDatFiles.SelectedIndex=selected;refreshingAnimationChoices=false;
+        if(loadSelection&&selected>=0&&cmbAnimationDatFiles.SelectedItem is AnimationDatItem chosen&&!string.Equals(animationLabDatPath,chosen.Path,StringComparison.OrdinalIgnoreCase))LoadAnimationLaboratoryModel(chosen.Path,false);
     }
+
+    private void SelectAnimationDat(string path){for(int i=0;i<cmbAnimationDatFiles.Items.Count;i++)if(cmbAnimationDatFiles.Items[i] is AnimationDatItem item&&string.Equals(item.Path,path,StringComparison.OrdinalIgnoreCase)){refreshingAnimationChoices=true;cmbAnimationDatFiles.SelectedIndex=i;refreshingAnimationChoices=false;break;}}
 
     private void LoadAnimationLaboratoryModel(string path,bool showErrors)
     {
@@ -175,6 +212,7 @@ public partial class Form1
             animationLabViewport.SetEnemyBoneDiagnostic(chkAnimationLabSkeleton.Checked,null);UpdateAnimationLaboratoryPose();animationLabViewport.FocusEnemyModel(animationLabEnemy,animationLabModel);
             animationLabDatPath=path;RefreshAnimationFiles();
             settings.LastAnimationDatPath=path;SaveSettings();
+            SelectAnimationDat(path);
             lblAnimationLabModel.Text=$"Modelo: {Path.GetFileName(path)} • {animationLabModel.Parts.Count} parte(s) • {animationLabModel.Skeleton.Bones.Count} bones • FCV: {(currentFcv==null?"nenhum":Path.GetFileName(currentFcv.FilePath))}";
             ExtractLog($"Laboratório 3D: {Path.GetFileName(path)} | {animationLabModel.Skeleton.Bones.Count} bones | {animationLabModel.TexturePackages.Count} TPL(s).");
         }
@@ -213,7 +251,7 @@ public partial class Form1
     private void btnAnimationCatalogSave_Click(object? sender,EventArgs e){if(animationLabDatPath==null||currentFcv==null)return;LoadAnimationNames();string key=AnimationNameKey(Path.GetFileNameWithoutExtension(animationLabDatPath),Path.GetFileName(currentFcv.FilePath));string name=txtAnimationCatalogName.Text.Trim();if(name.Length==0)animationNames.Remove(key);else animationNames[key]=name;string? file=GetAnimationNamesFile();if(file!=null){Directory.CreateDirectory(Path.GetDirectoryName(file)!);File.WriteAllText(file,System.Text.Json.JsonSerializer.Serialize(animationNames,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));}RefreshAnimationFiles();lblAnimationStatus.Text=name.Length==0?"Nome removido do catálogo.":$"Nome salvo: {name}";}
     private void txtAnimationCatalogName_KeyDown(object? sender,KeyEventArgs e){if(e.KeyCode==Keys.Enter){btnAnimationCatalogSave_Click(sender,EventArgs.Empty);e.SuppressKeyPress=true;}}
     private void btnAnimationLabFit_Click(object? sender,EventArgs e){if(animationLabEnemy!=null&&animationLabModel!=null)animationLabViewport.FocusEnemyModel(animationLabEnemy,animationLabModel);}
-    private void trkAnimationLabBackground_Scroll(object? sender,EventArgs e){if(animationLabViewport!=null)animationLabViewport.BackgroundBrightness=trkAnimationLabBackground.Value;}
+    private void trkAnimationLabBackground_Scroll(object? sender,EventArgs e){if(animationLabViewport!=null)animationLabViewport.BackgroundBrightness=trkAnimationLabBackground.Value;settings.AnimationLabBackgroundBrightness=trkAnimationLabBackground.Value;if(!applyingAnimationLabSettings&&!restoringSession)SaveSettings();}
     private void ConfigureAnimationLaboratoryParts(string path,byte enemyType,EnemyModelScene model)
     {
         if(!Path.GetFileNameWithoutExtension(path).Equals("pl00",StringComparison.OrdinalIgnoreCase)&&!IsWeaponDat(path)){animationLabViewport.UseAutomaticEnemyModelParts(enemyType);return;}
@@ -230,8 +268,28 @@ public partial class Form1
         animationLabViewport.ShowAllEnemyModelParts(enemyType);
         foreach(EnemyModelPart part in model.Parts)animationLabViewport.SetEnemyModelPartVisible(enemyType,part.BinIndex,visible.Contains(part.BinIndex));
     }
-    private void chkAnimationLabSkeleton_CheckedChanged(object? sender,EventArgs e)=>animationLabViewport.SetEnemyBoneDiagnostic(chkAnimationLabSkeleton.Checked,null);
-    private void chkAnimationLabRestPose_CheckedChanged(object? sender,EventArgs e){StopAnimationPlayback();UpdateAnimationLaboratoryPose();}
+    private void chkAnimationLabSkeleton_CheckedChanged(object? sender,EventArgs e){animationLabViewport.SetEnemyBoneDiagnostic(chkAnimationLabSkeleton.Checked,null);settings.AnimationLabShowSkeleton=chkAnimationLabSkeleton.Checked;if(!applyingAnimationLabSettings&&!restoringSession)SaveSettings();}
+    private void chkAnimationLabRestPose_CheckedChanged(object? sender,EventArgs e){StopAnimationPlayback();UpdateAnimationLaboratoryPose();settings.AnimationLabRestPose=chkAnimationLabRestPose.Checked;if(!applyingAnimationLabSettings&&!restoringSession)SaveSettings();}
+    private void chkAnimationLabIgnoreRootMotion_CheckedChanged(object? sender,EventArgs e)
+    {
+        if(animationLabViewport==null)return;
+        animationLabViewport.SetEnemyAnimationIgnoreRootMotion(chkAnimationLabIgnoreRootMotion.Checked);
+        UpdateAnimationLaboratoryPose();
+        settings.AnimationLabIgnoreRootMotion=chkAnimationLabIgnoreRootMotion.Checked;if(!applyingAnimationLabSettings&&!restoringSession)SaveSettings();
+    }
+
+    private void ApplyAnimationLabSettings()
+    {
+        applyingAnimationLabSettings=true;
+        chkAnimationLabSkeleton.Checked=settings.AnimationLabShowSkeleton;
+        chkAnimationLabRestPose.Checked=settings.AnimationLabRestPose;
+        chkAnimationLabIgnoreRootMotion.Checked=settings.AnimationLabIgnoreRootMotion;
+        trkAnimationLabBackground.Value=Math.Clamp(settings.AnimationLabBackgroundBrightness,trkAnimationLabBackground.Minimum,trkAnimationLabBackground.Maximum);
+        animationLabViewport.BackgroundBrightness=trkAnimationLabBackground.Value;
+        tabAnimationAxis.SelectedIndex=Math.Clamp(settings.AnimationInspectorAxisIndex,0,tabAnimationAxis.TabCount-1);
+        tabAnimationView.SelectedIndex=Math.Clamp(settings.AnimationViewTabIndex,0,tabAnimationView.TabCount-1);
+        applyingAnimationLabSettings=false;
+    }
 
     private void btnAnimationPlay_Click(object? sender, EventArgs e)
     {
@@ -249,8 +307,9 @@ public partial class Form1
     private void StopAnimationPlayback(){animationPlaybackTimer?.Stop();if(btnAnimationLabPlay!=null)btnAnimationLabPlay.Text="PLAY";}
     private void trkAnimationLabFrame_Scroll(object? sender,EventArgs e){StopAnimationPlayback();SetAnimationPlaybackFrame(trkAnimationLabFrame.Value);}
     private void SetAnimationPlaybackFrame(int frame){animationPlaybackFrame=frame;trkAnimationLabFrame.Value=Math.Min(trkAnimationLabFrame.Maximum,frame);UpdateAnimationLaboratoryPose();UpdateAnimationFrameUi();}
-    private void UpdateAnimationLaboratoryPose(){if(animationLabViewport==null)return;animationLabViewport.SetEnemyAttachmentAnimation(chkAnimationLabRestPose?.Checked==true?null:currentFcv,animationPlaybackFrame,true);}
+    private void UpdateAnimationLaboratoryPose(){if(animationLabViewport==null)return;animationLabViewport.SetEnemyAnimationIgnoreRootMotion(chkAnimationLabIgnoreRootMotion?.Checked==true);animationLabViewport.SetEnemyAttachmentAnimation(chkAnimationLabRestPose?.Checked==true?null:currentFcv,animationPlaybackFrame,true);}
     private void UpdateAnimationFrameUi(){if(lblAnimationLabFrame!=null)lblAnimationLabFrame.Text=currentFcv==null?"Frame 0 / —":$"Frame {animationPlaybackFrame} / {Math.Max(0,currentFcv.FrameCount-1)}";}
     private static string FormatFcvNumber(double value) => Math.Abs(value % 1) < 0.0000001 ? value.ToString("0") : value.ToString("0.######");
     private sealed record AnimationFileItem(string Path,string Label,byte[]? Data) { public override string ToString() => Label; }
+    private sealed record AnimationDatItem(string Path,string Label) { public override string ToString()=>Label; }
 }

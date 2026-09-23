@@ -64,14 +64,14 @@ public static class FcvWriter
             {
                 case 0x0: writer.Write((float)key.Value);writer.Write((float)key.TangentIn);writer.Write((float)key.TangentOut);break;
                 case 0x1: writer.Write((float)key.Value);writer.Write(checked((short)key.TangentIn));writer.Write(checked((short)key.TangentOut));break;
-                case 0x2: writer.Write(checked((short)key.Value));writer.Write(checked((short)key.TangentIn));writer.Write(checked((short)key.TangentOut));break;
+                case 0x2: writer.Write((float)key.Value);writer.Write(checked((sbyte)key.TangentIn));writer.Write(checked((sbyte)key.TangentOut));break;
                 case 0x4: writer.Write(checked((short)key.Value));writer.Write((float)key.TangentIn);writer.Write((float)key.TangentOut);break;
-                case 0x5: writer.Write(checked((short)key.Value));writer.Write(checked((short)key.TangentIn));writer.Write(unchecked((ushort)(short)key.TangentOut));break;
+                case 0x5: writer.Write(checked((short)key.Value));writer.Write(checked((short)key.TangentIn));writer.Write(checked((short)key.TangentOut));break;
                 case 0x6: writer.Write(checked((short)key.Value));writer.Write(checked((sbyte)key.TangentIn));writer.Write(checked((sbyte)key.TangentOut));break;
                 case 0x8: writer.Write(checked((sbyte)key.Value));writer.Write((float)key.TangentIn);writer.Write((float)key.TangentOut);break;
                 case 0x9: writer.Write(checked((sbyte)key.Value));writer.Write(checked((short)key.TangentIn));writer.Write(checked((short)key.TangentOut));break;
                 case 0xA: writer.Write(checked((sbyte)key.Value));writer.Write(checked((sbyte)key.TangentIn));writer.Write(checked((sbyte)key.TangentOut));break;
-                case 0xF: writer.Write(checked((sbyte)key.Value));writer.Write(checked((byte)key.TangentIn));writer.Write(checked((byte)key.TangentOut));writer.Write(checked((byte)key.Extra));break;
+                case 0xF: writer.Write((float)key.Value);break;
                 default: throw new InvalidDataException($"Encoding FCV desconhecido: 0x{encoding:X1}0");
             }
         }

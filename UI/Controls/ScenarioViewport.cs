@@ -70,6 +70,9 @@ public sealed partial class ScenarioViewport : GLControl
     private bool gpuDirty;
     private int shaderProgram;
     private int uMvp;
+    private int uModel;
+    private int uNormalMatrix;
+    private int uNormalSign;
     private int uColor;
     private int uUnlit;
     private int meshVao;
@@ -108,7 +111,7 @@ public sealed partial class ScenarioViewport : GLControl
     private Point mouseDownPoint;
     private bool leftMouseMoved;
     private int uOpacity;
-    private EslScene? eslScene; private bool enemyGpuDirty; private int enemyVao, enemyVbo, enemyVertexCount, selectedEnemyVao, selectedEnemyVbo, selectedEnemyVertexCount; private int selectedEnemyIndex=-1;
+    private EslScene? eslScene; private bool enemyGpuDirty; private int enemyVao, enemyVbo, enemyVertexCount, selectedEnemyVao, selectedEnemyVbo, selectedEnemyVertexCount; private readonly int[] enemyGizmoVaos=new int[3],enemyGizmoVbos=new int[3],enemyGizmoCounts=new int[3]; private int selectedEnemyIndex=-1;
     private EtsScene? etsScene; private EtmCatalog? etmCatalog; private bool etsGpuDirty; private int etsVao, etsVbo, etsVertexCount, selectedEtsVao, selectedEtsVbo, selectedEtsVertexCount; private int etsModelVao, etsModelVbo, etsModelVertexCount, selectedEtsModelVao, selectedEtsModelVbo, selectedEtsModelVertexCount; private int selectedEtsFileOrder=-1; private readonly HashSet<int> selectedEtsFileOrders=new();
     private IReadOnlyDictionary<byte, EnemyModelScene> enemyModels = new Dictionary<byte, EnemyModelScene>();
     // v0.4.3 model-parts debugger: hidden BIN ordinals are stored per emXX type.
@@ -134,11 +137,16 @@ public sealed partial class ScenarioViewport : GLControl
     // Experimental v0.4.9 weapon attachment. The body skeleton is read from the enemy DAT.
     private FcvAnimation? enemyAttachmentAnimation;
     private bool enemyAttachmentAnimationForAll;
+    private bool enemyAnimationIgnoreRootMotion;
     private float enemyAttachmentFrame;
     private bool enemyIdleAnimationEnabled;
     private float enemyIdleAnimationFrame;
     private FcvAnimation? enemyIdleAnimationOverride;
-    private bool enemyIdleStabilizeFeet=true;
+    private bool enemyIdleStabilizeFeet;
+    private readonly Dictionary<(byte EnemyType,int AnimationId),FcvSkeletonPose> enemyPoseFrameCache=new();
+    private readonly Dictionary<string,FcvSkeletonPose> enemyBindPoseCache=new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(byte EnemyType,int AnimationId,NVector3 Position,EnemyVertexSkin Skin),NVector3> enemySkinnedVertexFrameCache=new();
+    private readonly Dictionary<EnemyModelPart,IReadOnlyDictionary<NVector3,NVector3>> enemySmoothNormalCache=new();
     private int enemyAttachmentBoneIndex = -1;
     private readonly HashSet<(byte EnemyType,int BinIndex)> forcedEnemyHandHeldParts=new();
     private NVector3 enemyAttachmentOffset = NVector3.Zero;
@@ -190,6 +198,7 @@ public sealed partial class ScenarioViewport : GLControl
     public EslScene? EslScene => eslScene;
     public EtsScene? EtsScene => etsScene;
     public event Action<EslEnemyEntry?>? EnemyEntryClicked;
+    public event Action<EslEnemyEntry, Point>? EnemyLabelClicked;
     public event Action<EnemyModelPart?>? EnemyModelPartClicked;
     public event Action<EnemyModelFaceHit?, bool>? EnemyModelFaceClicked;
     public event Action<NVector3>? EnemyModelFaceTranslationRequested;
@@ -301,6 +310,7 @@ public sealed partial class ScenarioViewport : GLControl
     public void SetScene(ScenarioScene? value, bool fit = true)
     {
         scene = value;
+        if(value!=null)RebuildScenarioGeometry();
         selectedSmdEntry = -1;
         smdOverlayDirty = true;
         gpuDirty = true;
@@ -330,6 +340,7 @@ public sealed partial class ScenarioViewport : GLControl
     public void SetEnemyModels(IReadOnlyDictionary<byte, EnemyModelScene>? models)
     {
         enemyModels = models ?? new Dictionary<byte, EnemyModelScene>();
+        ClearEnemyAnimationFrameCaches();enemyBindPoseCache.Clear();enemySmoothNormalCache.Clear();
         enemyGpuDirty = true;
         enemyTexturesDirty = true;
         Invalidate();
@@ -349,16 +360,19 @@ public sealed partial class ScenarioViewport : GLControl
     }
     public void SetEnemyAttachmentOffset(float x,float y,float z) { enemyAttachmentOffset=new NVector3(x,y,z); enemyGpuDirty=true; Invalidate(); }
     public void SetEnemyAttachmentRotation(float x,float y,float z) { enemyAttachmentRotationDegrees=new NVector3(x,y,z); enemyGpuDirty=true; Invalidate(); }
-    public void SetEnemyAttachmentAnimation(FcvAnimation? animation,float frame,bool applyToAll=false) { enemyAttachmentAnimation=animation; enemyAttachmentFrame=frame; enemyAttachmentAnimationForAll=applyToAll; enemyGpuDirty=true; Invalidate(); }
-    public void SetEnemyIdleAnimation(bool enabled, float frame, FcvAnimation? animation=null, bool stabilizeFeet=true)
+    public void SetEnemyAttachmentAnimation(FcvAnimation? animation,float frame,bool applyToAll=false) { enemyAttachmentAnimation=animation; enemyAttachmentFrame=frame; enemyAttachmentAnimationForAll=applyToAll;ClearEnemyAnimationFrameCaches();enemyGpuDirty=true; Invalidate(); }
+    public void SetEnemyAnimationIgnoreRootMotion(bool ignore) { enemyAnimationIgnoreRootMotion=ignore; enemyGpuDirty=true; Invalidate(); }
+    public void SetEnemyIdleAnimation(bool enabled, float frame, FcvAnimation? animation=null, bool stabilizeFeet=false)
     {
         enemyIdleAnimationEnabled=enabled;
         enemyIdleAnimationFrame=frame;
         enemyIdleAnimationOverride=animation;
         enemyIdleStabilizeFeet=stabilizeFeet;
+        ClearEnemyAnimationFrameCaches();
         enemyGpuDirty=true;
         Invalidate();
     }
+    private void ClearEnemyAnimationFrameCaches(){enemyPoseFrameCache.Clear();enemySkinnedVertexFrameCache.Clear();}
     public bool IsEnemyModelPartVisible(byte enemyType, int binIndex) => !hiddenEnemyModelParts.TryGetValue(enemyType, out HashSet<int>? hidden) || !hidden.Contains(binIndex);
     public bool IsEnemyModelPartAutomaticallyVisible(EslEnemyEntry entry, EnemyModelPart part)
     {
@@ -643,6 +657,8 @@ public sealed partial class ScenarioViewport : GLControl
         MakeCurrent();
         if (!glReady) InitializeGl();
         if (gpuDirty) UploadScene();
+        UploadDirtySmdEntryGpu();
+        RefreshSmdOverlayCamera();
         if (smdOverlayDirty) UploadSmdOverlay();
         if (texturesDirty) UploadTextures();
         if (enemyTexturesDirty) UploadEnemyTextures();
@@ -689,6 +705,7 @@ public sealed partial class ScenarioViewport : GLControl
             Matrix4 mvp = BuildMvp();
             GL.UseProgram(shaderProgram);
             GL.UniformMatrix4(uMvp, true, ref mvp);
+            Matrix4 identityModel=Matrix4.Identity;GL.UniformMatrix4(uModel,true,ref identityModel);GL.UniformMatrix4(uNormalMatrix,true,ref identityModel);GL.Uniform1(uNormalSign,1f);
             GL.Uniform1(uOpacity, 1.0f);
             GL.Uniform4(uTextureTint,1f,1f,1f,1f);
             ApplyLitShaderUniforms();
@@ -696,7 +713,7 @@ public sealed partial class ScenarioViewport : GLControl
             if (scene != null && ScenarioVisible)
             {
                 DrawGridGpu();
-                if (meshVertexCount > 0) DrawMeshGpu();
+                if ((SmdEditingEnabled&&smdEntryGpu.Count>0)||(!SmdEditingEnabled&&meshVertexCount>0)) DrawMeshGpu();
                 DrawSmdOverlay();
             }
             if (aevScene != null && AevVisible && aevVertexCount > 0) DrawAevGpu();
@@ -719,6 +736,7 @@ public sealed partial class ScenarioViewport : GLControl
         if (ShowEnemyLabels && EnemiesVisible && eslScene != null) DrawEnemyLabelsGpu();
         if (CamVisible && camScene != null) DrawCamFrameLabelsGpu();
         if (statusMessage != null) DrawStatusMessageGpu(statusMessage);
+        DrawSmdFaceSelectionBox();
         SwapBuffers();
         fpsSampleFrames++;
         double fpsElapsed = (Stopwatch.GetTimestamp() - fpsSampleStart) / (double)Stopwatch.Frequency;
@@ -866,6 +884,20 @@ public sealed partial class ScenarioViewport : GLControl
         GL.Disable(EnableCap.Blend); GL.Enable(EnableCap.DepthTest); GL.Enable(EnableCap.CullFace);
     }
 
+    private EslEnemyEntry? PickEnemyLabel(Point mouse)
+    {
+        if(!ShowEnemyLabels||eslScene==null)return null;EslEnemyEntry? best=null;float bestDepth=float.PositiveInfinity;
+        foreach(EslEnemyEntry entry in eslScene.Entries.Where(EnemyIsVisible))
+        {
+            NVector3 world=EslToWorld(entry)+new NVector3(0f,Math.Max(.08f,(scene?.Radius??1f)*.0012f),0f);
+            if(!TryProjectWorldToScreen(world,out PointF screen))continue;
+            bool selected=entry.Index==selectedEnemyIndex;string text=$"#{entry.Index:D3} {entry.FriendlyName}";LabelTexture label=GetOrCreateLabelTexture(text,selected);
+            var bounds=new RectangleF(screen.X-label.Width*.5f,screen.Y-label.Height-10f,label.Width,label.Height);
+            if(bounds.Contains(mouse)){float depth=NVector3.DistanceSquared(cameraPosition,world);if(depth<bestDepth){bestDepth=depth;best=entry;}}
+        }
+        return best;
+    }
+
     private LabelTexture GetOrCreateLabelTexture(string text, bool selected)
     {
         string key = (selected ? "S|" : "N|") + text;
@@ -927,15 +959,19 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUv;
 uniform mat4 uMvp;
+uniform mat4 uModel;
+uniform mat4 uNormalMatrix;
+uniform float uNormalSign;
 out vec3 vNormal;
 out vec2 vUv;
 out vec3 vWorldPos;
 void main()
 {
-    gl_Position = vec4(aPos, 1.0) * uMvp;
-    vNormal = aNormal;
+    vec4 world = vec4(aPos, 1.0) * uModel;
+    gl_Position = world * uMvp;
+    vNormal = normalize((aNormal * mat3(uNormalMatrix)) * uNormalSign);
     vUv = aUv;
-    vWorldPos = aPos;
+    vWorldPos = world.xyz;
 }";
 
         const string fragmentShader = @"#version 330 core
@@ -1035,6 +1071,9 @@ void main()
         GL.DeleteShader(fs);
 
         uMvp = GL.GetUniformLocation(shaderProgram, "uMvp");
+        uModel = GL.GetUniformLocation(shaderProgram, "uModel");
+        uNormalMatrix = GL.GetUniformLocation(shaderProgram, "uNormalMatrix");
+        uNormalSign = GL.GetUniformLocation(shaderProgram, "uNormalSign");
         uColor = GL.GetUniformLocation(shaderProgram, "uColor");
         uUnlit = GL.GetUniformLocation(shaderProgram, "uUnlit");
         uTexture = GL.GetUniformLocation(shaderProgram, "uTexture");
@@ -1102,6 +1141,7 @@ void main()
         aevHandleVao = GL.GenVertexArray();
         aevHandleVbo = GL.GenBuffer();
         enemyVao=GL.GenVertexArray(); enemyVbo=GL.GenBuffer(); selectedEnemyVao=GL.GenVertexArray(); selectedEnemyVbo=GL.GenBuffer();
+        for(int i=0;i<3;i++){enemyGizmoVaos[i]=GL.GenVertexArray();enemyGizmoVbos[i]=GL.GenBuffer();}
         enemyModelVao=GL.GenVertexArray(); enemyModelVbo=GL.GenBuffer(); selectedEnemyModelVao=GL.GenVertexArray(); selectedEnemyModelVbo=GL.GenBuffer();
         glReady = true;
     }
@@ -1124,6 +1164,13 @@ void main()
     private void UploadScene()
     {
         gpuDirty = false;
+        if(SmdEditingEnabled)
+        {
+            ReleaseSmdEntryGpu();
+            if(scene!=null){foreach(ScenarioEntry entry in scene.Entries)UploadSmdEntryGpu(entry);float[] grid=BuildGridData(scene);gridVertexCount=grid.Length/6;GL.BindVertexArray(gridVao);GL.BindBuffer(BufferTarget.ArrayBuffer,gridVbo);GL.BufferData(BufferTarget.ArrayBuffer,grid.Length*sizeof(float),grid,BufferUsageHint.StaticDraw);GL.VertexAttribPointer(0,3,VertexAttribPointerType.Float,false,6*sizeof(float),0);GL.EnableVertexAttribArray(0);GL.VertexAttribPointer(1,3,VertexAttribPointerType.Float,false,6*sizeof(float),3*sizeof(float));GL.EnableVertexAttribArray(1);GL.DisableVertexAttribArray(2);GL.VertexAttrib2(2,0f,0f);GL.BindVertexArray(0);}
+            meshVertexCount=0;meshBatches.Clear();return;
+        }
+        ReleaseSmdEntryGpu();
         meshVertexCount = 0;
         gridVertexCount = 0;
         meshBatches.Clear();
@@ -1656,6 +1703,7 @@ void main()
         enemyGpuDirty=false;
         var all=new List<float>();
         var sel=new List<float>();
+        var gizmoAxes=new[]{new List<float>(),new List<float>(),new List<float>()};
         var modelBuckets = new Dictionary<EnemyTextureKey, List<float>>();
         var selectedModelBuckets = new Dictionary<EnemyTextureKey, List<float>>();
         enemyModelBatches.Clear();
@@ -1665,6 +1713,7 @@ void main()
         {
             bool selected=e.Index==selectedEnemyIndex;
             AddEnemyMarker(selected?sel:all,e,selected);
+            if(selected)AddEnemyTransformGizmo(gizmoAxes,e);
             if (enemyModels.TryGetValue(e.EnemyType, out EnemyModelScene? model))
             {
                 AddEnemyModel(selected ? selectedModelBuckets : modelBuckets, e, model);
@@ -1673,7 +1722,7 @@ void main()
                 if (showEnemySkeletonDiagnostic && model.Skeleton != null)
                 {
                     FcvSkeletonPose? skeletonPose=(enemyAttachmentAnimationForAll||e.Index==selectedEnemyIndex)&&enemyAttachmentAnimation!=null
-                        ? FcvSkeletonEvaluator.Evaluate(model.Skeleton,enemyAttachmentAnimation,enemyAttachmentFrame)
+                        ? FcvSkeletonEvaluator.Evaluate(model.Skeleton,enemyAttachmentAnimation,enemyAttachmentFrame,false,enemyAnimationIgnoreRootMotion)
                         : null;
                     AddEnemySkeletonLines(sel,e,model.Skeleton,skeletonPose);
                 }
@@ -1685,6 +1734,7 @@ void main()
 
         UploadLineBuffer(enemyVao,enemyVbo,all,out enemyVertexCount);
         UploadLineBuffer(selectedEnemyVao,selectedEnemyVbo,sel,out selectedEnemyVertexCount);
+        for(int i=0;i<3;i++)UploadLineBuffer(enemyGizmoVaos[i],enemyGizmoVbos[i],gizmoAxes[i],out enemyGizmoCounts[i]);
 
         List<float> modelAll = BuildEnemyModelBatches(modelBuckets, enemyModelBatches);
         List<float> modelSelected = BuildEnemyModelBatches(selectedModelBuckets, selectedEnemyModelBatches);
@@ -1837,7 +1887,7 @@ void main()
         float rx = entry.RotX * (MathF.PI / 32768f);
         float ry = entry.RotY * (MathF.PI / 32768f);
         float rz = entry.RotZ * (MathF.PI / 32768f);
-        IEnumerable<EnemyModelPart> parts = model.Parts.Count > 0 ? model.Parts.Where(x => IsEnemyModelPartAutomaticallyVisible(entry, x)) : Array.Empty<EnemyModelPart>();
+        EnemyModelPart[] parts = model.Parts.Count > 0 ? model.Parts.Where(x => IsEnemyModelPartAutomaticallyVisible(entry, x)).ToArray() : Array.Empty<EnemyModelPart>();
 
         if (model.Parts.Count == 0)
         {
@@ -1845,12 +1895,17 @@ void main()
             return;
         }
 
-        // Visual Editor autonomous idle: every em12 can use FCV 001 embedded in em12.dat,
-        // independent from the Animations page. Manual FCV preview remains available for the
-        // selected enemy when autonomous idle is disabled.
+        // Visual Editor autonomous idle: every enemy can use the first FCV embedded in its DAT.
+        // The optional debug override remains specific to em12, whose external clip browser is
+        // intentionally specialized; other types always retain their own compatible skeleton/FCV.
         FcvAnimation? bodyAnimation = null;
         float bodyFrame = 0f;
-        if (enemyIdleAnimationEnabled && entry.EnemyType == 0x12 && (enemyIdleAnimationOverride ?? model.IdleAnimation) is FcvAnimation selectedAnimation)
+        int? equipmentIdleEntry=EnemyEquipmentCatalog.GetEquipmentIdleAnimationEntry(entry);
+        FcvAnimation? equipmentIdle=equipmentIdleEntry.HasValue && model.EquipmentIdleAnimations.TryGetValue(equipmentIdleEntry.Value,out FcvAnimation? knownIdle)
+            ? knownIdle : null;
+        FcvAnimation? automaticIdle = equipmentIdle ?? (entry.EnemyType == 0x12 && enemyIdleAnimationOverride != null
+            ? enemyIdleAnimationOverride : model.IdleAnimation);
+        if (enemyIdleAnimationEnabled && automaticIdle is FcvAnimation selectedAnimation)
         {
             bodyAnimation = selectedAnimation;
             bodyFrame = enemyIdleAnimationFrame;
@@ -1860,24 +1915,76 @@ void main()
             bodyAnimation = enemyAttachmentAnimation;
             bodyFrame = enemyAttachmentFrame;
         }
-        bool animateBody = bodyAnimation != null && model.Skeleton != null;
-        bool stabilizeIdleFeet = enemyIdleAnimationEnabled && enemyIdleStabilizeFeet && entry.EnemyType == 0x12;
-        FcvSkeletonPose? animationPose = model.Skeleton != null && (animateBody || enemyAttachmentBoneIndex >= 0)
-            ? FcvSkeletonEvaluator.Evaluate(model.Skeleton, animateBody ? bodyAnimation : null, animateBody ? bodyFrame : 0f, stabilizeIdleFeet) : null;
-        FcvSkeletonPose? bindPose = model.Skeleton != null && animationPose != null
-            ? FcvSkeletonEvaluator.Evaluate(model.Skeleton, null, 0f) : null;
+        bool animateBody = bodyAnimation != null && model.Skeleton != null && ShouldAnimateEnemy(entry,model);
+        bool stabilizeIdleFeet = enemyIdleAnimationEnabled && enemyIdleStabilizeFeet;
+        int animationId=bodyAnimation==null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(bodyAnimation);
+        FcvSkeletonPose? animationPose=null;
+        bool hasAutomaticAttachment=parts.Any(x=>EnemyEquipmentCatalog.GetAttachmentPoint(entry,x.DatEntryIndex)!=EnemyEquipmentCatalog.AttachmentPoint.Model);
+        if(model.Skeleton!=null&&(animateBody||hasAutomaticAttachment||enemyAttachmentBoneIndex>=0))
+        {
+            var poseKey=(entry.EnemyType,animateBody?animationId:0);
+            if(!enemyPoseFrameCache.TryGetValue(poseKey,out animationPose))
+            {
+                animationPose=FcvSkeletonEvaluator.Evaluate(model.Skeleton,animateBody?bodyAnimation:null,animateBody?bodyFrame:0f,stabilizeIdleFeet,enemyAnimationIgnoreRootMotion);
+                enemyPoseFrameCache[poseKey]=animationPose;
+            }
+        }
+        FcvSkeletonPose? bindPose=null;
+        if(model.Skeleton!=null&&animationPose!=null)
+        {
+            string bindKey=$"{model.SourcePath}|{model.SkeletonSourceDatEntryIndex}";
+            if(!enemyBindPoseCache.TryGetValue(bindKey,out bindPose)){bindPose=FcvSkeletonEvaluator.Evaluate(model.Skeleton,null,0f);enemyBindPoseCache[bindKey]=bindPose;}
+        }
         foreach (EnemyModelPart part in parts)
         {
-            bool attachToHand = (EnemyEquipmentCatalog.IsHandHeldPart(entry, part.DatEntryIndex)||forcedEnemyHandHeldParts.Contains((entry.EnemyType,part.BinIndex))) && animationPose != null && bindPose != null;
+            EnemyEquipmentCatalog.AttachmentPoint attachmentPoint=EnemyEquipmentCatalog.GetAttachmentPoint(entry,part.DatEntryIndex);
+            bool attachToHand = (attachmentPoint!=EnemyEquipmentCatalog.AttachmentPoint.Model||forcedEnemyHandHeldParts.Contains((entry.EnemyType,part.BinIndex))) && animationPose != null && bindPose != null;
             bool forcedAttachment=forcedEnemyHandHeldParts.Contains((entry.EnemyType,part.BinIndex));
-            NVector3 attachmentPivot = attachToHand&&!forcedAttachment ? GetEnemyPartPivot(part) : NVector3.Zero;
-            IReadOnlyDictionary<NVector3, NVector3>? smoothNormals = !attachToHand && !animateBody ? BuildEnemySmoothNormals(part.Triangles) : null;
+            int attachmentBone=forcedAttachment?enemyAttachmentBoneIndex:ResolveEnemyAttachmentBone(model.Skeleton,attachmentPoint);
+            var equipmentRotation=EnemyEquipmentCatalog.GetAttachmentRotation(entry,part.DatEntryIndex);
+            var equipmentOffset=EnemyEquipmentCatalog.GetAttachmentOffset(entry,part.DatEntryIndex);
+            NVector3 attachmentRotation=enemyAttachmentRotationDegrees+new NVector3(equipmentRotation.X,equipmentRotation.Y,equipmentRotation.Z);
+            NVector3 attachmentOffset=enemyAttachmentOffset+new NVector3(equipmentOffset.X,equipmentOffset.Y,equipmentOffset.Z);
+            // Enemy weapon BINs are authored around their grip/origin. Centering their bounds on
+            // the hand displaced long weapons by half their length and made their rotation wrong.
+            NVector3 attachmentPivot = NVector3.Zero;
+            IReadOnlyDictionary<NVector3, NVector3>? smoothNormals = !attachToHand && !animateBody ? GetEnemySmoothNormals(part) : null;
             foreach (EnemyModelTriangle sourceTriangle in part.Triangles)
             {
                 EnemyModelTriangle tri = ApplyEnemyTextureAssignment(entry.EnemyType, part.BinIndex, sourceTriangle);
-                AddEnemyTriangleToBucket(buckets, entry, tri, origin, rx, ry, rz, model, attachToHand, animationPose, bindPose, attachmentPivot, animateBody, smoothNormals);
+                AddEnemyTriangleToBucket(buckets, entry, tri, origin, rx, ry, rz, model, attachToHand, animationPose, bindPose, attachmentPivot, animateBody, smoothNormals,animationId,attachmentBone,attachmentRotation,attachmentOffset);
             }
         }
+    }
+
+    private static int ResolveEnemyAttachmentBone(Ps2BinSkeleton? skeleton,EnemyEquipmentCatalog.AttachmentPoint point)
+    {
+        if(skeleton==null)return -1;
+        // In the common em10/Ganado rig 0x0A is the character's right hand and 0x10
+        // the left hand. Resolve by ID, rather than assuming that every DAT uses index 10/16.
+        byte wanted=point switch
+        {
+            EnemyEquipmentCatalog.AttachmentPoint.Head => 0x04,
+            EnemyEquipmentCatalog.AttachmentPoint.LeftHand => 0x10,
+            _ => 0x0A
+        };
+        return skeleton.FirstIndexById.TryGetValue(wanted,out int index)?index:-1;
+    }
+
+    private bool ShouldAnimateEnemy(EslEnemyEntry entry,EnemyModelScene model)
+    {
+        if(entry.Index==selectedEnemyIndex)return true;
+        NVector3 center=EslToWorld(entry)+(model.BoundsMin+model.BoundsMax)*.5f;
+        float modelRadius=Math.Max(1f,model.Size.Length()*.5f),maxDistance=Math.Max(140f,modelRadius*10f);
+        if(NVector3.DistanceSquared(cameraPosition,center)>maxDistance*maxDistance)return false;
+        if(!TryProjectWorldToScreen(center,out PointF screen))return false;
+        float margin=96f;return screen.X>=-margin&&screen.Y>=-margin&&screen.X<=ClientSize.Width+margin&&screen.Y<=ClientSize.Height+margin;
+    }
+
+    private IReadOnlyDictionary<NVector3,NVector3> GetEnemySmoothNormals(EnemyModelPart part)
+    {
+        if(!enemySmoothNormalCache.TryGetValue(part,out IReadOnlyDictionary<NVector3,NVector3>? normals)){normals=BuildEnemySmoothNormals(part.Triangles);enemySmoothNormalCache[part]=normals;}
+        return normals;
     }
 
     private EnemyModelTriangle ApplyEnemyTextureAssignment(byte enemyType, int binIndex, EnemyModelTriangle triangle) =>
@@ -1885,12 +1992,12 @@ void main()
             ? triangle with { TplEntryIndex = assignment.TplEntry, TextureIndex = assignment.TextureIndex }
             : triangle;
 
-    private void AddEnemyTriangleToBucket(Dictionary<EnemyTextureKey,List<float>> buckets,EslEnemyEntry entry,EnemyModelTriangle tri,NVector3 origin,float rx,float ry,float rz,EnemyModelScene model,bool attachToHand,FcvSkeletonPose? animationPose=null,FcvSkeletonPose? bindPose=null,NVector3 attachmentPivot=default,bool animateBody=false,IReadOnlyDictionary<NVector3,NVector3>? smoothNormals=null)
+    private void AddEnemyTriangleToBucket(Dictionary<EnemyTextureKey,List<float>> buckets,EslEnemyEntry entry,EnemyModelTriangle tri,NVector3 origin,float rx,float ry,float rz,EnemyModelScene model,bool attachToHand,FcvSkeletonPose? animationPose=null,FcvSkeletonPose? bindPose=null,NVector3 attachmentPivot=default,bool animateBody=false,IReadOnlyDictionary<NVector3,NVector3>? smoothNormals=null,int animationId=0,int attachmentBone=-1,NVector3 attachmentRotation=default,NVector3 attachmentOffset=default)
     {
         var key=new EnemyTextureKey(entry.EnemyType,tri.TplEntryIndex,tri.TextureIndex);
         if(!buckets.TryGetValue(key,out List<float>? values)){values=new List<float>();buckets[key]=values;}
-        if(attachToHand && animationPose!=null && bindPose!=null) WriteEnemyAttachedTriangle(values,tri,origin,rx,ry,rz,model,animationPose,bindPose,attachmentPivot);
-        else if(animateBody && animationPose!=null && bindPose!=null) WriteEnemySkinnedTriangle(values,tri,origin,rx,ry,rz,model,animationPose,bindPose);
+        if(attachToHand && animationPose!=null && bindPose!=null) WriteEnemyAttachedTriangle(values,tri,origin,rx,ry,rz,model,animationPose,bindPose,attachmentPivot,attachmentBone,attachmentRotation,attachmentOffset);
+        else if(animateBody && animationPose!=null && bindPose!=null) WriteEnemySkinnedTriangle(values,tri,origin,rx,ry,rz,model,animationPose,bindPose,entry.EnemyType,animationId);
         else WriteEnemyTriangle(values,tri,origin,rx,ry,rz,smoothNormals);
     }
 
@@ -1927,41 +2034,46 @@ void main()
         return has ? (min+max)*0.5f : NVector3.Zero;
     }
 
-    private void WriteEnemyAttachedTriangle(List<float> values,EnemyModelTriangle tri,NVector3 origin,float rx,float ry,float rz,EnemyModelScene model,FcvSkeletonPose pose,FcvSkeletonPose bindPose,NVector3 attachmentPivot)
+    private void WriteEnemyAttachedTriangle(List<float> values,EnemyModelTriangle tri,NVector3 origin,float rx,float ry,float rz,EnemyModelScene model,FcvSkeletonPose pose,FcvSkeletonPose bindPose,NVector3 attachmentPivot,int attachmentBone,NVector3 attachmentRotation,NVector3 attachmentOffset)
     {
-        if(model.Skeleton==null || enemyAttachmentBoneIndex<0 || enemyAttachmentBoneIndex>=model.Skeleton.Bones.Count){WriteEnemyTriangle(values,tri,origin,rx,ry,rz);return;}
+        if(model.Skeleton==null || attachmentBone<0 || attachmentBone>=model.Skeleton.Bones.Count){WriteEnemyTriangle(values,tri,origin,rx,ry,rz);return;}
         // Keep preview animations anchored to the ESL position. FCV root translation is
         // animation/root-motion data and must not be added on top of the enemy world position.
         NVector3 rootMotion = GetEnemyAnimationRootMotion(model.Skeleton, pose, bindPose);
-        NVector3 bonePos=pose.WorldPositions[enemyAttachmentBoneIndex]/100f - rootMotion;
-        NQuaternion boneRot=pose.WorldRotations[enemyAttachmentBoneIndex];
-        NVector3 a=TransformEnemyAttachedVertex(tri.A,attachmentPivot,bonePos,boneRot,origin,rx,ry,rz);
-        NVector3 b=TransformEnemyAttachedVertex(tri.B,attachmentPivot,bonePos,boneRot,origin,rx,ry,rz);
-        NVector3 c=TransformEnemyAttachedVertex(tri.C,attachmentPivot,bonePos,boneRot,origin,rx,ry,rz);
+        NVector3 bonePos=pose.WorldPositions[attachmentBone]/100f - rootMotion;
+        NQuaternion boneRot=pose.WorldRotations[attachmentBone];
+        NVector3 a=TransformEnemyAttachedVertex(tri.A,attachmentPivot,bonePos,boneRot,origin,rx,ry,rz,attachmentRotation,attachmentOffset);
+        NVector3 b=TransformEnemyAttachedVertex(tri.B,attachmentPivot,bonePos,boneRot,origin,rx,ry,rz,attachmentRotation,attachmentOffset);
+        NVector3 c=TransformEnemyAttachedVertex(tri.C,attachmentPivot,bonePos,boneRot,origin,rx,ry,rz,attachmentRotation,attachmentOffset);
         NVector3 n=NVector3.Cross(b-a,c-a); float len=n.Length(); if(!float.IsFinite(len)||len<0.000001f)return; n/=len;
         WriteEnemyModelVertex(values,a,n,tri.UvA);WriteEnemyModelVertex(values,b,n,tri.UvB);WriteEnemyModelVertex(values,c,n,tri.UvC);
     }
 
-    private NVector3 TransformEnemyAttachedVertex(NVector3 v,NVector3 weaponPivot,NVector3 bonePos,NQuaternion boneRot,NVector3 origin,float rx,float ry,float rz)
+    private static NVector3 TransformEnemyAttachedVertex(NVector3 v,NVector3 weaponPivot,NVector3 bonePos,NQuaternion boneRot,NVector3 origin,float rx,float ry,float rz,NVector3 attachmentRotation,NVector3 attachmentOffset)
     {
         // Rigid bind-pose attachment: put the weapon's own pivot on the selected bone.
         // This deliberately avoids bind/current cancellation so changing bones is visible immediately.
         v-=weaponPivot;
-        float ax=enemyAttachmentRotationDegrees.X*MathF.PI/180f, ay=enemyAttachmentRotationDegrees.Y*MathF.PI/180f, az=enemyAttachmentRotationDegrees.Z*MathF.PI/180f;
+        float ax=attachmentRotation.X*MathF.PI/180f, ay=attachmentRotation.Y*MathF.PI/180f, az=attachmentRotation.Z*MathF.PI/180f;
         if(MathF.Abs(ax)>0.000001f){float c=MathF.Cos(ax),ss=MathF.Sin(ax);v=new NVector3(v.X,v.Y*c-v.Z*ss,v.Y*ss+v.Z*c);}
         if(MathF.Abs(ay)>0.000001f){float c=MathF.Cos(ay),ss=MathF.Sin(ay);v=new NVector3(v.X*c+v.Z*ss,v.Y,-v.X*ss+v.Z*c);}
         if(MathF.Abs(az)>0.000001f){float c=MathF.Cos(az),ss=MathF.Sin(az);v=new NVector3(v.X*c-v.Y*ss,v.X*ss+v.Y*c,v.Z);}
-        v+=enemyAttachmentOffset;
+        v+=attachmentOffset;
         v=NVector3.Transform(v,boneRot)+bonePos;
         return TransformEnemyModelVertex(v,origin,rx,ry,rz);
     }
 
-    private void WriteEnemySkinnedTriangle(List<float> values, EnemyModelTriangle tri, NVector3 origin, float rx, float ry, float rz, EnemyModelScene model, FcvSkeletonPose pose, FcvSkeletonPose bindPose)
+    private void WriteEnemySkinnedTriangle(List<float> values, EnemyModelTriangle tri, NVector3 origin, float rx, float ry, float rz, EnemyModelScene model, FcvSkeletonPose pose, FcvSkeletonPose bindPose,byte enemyType,int animationId)
     {
         if (model.Skeleton == null) { WriteEnemyTriangle(values, tri, origin, rx, ry, rz); return; }
-        NVector3 a = TransformEnemySkinnedVertex(tri.A, tri.SkinA, model.Skeleton, pose, bindPose);
-        NVector3 b = TransformEnemySkinnedVertex(tri.B, tri.SkinB, model.Skeleton, pose, bindPose);
-        NVector3 c = TransformEnemySkinnedVertex(tri.C, tri.SkinC, model.Skeleton, pose, bindPose);
+        NVector3 Skin(NVector3 vertex,EnemyVertexSkin skin)
+        {
+            var key=(enemyType,animationId,vertex,skin);if(enemySkinnedVertexFrameCache.TryGetValue(key,out NVector3 cached))return cached;
+            NVector3 result=TransformEnemySkinnedVertex(vertex,skin,model.Skeleton,pose,bindPose);enemySkinnedVertexFrameCache[key]=result;return result;
+        }
+        NVector3 a = Skin(tri.A, tri.SkinA);
+        NVector3 b = Skin(tri.B, tri.SkinB);
+        NVector3 c = Skin(tri.C, tri.SkinC);
         a = TransformEnemyModelVertex(a, origin, rx, ry, rz);
         b = TransformEnemyModelVertex(b, origin, rx, ry, rz);
         c = TransformEnemyModelVertex(c, origin, rx, ry, rz);
@@ -2065,26 +2177,29 @@ void main()
         float a=(float)(e.RotY*(Math.PI/32768.0)); float dx=(float)Math.Sin(a), dz=(float)Math.Cos(a), len=r*1.8f;
         float tx=x+dx*len,tz=z+dz*len; L(x,y+0.08f,z,tx,y+0.08f,tz);
         float px=-dz,pz=dx,head=r*0.42f; L(tx,y+0.08f,tz,tx-dx*head+px*head,y+0.08f,tz-dz*head+pz*head); L(tx,y+0.08f,tz,tx-dx*head-px*head,y+0.08f,tz-dz*head-pz*head);
-        if(!selected) return;
-        float axis=3.6f;
+    }
+    private void AddEnemyTransformGizmo(List<float>[] axes,EslEnemyEntry e)
+    {
+        float x=e.PosX*EslWorldScale,y=e.PosY*EslWorldScale,z=e.PosZ*EslWorldScale,axis=EnemyGizmoLength(e);
+        void L(int index,float ax,float ay,float az,float bx,float by,float bz)=>axes[index].AddRange(new[]{ax,ay,az,0f,0f,0f,bx,by,bz,0f,0f,0f});
         if (EnemyTransformMode == EnemyGizmoMode.Move)
         {
-            L(x,y+0.03f,z,x+axis,y+0.03f,z); L(x,y,z,x,y+axis,z); L(x,y+0.03f,z,x,y+0.03f,z+axis);
-            // small arrow heads make each selectable axis easier to read
-            L(x+axis,y+0.03f,z,x+axis-0.45f,y+0.28f,z); L(x+axis,y+0.03f,z,x+axis-0.45f,y-0.22f,z);
-            L(x,y+axis,z,x+0.25f,y+axis-0.45f,z); L(x,y+axis,z,x-0.25f,y+axis-0.45f,z);
-            L(x,y+0.03f,z+axis,x,y+0.28f,z+axis-0.45f); L(x,y+0.03f,z+axis,x,y-0.22f,z+axis-0.45f);
+            float arrowHead=axis*.13f,wing=axis*.075f;
+            L(0,x,y,z,x+axis,y,z); L(1,x,y,z,x,y+axis,z); L(2,x,y,z,x,y,z+axis);
+            L(0,x+axis,y,z,x+axis-arrowHead,y+wing,z); L(0,x+axis,y,z,x+axis-arrowHead,y-wing,z);
+            L(1,x,y+axis,z,x+wing,y+axis-arrowHead,z); L(1,x,y+axis,z,x-wing,y+axis-arrowHead,z);
+            L(2,x,y,z+axis,x,y+wing,z+axis-arrowHead); L(2,x,y,z+axis,x,y-wing,z+axis-arrowHead);
         }
         else
         {
-            const int seg=36; float rr=2.7f;
+            const int seg=72; float rr=axis;
             for(int i=0;i<seg;i++)
             {
                 float a0=(float)(i*Math.PI*2/seg),a1=(float)((i+1)*Math.PI*2/seg);
                 // X ring (YZ), Y ring (XZ), Z ring (XY)
-                L(x,y+MathF.Cos(a0)*rr,z+MathF.Sin(a0)*rr,x,y+MathF.Cos(a1)*rr,z+MathF.Sin(a1)*rr);
-                L(x+MathF.Cos(a0)*rr,y+0.04f,z+MathF.Sin(a0)*rr,x+MathF.Cos(a1)*rr,y+0.04f,z+MathF.Sin(a1)*rr);
-                L(x+MathF.Cos(a0)*rr,y+MathF.Sin(a0)*rr,z,x+MathF.Cos(a1)*rr,y+MathF.Sin(a1)*rr,z);
+                L(0,x,y+MathF.Cos(a0)*rr,z+MathF.Sin(a0)*rr,x,y+MathF.Cos(a1)*rr,z+MathF.Sin(a1)*rr);
+                L(1,x+MathF.Cos(a0)*rr,y+0.04f,z+MathF.Sin(a0)*rr,x+MathF.Cos(a1)*rr,y+0.04f,z+MathF.Sin(a1)*rr);
+                L(2,x+MathF.Cos(a0)*rr,y+MathF.Sin(a0)*rr,z,x+MathF.Cos(a1)*rr,y+MathF.Sin(a1)*rr,z);
             }
         }
     }
@@ -2218,6 +2333,7 @@ void main()
 
     private void DrawMeshGpu()
     {
+        if(SmdEditingEnabled){DrawSmdEntryMeshes();return;}
         if (meshVertexCount <= 0) return;
         GL.Uniform1(uOpacity, 1.0f);
 
@@ -2329,7 +2445,7 @@ void main()
 
     private int PickEnemyGizmoHandle(Point mouse, EslEnemyEntry enemy)
     {
-        NVector3 o=EslToWorld(enemy); const float axis=3.6f; const float threshold=10f;
+        NVector3 o=EslToWorld(enemy); float axis=EnemyGizmoLength(enemy); const float threshold=11f;
         if (EnemyTransformMode == EnemyGizmoMode.Move)
         {
             NVector3[] ends={o+NVector3.UnitX*axis,o+NVector3.UnitY*axis,o+NVector3.UnitZ*axis};
@@ -2337,7 +2453,7 @@ void main()
             for(int i=0;i<3;i++) if(TryProjectWorldToScreen(ends[i],out PointF pe) && DistancePointToSegment(mouse,po,pe)<=threshold) return i+1;
             return 0;
         }
-        const int seg=36; float rr=2.7f; int best=0; float bestD=threshold;
+        const int seg=72; float rr=axis; int best=0; float bestD=threshold;
         for(int ring=0;ring<3;ring++)
         {
             PointF? prev=null;
@@ -2358,6 +2474,14 @@ void main()
     }
 
     private EslEnemyEntry? GetSelectedEnemyEntry() => eslScene?.Entries.FirstOrDefault(x => x.Index == selectedEnemyIndex);
+    private float EnemyGizmoLength(EslEnemyEntry enemy)
+    {
+        NVector3 origin=EslToWorld(enemy); float depth=Math.Max(.05f,NVector3.Dot(origin-cameraPosition,GetForward()));
+        Rectangle viewport=GetRenderViewport(); float aspect=Math.Max(.01f,viewport.Width/(float)Math.Max(1,viewport.Height));
+        float verticalFov=FieldOfViewIsHorizontal?2f*MathF.Atan(MathF.Tan(fieldOfViewDegrees*MathF.PI/360f)/aspect):fieldOfViewDegrees*MathF.PI/180f;
+        float worldPerPixel=2f*depth*MathF.Tan(verticalFov*.5f)/Math.Max(1,viewport.Height);
+        return Math.Clamp(worldPerPixel*72f,.25f,1000f);
+    }
     private bool IsMouseNearEnemy(Point mouse, EslEnemyEntry enemy, float radius=20f)
     {
         if (!TryProjectWorldToScreen(EslToWorld(enemy), out PointF p)) return false;
@@ -2423,13 +2547,22 @@ void main()
             GL.Disable(EnableCap.Blend);
             GL.Enable(EnableCap.CullFace);
 
-            // A thin wire overlay keeps selection obvious without hiding the texture.
+            // Soft selection tint: preserve the original texture/detail and add only a
+            // translucent yellow skin, avoiding the noisy per-face wireframe.
             GL.Uniform1(uUseTexture,0);
             GL.Uniform1(uUnlit,1);
-            GL.Uniform3(uColor,1f,0.78f,0.12f);
-            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
+            GL.Uniform3(uColor,1f,0.78f,0.08f);
+            GL.Uniform1(uOpacity,.28f);
+            GL.Enable(EnableCap.Blend);
+            GL.BlendFunc(BlendingFactor.SrcAlpha,BlendingFactor.OneMinusSrcAlpha);
+            GL.DepthMask(false);
+            GL.Enable(EnableCap.PolygonOffsetFill);
+            GL.PolygonOffset(-1f,-1f);
             GL.DrawArrays(PrimitiveType.Triangles,0,selectedEnemyModelVertexCount);
-            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
+            GL.Disable(EnableCap.PolygonOffsetFill);
+            GL.DepthMask(true);
+            GL.Disable(EnableCap.Blend);
+            GL.Uniform1(uOpacity,1f);
             GL.Uniform1(uUnlit,0);
         }
 
@@ -2453,6 +2586,13 @@ void main()
             GL.BindVertexArray(selectedEnemyVao);
             GL.LineWidth(5f);
             GL.DrawArrays(PrimitiveType.Lines,0,selectedEnemyVertexCount);
+        }
+        var axisColors=new[]{(1f,.16f,.12f),(.18f,.9f,.28f),(.14f,.48f,1f)};
+        for(int i=0;i<3;i++)
+        {
+            bool active=enemyDragMode!=0&&((enemyDragMode-1)%3)==i;
+            if(active)GL.Uniform3(uColor,1f,.95f,.3f);else GL.Uniform3(uColor,axisColors[i].Item1,axisColors[i].Item2,axisColors[i].Item3);
+            GL.BindVertexArray(enemyGizmoVaos[i]);GL.LineWidth(active?9f:6f);GL.DrawArrays(PrimitiveType.Lines,0,enemyGizmoCounts[i]);
         }
         GL.LineWidth(1f);
         GL.Enable(EnableCap.DepthTest);
@@ -2499,6 +2639,7 @@ void main()
                 if (!FseEditingEnabled && TryBeginCamDrag(e.Location)) { Capture = true; return; }
 
                 if (TryBeginSmdDrag(e.Location)) { Capture = true; return; }
+                if(SmdEditingEnabled&&SmdFaceEditMode&&SelectedSmd()!=null){BeginSmdFaceBoxSelection(e.Location);Capture=true;return;}
 
                 if (TryBeginEnemyFaceGizmoDrag(e.Location)) { Capture = true; return; }
 
@@ -2578,6 +2719,7 @@ void main()
             bool wasItaDrag = e.Button == MouseButtons.Left && IsItaDragging;
             bool wasSoundDrag = e.Button == MouseButtons.Left && IsSoundDragging;
             bool wasSmdDrag = e.Button == MouseButtons.Left && IsSmdDragging;
+            bool wasSmdFaceBox=e.Button==MouseButtons.Left&&smdFaceBoxSelecting;
             bool wasCollisionDrag = e.Button == MouseButtons.Left && draggingCollisionVertex;
             bool wasFaceGizmoDrag = e.Button == MouseButtons.Left && enemyFaceGizmoAxis != 0;
             bool wasRtpDrag = e.Button == MouseButtons.Left && IsRtpDragging;
@@ -2587,6 +2729,7 @@ void main()
             bool clickAev = e.Button == MouseButtons.Left && !leftMouseMoved && !wasHandleDrag && !wasEnemyDrag && !wasEtsDrag && !wasItaDrag && !wasSoundDrag && !wasSmdDrag && !wasCollisionDrag && !wasFaceGizmoDrag && !wasRtpDrag && !wasCamDrag;
 
             if (wasSmdDrag) EndSmdDrag();
+            if(wasSmdFaceBox){if(leftMouseMoved){CompleteSmdFaceBoxSelection();dragButton=MouseButtons.None;Capture=false;return;}smdFaceBoxSelecting=false;Invalidate();}
             if (wasEtsDrag) EndEtsDrag();
             if (wasItaDrag) EndItaDrag();
             if (wasSoundDrag) EndSoundDrag();
@@ -2652,6 +2795,12 @@ void main()
             Capture = false;
 
             if(wasCamPointClick)return;
+
+            if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasSoundDrag&&!wasCamDrag&&!wasSmdDrag&&!wasCollisionDrag&&EnemiesVisible)
+            {
+                EslEnemyEntry? labelEnemy=PickEnemyLabel(e.Location);
+                if(labelEnemy!=null){SelectEnemyEntry(labelEnemy);EnemyEntryClicked?.Invoke(labelEnemy);EnemyLabelClicked?.Invoke(labelEnemy,e.Location);return;}
+            }
             if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasSoundDrag&&HandleSoundClick(e.Location))return;
 
             if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasItaDrag&&!wasAssetGizmoDrag&&ItaVisible&&itaScene!=null)
@@ -2691,11 +2840,15 @@ void main()
                 AevEntry? hit = PickAevEntry(e.Location);
                 SelectAevEntry(hit);
                 AevEntryClicked?.Invoke(hit);
-                if(hit==null && EnemiesVisible && eslScene!=null){EslEnemyEntry? eh=null; float best=18f; foreach(var en in eslScene.Entries.Where(EnemyIsVisible)){if(!TryProjectWorldToScreen(EslToWorld(en),out PointF sp)) continue; float dx=sp.X-e.X,dy=sp.Y-e.Y,d=MathF.Sqrt(dx*dx+dy*dy); if(d<best){best=d;eh=en;}} SelectEnemyEntry(eh); EnemyEntryClicked?.Invoke(eh);}
+                if(hit==null && EnemiesVisible && eslScene!=null){EslEnemyEntry? eh=PickEnemyEntryFromModel(e.Location); float best=18f;if(eh==null)foreach(var en in eslScene.Entries.Where(EnemyIsVisible)){if(!TryProjectWorldToScreen(EslToWorld(en),out PointF sp)) continue; float dx=sp.X-e.X,dy=sp.Y-e.Y,d=MathF.Sqrt(dx*dx+dy*dy); if(d<best){best=d;eh=en;}} SelectEnemyEntry(eh); EnemyEntryClicked?.Invoke(eh);}
             }
             else if (!collisionHit && !modelPartHit && e.Button==MouseButtons.Left && !leftMouseMoved && EnemiesVisible && eslScene!=null)
             {
-                EslEnemyEntry? hit=null; float best=18f; foreach(var en in eslScene.Entries.Where(EnemyIsVisible)){if(!TryProjectWorldToScreen(EslToWorld(en),out PointF sp)) continue; float dx=sp.X-e.X,dy=sp.Y-e.Y,d=MathF.Sqrt(dx*dx+dy*dy); if(d<best){best=d;hit=en;}} SelectEnemyEntry(hit); EnemyEntryClicked?.Invoke(hit);
+                // Prefer the visible model surface; the old marker-radius fallback remains useful
+                // while a DAT is still loading or for enemies without renderable geometry.
+                EslEnemyEntry? hit=PickEnemyEntryFromModel(e.Location); float best=18f;
+                if(hit==null)foreach(var en in eslScene.Entries.Where(EnemyIsVisible)){if(!TryProjectWorldToScreen(EslToWorld(en),out PointF sp)) continue; float dx=sp.X-e.X,dy=sp.Y-e.Y,d=MathF.Sqrt(dx*dx+dy*dy); if(d<best){best=d;hit=en;}}
+                SelectEnemyEntry(hit); EnemyEntryClicked?.Invoke(hit);
             }
             if (!collisionHit && e.Button == MouseButtons.Left && !leftMouseMoved && !wasEtsDrag&&!wasAssetGizmoDrag && ObjectsVisible && etsScene != null)
             {
@@ -2734,6 +2887,27 @@ void main()
             }
         }
         return bestPart;
+    }
+
+    private EslEnemyEntry? PickEnemyEntryFromModel(Point mouse)
+    {
+        if(eslScene==null)return null; EslEnemyEntry? bestEntry=null; float bestDepth=float.PositiveInfinity;
+        foreach(EslEnemyEntry entry in eslScene.Entries.Where(EnemyIsVisible))
+        {
+            if(!enemyModels.TryGetValue(entry.EnemyType,out EnemyModelScene? model))continue;
+            NVector3 origin=EslToWorld(entry);float rx=entry.RotX*(MathF.PI/32768f),ry=entry.RotY*(MathF.PI/32768f),rz=entry.RotZ*(MathF.PI/32768f);
+            foreach(EnemyModelPart part in model.Parts)
+            {
+                if(!IsEnemyModelPartAutomaticallyVisible(entry,part))continue;
+                foreach(EnemyModelTriangle triangle in part.Triangles)
+                {
+                    NVector3 a=TransformEnemyModelVertex(triangle.A,origin,rx,ry,rz),b=TransformEnemyModelVertex(triangle.B,origin,rx,ry,rz),c=TransformEnemyModelVertex(triangle.C,origin,rx,ry,rz);
+                    if(!TryProjectWorldToScreen(a,out PointF pa)||!TryProjectWorldToScreen(b,out PointF pb)||!TryProjectWorldToScreen(c,out PointF pc)||!PointInScreenTriangle(mouse,pa,pb,pc))continue;
+                    float depth=NVector3.DistanceSquared(cameraPosition,(a+b+c)/3f);if(depth<bestDepth){bestDepth=depth;bestEntry=entry;}
+                }
+            }
+        }
+        return bestEntry;
     }
 
     public EnemyModelFaceHit? PickEnemyModelFaceAt(Point mouse) => PickEnemyModelFace(mouse);
@@ -2808,7 +2982,8 @@ void main()
         }
         else if (dragButton == MouseButtons.Left)
         {
-            if(assetGizmoDragging)UpdateAssetGizmo(e.Location);
+            if(smdFaceBoxSelecting){smdFaceBoxEnd=e.Location;Invalidate();}
+            else if(assetGizmoDragging)UpdateAssetGizmo(e.Location);
             else if (IsRtpDragging) UpdateRtpDrag(e.Location);
             else if (IsCamDragging) UpdateCamDrag(e.Location);
             else if (IsSmdDragging) UpdateSmdDrag(e.Location);
@@ -2945,11 +3120,13 @@ void main()
     {
         base.OnKeyDown(e);
 
-        if(FseEditingEnabled&&!e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3)
+        if(FseEditingEnabled&&e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3)
         {SetFseTransformMode(e.KeyCode is Keys.D1 or Keys.NumPad1?FseGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?FseGizmoMode.Vertex:FseGizmoMode.Face);e.Handled=true;e.SuppressKeyPress=true;return;}
 
-        if(SmdEditingEnabled&&!e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3)
+        if(SmdEditingEnabled&&e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3)
         {SmdGizmoMode mode=e.KeyCode is Keys.D1 or Keys.NumPad1?SmdGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?SmdGizmoMode.Rotate:SmdGizmoMode.Scale;if(SmdFaceEditMode)mode=SmdGizmoMode.Move;SmdTransformMode=mode;SmdTransformModeRequested?.Invoke(mode);smdOverlayDirty=true;Invalidate();e.Handled=true;e.SuppressKeyPress=true;return;}
+
+        if(SmdEditingEnabled&&SmdFaceEditMode&&e.Control&&e.KeyCode==Keys.K){SeparateSmdFacesRequested?.Invoke();e.Handled=true;e.SuppressKeyPress=true;return;}
 
         if (EnemyModelPartPickingEnabled && e.Control && e.KeyCode is Keys.Z or Keys.Y)
         {
@@ -3520,7 +3697,9 @@ void main()
             try
             {
                 MakeCurrent();
+                ReleaseSmdEntryGpu();
                 if (meshVbo != 0) GL.DeleteBuffer(meshVbo);
+                ReleaseSmdEntryGpu();
                 if (meshVao != 0) GL.DeleteVertexArray(meshVao);
                 if (gridVbo != 0) GL.DeleteBuffer(gridVbo);
                 if (gridVao != 0) GL.DeleteVertexArray(gridVao);
@@ -3536,6 +3715,7 @@ void main()
                 if (enemyModelVao != 0) GL.DeleteVertexArray(enemyModelVao);
                 if (selectedEnemyModelVbo != 0) GL.DeleteBuffer(selectedEnemyModelVbo);
                 if (selectedEnemyModelVao != 0) GL.DeleteVertexArray(selectedEnemyModelVao);
+                for(int i=0;i<3;i++){if(enemyGizmoVbos[i]!=0)GL.DeleteBuffer(enemyGizmoVbos[i]);if(enemyGizmoVaos[i]!=0)GL.DeleteVertexArray(enemyGizmoVaos[i]);}
                 if (etsVbo != 0) GL.DeleteBuffer(etsVbo);
                 if (etsVao != 0) GL.DeleteVertexArray(etsVao);
                 if (selectedEtsVbo != 0) GL.DeleteBuffer(selectedEtsVbo);

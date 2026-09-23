@@ -368,17 +368,16 @@ public static class FcvCustomAnimationFactory
 
     private static double EncodeRotationValue(double radians,int encoding)=>encoding switch
     {
-        0x0 or 0x1=>radians,
-        0x4 or 0x5 or 0x6=>Math.Clamp(Math.Round(radians/Math.PI*32767.0),short.MinValue,short.MaxValue),
-        0x8 or 0x9 or 0xA=>Math.Clamp(Math.Round(radians/Math.PI*127.0),sbyte.MinValue,sbyte.MaxValue),
+        0x0 or 0x1 or 0x2 or 0xF=>radians,
+        0x4 or 0x5 or 0x6=>Math.Clamp(Math.Round(radians*10000.0),short.MinValue,short.MaxValue),
+        0x8 or 0x9 or 0xA=>Math.Clamp(Math.Round(radians*10000.0),sbyte.MinValue,sbyte.MaxValue),
         _=>throw new InvalidDataException($"Encoding de rotação não suportado no molde: 0x{encoding:X1}0")
     };
 
     private static double DecodeRotationValue(double value,int encoding)=>encoding switch
     {
-        0x0 or 0x1=>value,
-        0x4 or 0x5 or 0x6=>value/32767.0*Math.PI,
-        0x8 or 0x9 or 0xA=>value/127.0*Math.PI,
+        0x0 or 0x1 or 0x2 or 0xF=>value,
+        0x4 or 0x5 or 0x6 or 0x8 or 0x9 or 0xA=>value*0.0001,
         _=>throw new InvalidDataException($"Encoding de rotação não suportado no molde: 0x{encoding:X1}0")
     };
 

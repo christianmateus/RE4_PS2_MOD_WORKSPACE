@@ -1,4 +1,4 @@
-﻿namespace RE4_PS2_MOD_WORKSPACE;
+namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
@@ -49,6 +49,7 @@ public partial class Form1
     private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
         if (messagesModified && !ConfirmDiscardMessageChanges()) { e.Cancel = true; return; }
+        externalTplSyncCancellation?.Cancel();
         StopSoundPreview();
         SaveVisualCameraStateForActiveDat();
         characterCustomizer?.SaveCameraState();
@@ -277,7 +278,7 @@ public partial class Form1
             lblLogo.Text = collapsed ? "RE4" : "RE4 PS2";
             lblLogo.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             lblLogoSub.Visible = !collapsed;
-            lblVersion.Text = "v0.7.0";
+            lblVersion.Text = "v0.7.1";
             lblVersion.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             btnSidebarToggle.Text = collapsed ? "›" : "RETRAIR  ‹";
             btnSidebarToggle.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleRight;

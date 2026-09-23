@@ -26,6 +26,7 @@ public partial class Form1 : AppForm
     {
         InitializeComponent();
         LoadSettings();
+        ApplyAnimationLabSettings();
         WindowState = settings.StartMaximized ? FormWindowState.Maximized : FormWindowState.Normal;
         InitializeLocalization();
         ApplySidebarState(settings.SidebarCollapsed);
@@ -35,8 +36,6 @@ public partial class Form1 : AppForm
         ApplyVisualLayerSettings();
         if (chkVisualEnemyLabels != null) chkVisualEnemyLabels.Checked = settings.VisualEnemyLabels;
         if (visualViewport != null) visualViewport.ShowEnemyLabels = settings.VisualEnemyLabels;
-        if (chkVisualEnemyModelParts != null) chkVisualEnemyModelParts.Checked = settings.VisualEnemyModelParts;
-        if (pnlVisualEnemyModelParts != null) pnlVisualEnemyModelParts.Visible = settings.VisualEnemyModelParts;
         if (chkVisualEnemyAnimated != null) chkVisualEnemyAnimated.Checked = settings.VisualEnemyAnimated;
         if (chkVisualEnemyInactive != null) chkVisualEnemyInactive.Checked = settings.VisualShowInactiveEnemies;
         if (tabVisualEntities != null && tabVisualEntities.TabCount > 0)

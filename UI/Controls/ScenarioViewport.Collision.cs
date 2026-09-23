@@ -1,4 +1,5 @@
 using OpenTK.Graphics.OpenGL4;
+using OpenTK.Mathematics;
 using RE4_PS2_MOD_WORKSPACE.Core.Collision;
 using NVector3 = System.Numerics.Vector3;
 
@@ -28,6 +29,8 @@ public sealed partial class ScenarioViewport
     private NVector3 collisionDragStartPosition;
     private Point collisionDragStartMouse;
     private float collisionVerticalPixelsPerUnit = 1f;
+    private bool collisionGpuPreviewActive;
+    private Matrix4 collisionGpuPreviewModel=Matrix4.Identity;
     private CollisionVertexMoveMode collisionMoveMode;
     private bool collisionMoveWholeFace;
     private bool collisionMoveFaceSide;
@@ -92,6 +95,12 @@ public sealed partial class ScenarioViewport
         if(!glReady)return;for(int i=0;i<3;i++)EnsureCollisionBuffer(ref collisionHandleVaos[i],ref collisionHandleVbos[i]);
         List<float>[] handles=BuildCollisionHandle();for(int i=0;i<3;i++)UploadLineBuffer(collisionHandleVaos[i],collisionHandleVbos[i],handles[i],out collisionHandleVertexCounts[i]);
     }
+    private void UploadCollisionTransformPreview()
+    {
+        if(!glReady)return;EnsureCollisionBuffer(ref selectedCollisionVao,ref selectedCollisionVbo);EnsureCollisionBuffer(ref markedCollisionEdgeVao,ref markedCollisionEdgeVbo);
+        UploadEnemyModelBuffer(selectedCollisionVao,selectedCollisionVbo,BuildSelectedCollisionVertices(),out selectedCollisionVertexCount);
+        UploadLineBuffer(markedCollisionEdgeVao,markedCollisionEdgeVbo,BuildMarkedCollisionEdges(),out markedCollisionEdgeVertexCount);UploadCollisionHandles();
+    }
     private List<float> BuildCollisionVertices(EsatFile? file)
     {
         var output = new List<float>((file?.FaceCount ?? 0) * 24);
@@ -103,6 +112,7 @@ public sealed partial class ScenarioViewport
             EsatMesh mesh = file.Meshes[meshIndex];
             for (int faceIndex = 0; faceIndex < mesh.Faces.Count; faceIndex++)
             {
+                if(CollisionPreviewHidesFace(file,meshIndex,faceIndex))continue;
                 if (!CategoryVisible(GetCategory(mesh, faceIndex))) continue;
                 EsatFace face = mesh.Faces[faceIndex];if(Ps2EsatPrimitiveWriter.IsFaceDisabled(file.Kind,face))continue;
                 NVector3 normal = mesh.Normals[face.Normal];
@@ -112,6 +122,14 @@ public sealed partial class ScenarioViewport
             }
         }
         return output;
+    }
+    private bool CollisionPreviewHidesFace(EsatFile file,int meshIndex,int faceIndex)
+    {
+        if(!draggingCollisionVertex||selectedCollision==null||!ReferenceEquals(file,selectedCollision.File)||meshIndex!=selectedCollision.MeshIndex)return false;
+        if(CollisionRegionActive&&selectedCollisionRegionFaces.Count>0)return selectedCollisionRegionFaces.Contains(faceIndex);
+        if(selectedCollisionManualFaces.Count>0)return selectedCollisionManualFaces.Contains(faceIndex);
+        if(HasMarkedCollisionEdges)return markedCollisionEdges.Any(x=>x.FaceIndex==faceIndex);
+        return faceIndex==selectedCollision.FaceIndex;
     }
 
     private List<float> BuildDisabledCollisionVertices()
@@ -218,7 +236,7 @@ public sealed partial class ScenarioViewport
             int index=SelectedVertexIndex();NVector3 old=mesh.Positions[index];NVector3 raw=worldPosition*100f;if(old==raw)return;
             if(registerUndo)collisionUndo.Push(()=>mesh.Positions[index]=old);mesh.Positions[index]=raw;
         }
-        collisionGpuDirty=true; CollisionVertexEdited?.Invoke(selectedCollision); Invalidate();
+        if(!draggingCollisionVertex)collisionGpuDirty=true;else if(!collisionGpuPreviewActive)UploadCollisionTransformPreview(); CollisionVertexEdited?.Invoke(selectedCollision); Invalidate();
     }
 
     private int SelectedVertexIndex() => selectedCollisionVertexSlot switch { 0 => selectedCollision!.Face.Vertex0, 1 => selectedCollision!.Face.Vertex1, _ => selectedCollision!.Face.Vertex2 };
@@ -281,8 +299,8 @@ public sealed partial class ScenarioViewport
         if (EatCollisionVisible) DrawCollisionLayer(eatCollisionVao, eatCollisionVertexCount, 0.04f, 0.76f, 1.00f);if(ShowDisabledCollision)DrawCollisionLayer(disabledCollisionVao,disabledCollisionVertexCount,1f,.05f,.72f);
         if (selectedCollisionVertexCount > 0)
         {
-            GL.BindVertexArray(selectedCollisionVao); GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill); GL.Uniform3(uColor, 1f, 1f, 0.12f); GL.Uniform1(uOpacity, 0.62f); GL.DrawArrays(PrimitiveType.Triangles, 0, selectedCollisionVertexCount);
-            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line); GL.LineWidth(3f); GL.Uniform1(uOpacity, 1f); GL.DrawArrays(PrimitiveType.Triangles, 0, selectedCollisionVertexCount);
+            Matrix4 collisionDrawModel=collisionGpuPreviewActive?collisionGpuPreviewModel:Matrix4.Identity;GL.BindVertexArray(selectedCollisionVao);GL.UniformMatrix4(uModel,true,ref collisionDrawModel);GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill); GL.Uniform3(uColor, 1f, 1f, 0.12f); GL.Uniform1(uOpacity, 0.62f); GL.DrawArrays(PrimitiveType.Triangles, 0, selectedCollisionVertexCount);
+            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line); GL.LineWidth(3f); GL.Uniform1(uOpacity, 1f); GL.DrawArrays(PrimitiveType.Triangles, 0, selectedCollisionVertexCount);Matrix4 identityCollisionModel=Matrix4.Identity;GL.UniformMatrix4(uModel,true,ref identityCollisionModel);
         }
         if(markedCollisionEdgeVertexCount>0){GL.Disable(EnableCap.DepthTest);GL.BindVertexArray(markedCollisionEdgeVao);GL.Uniform3(uColor,1f,.08f,.78f);GL.Uniform1(uOpacity,1f);GL.LineWidth(9f);GL.DrawArrays(PrimitiveType.Lines,0,markedCollisionEdgeVertexCount);GL.Enable(EnableCap.DepthTest);}
         GL.PolygonMode(MaterialFace.FrontAndBack,PolygonMode.Fill);GL.Disable(EnableCap.DepthTest);GL.Uniform1(uOpacity,1f);var axisColors=new[]{(1f,.15f,.12f),(.2f,.95f,.25f),(.12f,.48f,1f)};for(int i=0;i<3;i++){var c=axisColors[i];if(collisionDragAxis==i+1)GL.Uniform3(uColor,1f,.92f,.18f);else GL.Uniform3(uColor,c.Item1,c.Item2,c.Item3);GL.BindVertexArray(collisionHandleVaos[i]);GL.LineWidth(collisionDragAxis==i+1?9f:6f);GL.DrawArrays(PrimitiveType.Lines,0,collisionHandleVertexCounts[i]);}GL.Enable(EnableCap.DepthTest);
@@ -376,18 +394,18 @@ public sealed partial class ScenarioViewport
     {
         if(!CollisionVisible||selectedCollision==null||(selectedCollisionVertexSlot<0&&!HasMarkedCollisionEdges))return false;
         NVector3 p=SelectedVertexWorld();float length=CamScreenSize(p,72f);if(!TryProjectWorldToScreen(p,out PointF origin))return false;float best=12f;collisionDragAxis=0;NVector3[] directions=CollisionGizmoAxes();if(CollisionTransformMode==CollisionGizmoMode.Rotate){const int segments=64;for(int ring=0;ring<3;ring++){NVector3 u=directions[(ring+1)%3],v=directions[(ring+2)%3];PointF? previous=null;for(int i=0;i<=segments;i++){float angle=MathF.Tau*i/segments;NVector3 world=p+(u*MathF.Cos(angle)+v*MathF.Sin(angle))*length;if(!TryProjectWorldToScreen(world,out PointF point)){previous=null;continue;}if(previous.HasValue){float d=DistancePointToSegment(screen,previous.Value,point);if(d<best){best=d;collisionDragAxis=ring+1;}}previous=point;}}}else for(int i=0;i<3;i++)if(TryProjectWorldToScreen(p+directions[i]*length,out PointF end)){float d=DistancePointToSegment(screen,origin,end);if(d<best){best=d;collisionDragAxis=i+1;}}if(collisionDragAxis==0)return false;collisionDragWorldAxis=directions[collisionDragAxis-1];
-        draggingCollisionVertex=true;collisionDragStartMouse=screen;collisionDragStartPosition=SelectedVertexWorld();
+        draggingCollisionVertex=true;collisionGpuPreviewActive=CollisionRegionActive||HasMarkedCollisionEdges;collisionGpuPreviewModel=Matrix4.Identity;collisionGpuDirty=true;collisionDragStartMouse=screen;collisionDragStartPosition=SelectedVertexWorld();
         collisionDragStartVertices=SelectedFaceVertexIndices().ToDictionary(x=>x,x=>selectedCollision.Mesh.Positions[x]);collisionDragStartNormals.Clear();if(CollisionTransformMode==CollisionGizmoMode.Rotate){IEnumerable<int> faces=CollisionRegionActive&&selectedCollisionRegionFaces.Count>0?selectedCollisionRegionFaces:selectedCollisionManualFaces.Count>0?selectedCollisionManualFaces:new[]{selectedCollision.FaceIndex};collisionDragStartNormals=faces.Select(i=>(int)selectedCollision.Mesh.Faces[i].Normal).Distinct().ToDictionary(i=>i,i=>selectedCollision.Mesh.Normals[i]);var radial=new System.Numerics.Vector2(screen.X-origin.X,screen.Y-origin.Y);if(radial.LengthSquared()>.01f){radial=System.Numerics.Vector2.Normalize(radial);collisionDragScreenAxis=new(-radial.Y,radial.X);}}
         NVector3 a=collisionDragStartPosition,b=a+NVector3.UnitY;if(TryProjectWorldToScreen(a,out PointF pa)&&TryProjectWorldToScreen(b,out PointF pb))collisionVerticalPixelsPerUnit=Math.Max(0.05f,MathF.Abs(pb.Y-pa.Y));
         return true;
     }
     private void UpdateCollisionVertexDrag(Point screen)
     {
-        if(!draggingCollisionVertex||selectedCollision==null)return;NVector3 axis=collisionDragWorldAxis;if(CollisionTransformMode==CollisionGizmoMode.Rotate){float pixels=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),collisionDragScreenAxis);float angle=pixels*MathF.PI/360f;var rotation=System.Numerics.Matrix4x4.CreateFromAxisAngle(axis,angle);foreach(var item in collisionDragStartVertices)selectedCollision.Mesh.Positions[item.Key]=(collisionDragStartPosition+NVector3.Transform(item.Value/100f-collisionDragStartPosition,rotation))*100f;foreach(var item in collisionDragStartNormals)selectedCollision.Mesh.Normals[item.Key]=NVector3.Normalize(NVector3.TransformNormal(item.Value,rotation));collisionGpuDirty=true;CollisionVertexEdited?.Invoke(selectedCollision);Invalidate();return;}NVector3 next=collisionDragStartPosition;float length=CamScreenSize(collisionDragStartPosition,72f);if(!TryProjectWorldToScreen(collisionDragStartPosition,out PointF a)||!TryProjectWorldToScreen(collisionDragStartPosition+axis*length,out PointF b))return;var projected=new System.Numerics.Vector2(b.X-a.X,b.Y-a.Y);float axisPixels=projected.Length();if(axisPixels<.1f)return;projected/=axisPixels;float delta=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),projected)*length/axisPixels;next+=axis*delta;SetSelectedCollisionVertexPosition(next,false);
+        if(!draggingCollisionVertex||selectedCollision==null)return;NVector3 axis=collisionDragWorldAxis;if(CollisionTransformMode==CollisionGizmoMode.Rotate){float pixels=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),collisionDragScreenAxis);float angle=pixels*MathF.PI/360f;var rotation=System.Numerics.Matrix4x4.CreateFromAxisAngle(axis,angle);foreach(var item in collisionDragStartVertices)selectedCollision.Mesh.Positions[item.Key]=(collisionDragStartPosition+NVector3.Transform(item.Value/100f-collisionDragStartPosition,rotation))*100f;foreach(var item in collisionDragStartNormals)selectedCollision.Mesh.Normals[item.Key]=NVector3.Normalize(NVector3.TransformNormal(item.Value,rotation));var pivot=new OpenTK.Mathematics.Vector3(collisionDragStartPosition.X,collisionDragStartPosition.Y,collisionDragStartPosition.Z);collisionGpuPreviewModel=Matrix4.CreateTranslation(-pivot)*Matrix4.CreateFromAxisAngle(new OpenTK.Mathematics.Vector3(axis.X,axis.Y,axis.Z),angle)*Matrix4.CreateTranslation(pivot);CollisionVertexEdited?.Invoke(selectedCollision);Invalidate();return;}NVector3 next=collisionDragStartPosition;float length=CamScreenSize(collisionDragStartPosition,72f);if(!TryProjectWorldToScreen(collisionDragStartPosition,out PointF a)||!TryProjectWorldToScreen(collisionDragStartPosition+axis*length,out PointF b))return;var projected=new System.Numerics.Vector2(b.X-a.X,b.Y-a.Y);float axisPixels=projected.Length();if(axisPixels<.1f)return;projected/=axisPixels;float delta=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),projected)*length/axisPixels;next+=axis*delta;SetSelectedCollisionVertexPosition(next,false);collisionGpuPreviewModel=Matrix4.CreateTranslation(new OpenTK.Mathematics.Vector3(next.X-collisionDragStartPosition.X,next.Y-collisionDragStartPosition.Y,next.Z-collisionDragStartPosition.Z));
     }
     private void EndCollisionVertexDrag()
     {
-        if(!draggingCollisionVertex||selectedCollision==null)return;draggingCollisionVertex=false;collisionDragAxis=0;EsatMesh mesh=selectedCollision.Mesh;
+        if(!draggingCollisionVertex||selectedCollision==null)return;draggingCollisionVertex=false;collisionDragAxis=0;collisionGpuPreviewActive=false;collisionGpuPreviewModel=Matrix4.Identity;collisionGpuDirty=true;EsatMesh mesh=selectedCollision.Mesh;
         var before=new Dictionary<int,NVector3>(collisionDragStartVertices);var beforeNormals=new Dictionary<int,NVector3>(collisionDragStartNormals);bool changed=before.Any(x=>mesh.Positions[x.Key]!=x.Value);
         if(changed)collisionUndo.Push(()=>{foreach(var item in before)mesh.Positions[item.Key]=item.Value;foreach(var item in beforeNormals)mesh.Normals[item.Key]=item.Value;});collisionDragStartVertices.Clear();collisionDragStartNormals.Clear();
     }

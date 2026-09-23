@@ -123,29 +123,48 @@ public static class Ps2EnemyDatReader
 
         FcvAnimation? idleAnimation = null;
         int idleAnimationEntry = -1;
-        // em12: FCV 001 is the known idle animation. In the DAT table this is entry #1.
-        // Read it directly from the enemy DAT so the Visual Editor does not depend on the Animations page.
-        if (enemyType == 0x12 && count > 1 && IsTag(tags[1], "FCV"))
+        var equipmentIdleAnimations = new Dictionary<int, FcvAnimation>();
+        // The first embedded FCV is the safest generic idle preview available for an enemy.
+        // Read it directly from the DAT so every supported emXX can animate without depending
+        // on the Animations page or on hard-coded em12 entry numbers.
+        int firstFcvEntry = Enumerable.Range(0, count).FirstOrDefault(i => IsTag(tags[i], "FCV"), -1);
+        if (firstFcvEntry >= 0)
         {
             try
             {
-                byte[] idleBytes = ReadEntryBytes(br, 1, offsets, fs.Length);
+                byte[] idleBytes = ReadEntryBytes(br, firstFcvEntry, offsets, fs.Length);
                 if (idleBytes.Length > 8)
                 {
-                    idleAnimation = FcvReader.Read(idleBytes, $"{Path.GetFileName(path)}#001.fcv");
-                    idleAnimationEntry = 1;
+                    idleAnimation = FcvReader.Read(idleBytes, $"{Path.GetFileName(path)}#{firstFcvEntry:D3}.fcv");
+                    idleAnimationEntry = firstFcvEntry;
                 }
             }
-            catch (Exception ex) { warnings.Add($"FCV 001 idle: {ex.Message}"); }
+            catch (Exception ex) { warnings.Add($"FCV #{firstFcvEntry:D3} idle: {ex.Message}"); }
+        }
+
+        // Documented em10-family weapon stances. Not every specialized DAT contains every
+        // entry, so only retain entries that are actually tagged FCV in this package.
+        foreach (int animationEntry in EnemyEquipmentCatalog.KnownEquipmentIdleEntries)
+        {
+            if (animationEntry < 0 || animationEntry >= count || !IsTag(tags[animationEntry], "FCV")) continue;
+            try
+            {
+                byte[] bytes = ReadEntryBytes(br, animationEntry, offsets, fs.Length);
+                if (bytes.Length > 8)
+                    equipmentIdleAnimations[animationEntry] = FcvReader.Read(bytes, $"{Path.GetFileName(path)}#{animationEntry:D3}.fcv");
+            }
+            catch (Exception ex) { warnings.Add($"FCV #{animationEntry:D3} equipment idle: {ex.Message}"); }
         }
 
         Ps2BinSkeleton? skeleton = null;
         int skeletonSource = -1;
-        // Experimental attachment support: em12 body 440 is the known village Ganado base.
-        // For other models, fall back to the first geometry BIN that exposes a valid skeleton.
-        IEnumerable<int> skeletonCandidates = enemyType == 0x12
-            ? new[] { 440 }.Concat(parts.Select(x => x.DatEntryIndex).Where(x => x != 440))
-            : parts.Select(x => x.DatEntryIndex);
+        // Enemy DATs commonly begin with one-bone accessories before their actual body BIN.
+        // Choosing the first valid skeleton therefore animated the weapon but left em15's body
+        // in bind pose. Inspect every renderable BIN and keep the skeleton that covers the most
+        // FCV nodes; bone count breaks ties in favour of the complete body rig.
+        HashSet<byte> animatedNodeIds = idleAnimation?.Tracks.Select(x => x.NodeId).ToHashSet() ?? new HashSet<byte>();
+        int bestSkeletonScore = -1;
+        IEnumerable<int> skeletonCandidates = parts.Select(x => x.DatEntryIndex);
         foreach (int candidate in skeletonCandidates.Distinct())
         {
             if (candidate < 0 || candidate >= count || !IsTag(tags[candidate], "BIN")) continue;
@@ -153,7 +172,10 @@ public static class Ps2EnemyDatReader
             {
                 byte[] payload = ReadEntryBytes(br, candidate, offsets, fs.Length);
                 Ps2BinSkeleton parsed = Ps2BinSkeletonReader.Read(payload, $"{Path.GetFileName(path)}#{candidate:D3}.bin");
-                if (parsed.Bones.Count > 0) { skeleton = parsed; skeletonSource = candidate; break; }
+                if (parsed.Bones.Count == 0) continue;
+                int animationCoverage = animatedNodeIds.Count(id => parsed.FirstIndexById.ContainsKey(id));
+                int score = animationCoverage * 10000 + parsed.FirstIndexById.Count * 100 + parsed.Bones.Count;
+                if (score > bestSkeletonScore) { bestSkeletonScore = score; skeleton = parsed; skeletonSource = candidate; }
             }
             catch { }
         }
@@ -164,6 +186,7 @@ public static class Ps2EnemyDatReader
             SkeletonSourceDatEntryIndex = skeletonSource,
             IdleAnimation = idleAnimation,
             IdleAnimationDatEntryIndex = idleAnimationEntry,
+            EquipmentIdleAnimations = equipmentIdleAnimations,
             EnemyType = enemyType,
             SourcePath = path,
             DatEntryCount = count,

@@ -55,9 +55,11 @@ public sealed class EnemyModelScene
     /// <summary>Skeleton extracted from a representative body BIN when available.</summary>
     public Ps2BinSkeleton? Skeleton { get; init; }
     public int SkeletonSourceDatEntryIndex { get; init; } = -1;
-    /// <summary>Idle FCV embedded in the enemy DAT. For em12 the known idle is DAT entry/FCV 001.</summary>
+    /// <summary>First FCV embedded in the enemy DAT, used as its automatic idle preview.</summary>
     public FcvAnimation? IdleAnimation { get; init; }
     public int IdleAnimationDatEntryIndex { get; init; } = -1;
+    /// <summary>Known weapon-specific idle FCVs, keyed by their original DAT entry index.</summary>
+    public IReadOnlyDictionary<int, FcvAnimation> EquipmentIdleAnimations { get; init; } = new Dictionary<int, FcvAnimation>();
     public byte EnemyType { get; init; }
     public string SourcePath { get; init; } = string.Empty;
     public int DatEntryCount { get; init; }

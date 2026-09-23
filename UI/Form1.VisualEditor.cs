@@ -2,6 +2,7 @@ using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 using System.ComponentModel;
+using System.Numerics;
 using RE4_PS2_MOD_WORKSPACE.Core.Collision;
 using RE4_PS2_MOD_WORKSPACE.Core.Lighting;
 using RE4_PS2_MOD_WORKSPACE.Core.Effects;
@@ -31,13 +32,16 @@ public partial class Form1
     private bool visualAevModified;
     private bool syncingVisualAevFilter;
     private bool syncingVisualEnemyFilter;
-    private bool syncingVisualEnemyModelParts;
-    private bool syncingVisualEnemyAttachment;
+    private bool syncingVisualEnemyQuickSelect;
+    private bool syncingViewportEnemyPicker;
+    private Panel? viewportEnemyPicker;
+    private ComboBox? viewportEnemyType;
+    private EslEnemyEntry? viewportEnemyPickerEntry;
     private System.Windows.Forms.Timer? visualEnemyIdleTimer;
     private float visualEnemyIdleFrame;
     private FcvAnimation? visualEnemyDebugAnimation;
     private int visualEnemyDebugFrameCount;
-    private bool visualEnemyDebugStabilizeFeet=true;
+    private bool visualEnemyDebugStabilizeFeet;
     private bool syncingVisualEnemyAnimation;
     private bool visualCollisionModified;
     private bool visualCollisionMoveWholeFace,visualCollisionMoveFaceSide,visualCollisionMoveObject,visualCollisionMoveEdge;
@@ -70,21 +74,6 @@ public partial class Form1
         public override string ToString() => $"{Name} • {FrameCount}f{(UsesSeq ? " • SEQ" : "")}";
     }
 
-    private sealed class VisualEnemyModelPartItem
-    {
-        public EnemyModelPart Part { get; }
-        public VisualEnemyModelPartItem(EnemyModelPart part) => Part = part;
-        public override string ToString()
-        {
-            string? known = EnemyModelPartCatalog.GetKnownPartName(Part.DatEntryIndex);
-            string name = known == null ? $"DAT #{Part.DatEntryIndex:D3}" : $"#{Part.DatEntryIndex:D3} {known}";
-            string tpl = Part.TplEntryIndex < 0 ? "TPL --" : $"TPL #{Part.TplEntryIndex:D3}";
-            string how = Part.TplResolution switch { EnemyTplResolutionKind.DirectNext => "direct", EnemyTplResolutionKind.SharedPrevious => "shared", _ => "none" };
-            string maps = Part.DiffuseMaps.Count == 0 ? "--" : string.Join(",", Part.DiffuseMaps.Select(x => x < 0 ? "none" : x.ToString()));
-            return $"BIN {Part.BinIndex:D2} • {name} • {tpl} {how} • diffuse/tex [{maps}]";
-        }
-    }
-
     private sealed record VisualAevTypeFilterItem(byte? Type, string Name)
     {
         public override string ToString() => Name;
@@ -98,10 +87,6 @@ public partial class Form1
         public override string ToString() => Name;
     }
     private sealed record VisualLitFileItem(string Path){public override string ToString()=>System.IO.Path.GetFileName(Path);}
-    private sealed record VisualEnemyAttachmentBoneItem(int Index, byte Id, byte ParentId)
-    {
-        public override string ToString() => $"#{Index:00} • Bone 0x{Id:X2} • Parent {(ParentId==0xFF?"ROOT":$"0x{ParentId:X2}")}";
-    }
     private string? visualSmdPath;
     private string? visualAevPath;
     private string? visualEtmPath;
@@ -328,6 +313,22 @@ public partial class Form1
         if (selectedEnemyScene != null) foreach (EslEnemyEntry e in selectedEnemyScene.Entries.Where(VisualEnemyPassesFilter)) lstVisualEnemyEntries.Items.Add(e);
         for (int i = 0; i < lstVisualEnemyEntries.Items.Count; i++) if (lstVisualEnemyEntries.Items[i] is EslEnemyEntry e && selected.Contains(e.Index)) lstVisualEnemyEntries.SetSelected(i, true);
         lstVisualEnemyEntries.EndUpdate();
+        syncingVisualEnemyQuickSelect = true;
+        try
+        {
+            cmbVisualEnemyQuickSelect.BeginUpdate(); cmbVisualEnemyQuickSelect.Items.Clear();
+            foreach (object item in lstVisualEnemyEntries.Items) cmbVisualEnemyQuickSelect.Items.Add(item);
+            EslEnemyEntry? primary = lstVisualEnemyEntries.SelectedItems.Cast<object>().OfType<EslEnemyEntry>().FirstOrDefault();
+            cmbVisualEnemyQuickSelect.SelectedItem = primary;
+        }
+        finally { cmbVisualEnemyQuickSelect.EndUpdate(); syncingVisualEnemyQuickSelect = false; }
+    }
+
+    private void cmbVisualEnemyQuickSelect_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        if (syncingVisualEnemyQuickSelect || cmbVisualEnemyQuickSelect.SelectedItem is not EslEnemyEntry entry) return;
+        visualViewport_EnemyEntryClicked(entry);
+        visualViewport?.FocusEnemy(entry);
     }
 
     private List<EslEnemyEntry> GetVisualSelectedEnemies() => lstVisualEnemyEntries?.SelectedItems.Cast<object>().OfType<EslEnemyEntry>().ToList() ?? new();
@@ -335,11 +336,11 @@ public partial class Form1
     private void lstVisualEnemyEntries_SelectedIndexChanged(object? sender, EventArgs e)
     {
         List<EslEnemyEntry> entries = GetVisualSelectedEnemies();
-        if (entries.Count == 0) { pgVisualProperties.SelectedObject = null; lblVisualPropertiesTitle.Text = "PROPERTIES • SELECTION"; visualViewport?.SelectEnemyEntry(null); RefreshVisualEnemyModelParts(null); return; }
+        if (entries.Count == 0) { pgVisualProperties.SelectedObject = null; lblVisualPropertiesTitle.Text = "PROPERTIES • SELECTION"; visualViewport?.SelectEnemyEntry(null); return; }
         if (entries.Count == 1) pgVisualProperties.SelectedObject = entries[0]; else pgVisualProperties.SelectedObjects = entries.Cast<object>().ToArray();
         lblVisualPropertiesTitle.Text = entries.Count == 1 ? $"PROPERTIES • ENEMY #{entries[0].Index:D3}" : $"PROPERTIES • {entries.Count} ENEMIES";
         visualViewport?.SelectEnemyEntry(entries[0]);
-        RefreshVisualEnemyModelParts(entries[0]);
+        syncingVisualEnemyQuickSelect = true; cmbVisualEnemyQuickSelect.SelectedItem = entries[0]; syncingVisualEnemyQuickSelect = false;
     }
 
     private void btnVisualEnemyGizmoMove_Click(object? sender, EventArgs e) => SetEnemyGizmoMode(EnemyGizmoMode.Move);
@@ -389,9 +390,9 @@ public partial class Form1
         timer.Tick += (_, _) =>
         {
             if (chkVisualEnemyAnimated == null || !chkVisualEnemyAnimated.Checked || visualViewport == null || visualViewport.IsDisposed) return;
-            if (!visualViewport.EnemiesVisible || !visualViewport.HasVisibleEnemyType(0x12)) return;
+            if (!visualViewport.EnemiesVisible) return;
             int frameCount = visualEnemyDebugFrameCount;
-            if (frameCount <= 0 && visualEnemyModelCache.TryGetValue(0x12, out EnemyModelScene? em12) && em12.IdleAnimation != null) frameCount = em12.IdleAnimation.FrameCount;
+            if (frameCount <= 0) frameCount = visualEnemyModelCache.Values.Where(x => x.IdleAnimation != null).Select(x => (int)x.IdleAnimation!.FrameCount).DefaultIfEmpty(0).Max();
             if (frameCount <= 0) { visualEnemyIdleFrame = 0f; visualViewport.SetEnemyIdleAnimation(true, 0f, visualEnemyDebugAnimation, visualEnemyDebugStabilizeFeet); return; }
             visualEnemyIdleFrame += 1f;
             if (visualEnemyIdleFrame >= frameCount) visualEnemyIdleFrame = 0f;
@@ -495,7 +496,9 @@ public partial class Form1
                 ? FcvReader.Read(item.Path)
                 : visualEnemyModelCache.TryGetValue(0x12,out EnemyModelScene? model) ? model.IdleAnimation : null;
             visualEnemyDebugFrameCount=item.FrameCount;
-            visualEnemyDebugStabilizeFeet=item.StabilizeFeet;
+            // Match the Animation Laboratory: FCV poses already contain the authored foot
+            // placement and tracked-foot IK, so the extra planted-foot correction must stay off.
+            visualEnemyDebugStabilizeFeet=false;
             visualEnemyIdleFrame=0f;
             visualViewport?.SetEnemyIdleAnimation(chkVisualEnemyAnimated?.Checked==true,0f,visualEnemyDebugAnimation,visualEnemyDebugStabilizeFeet);
             ExtractLog($"FCV debug: {item.Name} • {item.FrameCount} frames{(item.UsesSeq ? " pelo SEQ seguinte" : " pelo FCV")}.");
@@ -538,96 +541,6 @@ public partial class Form1
         else if(e.KeyCode==Keys.R){e.Handled=true;e.SuppressKeyPress=true;SetEnemyGizmoMode(EnemyGizmoMode.Rotate);}
     }
 
-    private void RefreshVisualEnemyModelParts(EslEnemyEntry? entry)
-    {
-        if (clbVisualEnemyModelParts == null || lblVisualEnemyParts == null) return;
-        syncingVisualEnemyModelParts = true;
-        try
-        {
-            clbVisualEnemyModelParts.BeginUpdate(); clbVisualEnemyModelParts.Items.Clear();
-            if (entry == null) { lblVisualEnemyParts.Text = "MODEL PARTS • selecione um inimigo"; return; }
-            if (!visualEnemyModelCache.TryGetValue(entry.EnemyType, out EnemyModelScene? model))
-            {
-                lblVisualEnemyParts.Text = $"MODEL PARTS • em{entry.EnemyType:X2}.dat • carregando..."; return;
-            }
-            bool automatic = EnemyModelPartCatalog.CanApplyAutomaticCoreParts(model, entry.EnemyType, entry.Subtype);
-            string mode = automatic ? "AUTO core + equipment" : "sem mapa automático";
-            string equipment = EnemyEquipmentCatalog.GetSummary(entry);
-            lblVisualEnemyParts.Text = $"MODEL PARTS • em{entry.EnemyType:X2}.dat • {mode} • {equipment}";
-            foreach (EnemyModelPart part in model.Parts.OrderBy(x => x.BinIndex))
-                clbVisualEnemyModelParts.Items.Add(new VisualEnemyModelPartItem(part), visualViewport?.IsEnemyModelPartAutomaticallyVisible(entry, part) != false);
-            RefreshVisualEnemyAttachment(entry);
-        }
-        finally { clbVisualEnemyModelParts.EndUpdate(); syncingVisualEnemyModelParts = false; }
-    }
-
-    private void RefreshVisualEnemyAttachment(EslEnemyEntry? entry)
-    {
-        if (cmbVisualEnemyAttachBone == null || visualViewport == null) return;
-        syncingVisualEnemyAttachment = true;
-        try
-        {
-            cmbVisualEnemyAttachBone.BeginUpdate(); cmbVisualEnemyAttachBone.Items.Clear();
-            if (entry == null) { lblVisualEnemyAttachment.Text = "ATTACHMENT DEBUG • selecione um inimigo"; return; }
-            IReadOnlyList<Ps2BinBone> bones = visualViewport.GetEnemyAttachmentBones(entry.EnemyType);
-            int source = visualViewport.GetEnemySkeletonSource(entry.EnemyType);
-            lblVisualEnemyAttachment.Text = entry.EnemyType == 0x12 ? $"ATTACHMENT DEBUG • Village weapons • Left Hand bone 16 • skeleton #{source:D3}" : $"ATTACHMENT DEBUG • em{entry.EnemyType:X2} • experimental";
-            foreach (Ps2BinBone bone in bones) cmbVisualEnemyAttachBone.Items.Add(new VisualEnemyAttachmentBoneItem(bone.Index,bone.Id,bone.ParentId));
-            if (bones.Count > 0)
-            {
-                int wanted = visualViewport.EnemyAttachmentBoneIndex;
-                // Village Ganados: bone/index 16 is the left hand; tested weapons are held there.
-                if (wanted < 0 || wanted >= bones.Count) wanted = entry.EnemyType == 0x12 && bones.Count > 16 ? 16 : Math.Min(bones.Count-1,0);
-                cmbVisualEnemyAttachBone.SelectedIndex = wanted; visualViewport.SetEnemyAttachmentBone(wanted);
-            }
-            var off=visualViewport.EnemyAttachmentOffset; var rot=visualViewport.EnemyAttachmentRotationDegrees;
-            nudVisualEnemyAttachX.Value=ClampNud(nudVisualEnemyAttachX,(decimal)off.X); nudVisualEnemyAttachY.Value=ClampNud(nudVisualEnemyAttachY,(decimal)off.Y); nudVisualEnemyAttachZ.Value=ClampNud(nudVisualEnemyAttachZ,(decimal)off.Z);
-            nudVisualEnemyAttachRX.Value=ClampNud(nudVisualEnemyAttachRX,(decimal)rot.X); nudVisualEnemyAttachRY.Value=ClampNud(nudVisualEnemyAttachRY,(decimal)rot.Y); nudVisualEnemyAttachRZ.Value=ClampNud(nudVisualEnemyAttachRZ,(decimal)rot.Z);
-        }
-        finally { cmbVisualEnemyAttachBone.EndUpdate(); syncingVisualEnemyAttachment=false; }
-    }
-
-    private static decimal ClampNud(NumericUpDown n, decimal value) => Math.Min(n.Maximum,Math.Max(n.Minimum,value));
-    private void cmbVisualEnemyAttachBone_SelectedIndexChanged(object? sender, EventArgs e)
-    {
-        if(syncingVisualEnemyAttachment || visualViewport==null || cmbVisualEnemyAttachBone.SelectedItem is not VisualEnemyAttachmentBoneItem b)return;
-        visualViewport.SetEnemyAttachmentBone(b.Index);
-    }
-    private void visualEnemyAttachment_ValueChanged(object? sender, EventArgs e)
-    {
-        if(syncingVisualEnemyAttachment || visualViewport==null)return;
-        visualViewport.SetEnemyAttachmentOffset((float)nudVisualEnemyAttachX.Value,(float)nudVisualEnemyAttachY.Value,(float)nudVisualEnemyAttachZ.Value);
-        visualViewport.SetEnemyAttachmentRotation((float)nudVisualEnemyAttachRX.Value,(float)nudVisualEnemyAttachRY.Value,(float)nudVisualEnemyAttachRZ.Value);
-    }
-
-    private void clbVisualEnemyModelParts_ItemCheck(object? sender, ItemCheckEventArgs e)
-    {
-        if (syncingVisualEnemyModelParts || visualViewport == null || e.Index < 0 || e.Index >= clbVisualEnemyModelParts.Items.Count) return;
-        if (GetVisualSelectedEnemies().FirstOrDefault() is not EslEnemyEntry enemy || clbVisualEnemyModelParts.Items[e.Index] is not VisualEnemyModelPartItem item) return;
-        visualViewport.SetEnemyModelPartVisible(enemy.EnemyType, item.Part.BinIndex, e.NewValue == CheckState.Checked);
-    }
-
-    private void btnVisualEnemyPartsSolo_Click(object? sender, EventArgs e)
-    {
-        if (visualViewport == null || GetVisualSelectedEnemies().FirstOrDefault() is not EslEnemyEntry enemy || clbVisualEnemyModelParts.SelectedItem is not VisualEnemyModelPartItem item) return;
-        visualViewport.SoloEnemyModelPart(enemy.EnemyType, item.Part.BinIndex);
-        RefreshVisualEnemyModelParts(enemy);
-    }
-
-    private void btnVisualEnemyPartsAll_Click(object? sender, EventArgs e)
-    {
-        if (visualViewport == null || GetVisualSelectedEnemies().FirstOrDefault() is not EslEnemyEntry enemy) return;
-        visualViewport.ShowAllEnemyModelParts(enemy.EnemyType);
-        RefreshVisualEnemyModelParts(enemy);
-    }
-
-    private void btnVisualEnemyPartsAuto_Click(object? sender, EventArgs e)
-    {
-        if (visualViewport == null || GetVisualSelectedEnemies().FirstOrDefault() is not EslEnemyEntry enemy) return;
-        visualViewport.UseAutomaticEnemyModelParts(enemy.EnemyType);
-        RefreshVisualEnemyModelParts(enemy);
-    }
-
     private void WireVisualEnemyEvents()
     {
         if (visualViewport == null) return;
@@ -635,6 +548,48 @@ public partial class Form1
         visualViewport.EnemyEntryClicked += visualViewport_EnemyEntryClicked;
         visualViewport.EnemyEntryEdited -= visualViewport_EnemyEntryEdited;
         visualViewport.EnemyEntryEdited += visualViewport_EnemyEntryEdited;
+        visualViewport.EnemyLabelClicked -= visualViewport_EnemyLabelClicked;
+        visualViewport.EnemyLabelClicked += visualViewport_EnemyLabelClicked;
+    }
+
+    private void visualViewport_EnemyLabelClicked(EslEnemyEntry entry,Point location)
+    {
+        if(visualViewport==null)return;EnsureViewportEnemyPicker();viewportEnemyPickerEntry=entry;syncingViewportEnemyPicker=true;
+        try
+        {
+            viewportEnemyType!.Items.Clear();viewportEnemyType.Items.AddRange(EslEnemyCatalog.AllVariants.Cast<object>().ToArray());
+            viewportEnemyType.SelectedItem=EslEnemyCatalog.GetVariantLabel(entry.EnemyType,entry.Subtype);
+            using Graphics measure=viewportEnemyType.CreateGraphics();int widest=viewportEnemyType.Items.Cast<string>().Select(x=>(int)Math.Ceiling(measure.MeasureString(x,viewportEnemyType.Font).Width)).DefaultIfEmpty(viewportEnemyType.Width).Max();
+            viewportEnemyType.DropDownWidth=Math.Clamp(widest+SystemInformation.VerticalScrollBarWidth+18,viewportEnemyType.Width,760);
+        }
+        finally{syncingViewportEnemyPicker=false;}
+        int left=Math.Clamp(location.X-12,4,Math.Max(4,visualViewport.ClientSize.Width-viewportEnemyPicker!.Width-4));
+        int top=Math.Clamp(location.Y+8,4,Math.Max(4,visualViewport.ClientSize.Height-viewportEnemyPicker.Height-4));
+        viewportEnemyPicker.Location=new Point(left,top);viewportEnemyPicker.Visible=true;viewportEnemyPicker.BringToFront();viewportEnemyType!.DroppedDown=true;
+    }
+
+    private void EnsureViewportEnemyPicker()
+    {
+        if(viewportEnemyPicker!=null||visualViewport==null)return;
+        viewportEnemyPicker=new Panel{Size=new Size(286,63),BackColor=Color.FromArgb(30,33,39),BorderStyle=BorderStyle.FixedSingle,Visible=false};
+        var title=new Label{Text="TROCAR INIMIGO",Left=9,Top=6,Width=225,Height=19,ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
+        var close=new Button{Text="×",Left=251,Top=2,Width=29,Height=25,FlatStyle=FlatStyle.Flat,BackColor=Surface2,ForeColor=TextPrimary,TabStop=false};close.FlatAppearance.BorderSize=0;close.Click+=(_,_)=>viewportEnemyPicker.Visible=false;
+        viewportEnemyType=new ComboBox{Left=8,Top=29,Width=270,Height=27,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat};
+        viewportEnemyType.SelectedIndexChanged+=viewportEnemyType_SelectedIndexChanged;
+        viewportEnemyPicker.Controls.AddRange(new Control[]{title,close,viewportEnemyType});visualViewport.Controls.Add(viewportEnemyPicker);
+    }
+
+    private void viewportEnemyType_SelectedIndexChanged(object? sender,EventArgs e)
+    {
+        if(syncingViewportEnemyPicker||viewportEnemyPickerEntry==null||viewportEnemyType?.SelectedItem is not string selected||!EslEnemyCatalog.TryParseVariantLabel(selected,out byte type,out byte subtype))return;
+        EslEnemyEntry entry=viewportEnemyPickerEntry;byte oldType=entry.EnemyType,oldSubtype=entry.Subtype;if(oldType==type&&oldSubtype==subtype)return;
+        visualViewport?.RegisterEnemyUndo(()=>ApplyViewportEnemyIdentity(entry,oldType,oldSubtype));ApplyViewportEnemyIdentity(entry,type,subtype);
+    }
+
+    private void ApplyViewportEnemyIdentity(EslEnemyEntry entry,byte type,byte subtype)
+    {
+        entry.EnemyType=type;entry.Subtype=subtype;NotifyEnemyEntriesChanged(new[]{entry.Index});visualViewport?.SelectEnemyEntry(entry);pgVisualProperties.SelectedObject=entry;pgVisualProperties.Refresh();
+        _=EnsureVisualEnemyModelsAsync();
     }
 
     private void visualViewport_EnemyEntryClicked(EslEnemyEntry? entry)
@@ -646,7 +601,6 @@ public partial class Form1
         if (found < 0) { chkVisualEnemyInactive.Checked = true; RefreshVisualEnemyEntryList(new[]{entry.Index}); for (int i=0;i<lstVisualEnemyEntries.Items.Count;i++) if (lstVisualEnemyEntries.Items[i] is EslEnemyEntry x && x.Index==entry.Index) { found=i; break; } }
         if (found >= 0) { lstVisualEnemyEntries.ClearSelected(); lstVisualEnemyEntries.SetSelected(found, true); lstVisualEnemyEntries.TopIndex = Math.Max(0, found - 4); }
         pgVisualProperties.SelectedObject = entry; lblVisualPropertiesTitle.Text = $"PROPERTIES • ENEMY #{entry.Index:D3}";
-        RefreshVisualEnemyModelParts(entry);
     }
 
     private void visualViewport_EnemyEntryEdited(EslEnemyEntry entry)
@@ -983,7 +937,6 @@ public partial class Form1
         lstVisualLitEntries?.Items.Clear();cmbVisualLitGroup?.Items.Clear();cmbVisualLitFile?.Items.Clear();
         lstVisualEffEntries?.Items.Clear();
         ClearVisualEffTexture();
-        RefreshVisualEnemyModelParts(null);
         if (cmbVisualAevTypeFilter != null) cmbVisualAevTypeFilter.Items.Clear();
         if (pgVisualProperties != null) pgVisualProperties.SelectedObject = null;
         if (btnVisualSaveAev != null) btnVisualSaveAev.Enabled = false;
@@ -1272,11 +1225,12 @@ public partial class Form1
         if(collisionTab&&!e.Control&&e.KeyCode==Keys.F&&visualCollisionMarkedEdges.Count>=2){btnVisualCollisionEdgeFill_Click(null,EventArgs.Empty);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(collisionTab&&!e.Control&&e.KeyCode==Keys.Delete){btnVisualCollisionRemove_Click(null,EventArgs.Empty);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(camTab&&!e.Control&&e.KeyCode==Keys.F){visualViewport?.FocusCam(lstVisualCamEntries.SelectedItem as CamEntry);e.Handled=true;e.SuppressKeyPress=true;return;}
-        if(camTab&&!e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3 or Keys.D4 or Keys.NumPad4 or Keys.D5 or Keys.NumPad5){SetCamGizmoMode(e.KeyCode is Keys.D1 or Keys.NumPad1?CamGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?CamGizmoMode.Scale:e.KeyCode is Keys.D3 or Keys.NumPad3?CamGizmoMode.Vertex:e.KeyCode is Keys.D4 or Keys.NumPad4?CamGizmoMode.Face:CamGizmoMode.Frame);e.Handled=true;e.SuppressKeyPress=true;return;}
-        if(smdTab&&!e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3){SmdGizmoMode mode=e.KeyCode is Keys.D1 or Keys.NumPad1?SmdGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?SmdGizmoMode.Rotate:SmdGizmoMode.Scale;if(chkVisualSmdEditMode.Checked)mode=SmdGizmoMode.Move;SetSmdGizmoMode(mode);e.Handled=true;e.SuppressKeyPress=true;return;}
+        if(camTab&&e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3 or Keys.D4 or Keys.NumPad4 or Keys.D5 or Keys.NumPad5){SetCamGizmoMode(e.KeyCode is Keys.D1 or Keys.NumPad1?CamGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?CamGizmoMode.Scale:e.KeyCode is Keys.D3 or Keys.NumPad3?CamGizmoMode.Vertex:e.KeyCode is Keys.D4 or Keys.NumPad4?CamGizmoMode.Face:CamGizmoMode.Frame);e.Handled=true;e.SuppressKeyPress=true;return;}
+        if(smdTab&&e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3){SmdGizmoMode mode=e.KeyCode is Keys.D1 or Keys.NumPad1?SmdGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?SmdGizmoMode.Rotate:SmdGizmoMode.Scale;if(chkVisualSmdEditMode.Checked)mode=SmdGizmoMode.Move;SetSmdGizmoMode(mode);e.Handled=true;e.SuppressKeyPress=true;return;}
+        if(smdTab&&e.Control&&e.KeyCode==Keys.K&&chkVisualSmdEditMode.Checked){SeparateSelectedSmdFaces();e.Handled=true;e.SuppressKeyPress=true;return;}
         if(objectTab && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;visualViewport?.FocusEts(lstVisualObjectEntries.SelectedItem as EtsEntry);return;}
-        if(objectTab && !e.Control && e.KeyCode is Keys.D1 or Keys.NumPad1){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Move);return;}
-        if(objectTab && !e.Control && e.KeyCode is Keys.D2 or Keys.NumPad2){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Rotate);return;}
+        if(objectTab && e.Control && e.KeyCode is Keys.D1 or Keys.NumPad1){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Move);return;}
+        if(objectTab && e.Control && e.KeyCode is Keys.D2 or Keys.NumPad2){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Rotate);return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;FocusSelectedEnemy();return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.G){e.Handled=true;e.SuppressKeyPress=true;SetEnemyGizmoMode(EnemyGizmoMode.Move);return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.R){e.Handled=true;e.SuppressKeyPress=true;SetEnemyGizmoMode(EnemyGizmoMode.Rotate);return;}
@@ -1594,6 +1548,21 @@ public partial class Form1
         if (pgVisualProperties.SelectedObject is ScenarioEntry smdEntry)
         {
             ScenarioEntry[] smdEntries=pgVisualProperties.SelectedObjects.OfType<ScenarioEntry>().ToArray();if(smdEntries.Length==0)smdEntries=new[]{smdEntry};
+            if(e.ChangedItem.PropertyDescriptor?.Name==nameof(ScenarioEntry.BinId))
+            {
+                ScenarioScene scene=visualViewport.Scene!;
+                try { _=SmdEmbeddedBinService.Extract(visualSmdPath!,smdEntry.BinId,scene.BinCount); }
+                catch(Exception ex)
+                {
+                    MessageBox.Show(this,$"O BIN {smdEntry.BinId:D3} não pode ser usado nesta cena.\n\n{ex.Message}","BIN SMD inválido",MessageBoxButtons.OK,MessageBoxIcon.Warning);
+                    smdEntry.BinId=(byte)e.OldValue; pgVisualProperties.Refresh(); return;
+                }
+                scene.IsModified=true;
+                if(!SaveVisualSmd())return;
+                ReloadVisualSmd(smdEntry.FileOrder);
+                lblVisualStatus.Text=$"Entry {smdEntry.FileOrder:D3} agora usa o BIN {smdEntry.BinId:D3}";
+                return;
+            }
             if(e.ChangedItem.PropertyDescriptor?.Name==nameof(ScenarioEntry.TextureIndex))
             {
                 if(smdEntry.TextureIndex<0||smdEntry.TextureIndex>byte.MaxValue){MessageBox.Show(this,"O índice de textura deve estar entre 0 e 255.","Textura SMD",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
@@ -1761,7 +1730,7 @@ public partial class Form1
         else if (scene != null) lblVisualStatus.Text = $"{scene.Triangles.Count:N0} tris • {visualViewport.LoadedTextureCount:N0} tex";
         else if (aev != null) lblVisualStatus.Text = $"{aev.Count:N0} AEV{modified}";
         else if(esl != null) lblVisualStatus.Text = $"{esl.ActiveCount:N0} enemies{modified}";
-        else lblVisualStatus.Text = "v0.7.0 • Visual Editor";
+        else lblVisualStatus.Text = "v0.7.1 • Visual Editor";
         UpdateTopVisualSaveState();
     }
 
@@ -1782,6 +1751,17 @@ public partial class Form1
         UpdateVisualStatus();
     }
 
+    private void RefreshVisualEditorTexturesForSmd(string smdPath, string tplPath)
+    {
+        if (visualViewport?.Scene == null || !File.Exists(tplPath) ||
+            !Path.GetFullPath(visualViewport.Scene.SourcePath).Equals(Path.GetFullPath(smdPath), StringComparison.OrdinalIgnoreCase))
+            return;
+        visualViewport.ReloadTextures(tplPath);
+        _ = UpdateVisualModifiedStateAsync();
+        UpdateVisualStatus();
+        if (string.Equals(visualSmdPath, smdPath, StringComparison.OrdinalIgnoreCase))
+            UpdateSmdTexturePreview(lstVisualSmdEntries?.SelectedItem as ScenarioEntry);
+    }
     private void ApplyVisualLayerSettings()
     {
         if (clbVisualLayers == null || clbVisualLayers.Items.Count < 8) return;
@@ -2155,14 +2135,6 @@ public partial class Form1
     private static System.Numerics.Vector3 V3(float x,float y,float z)=>new(x,y,z);
 
 
-    private void chkVisualEnemyModelParts_CheckedChanged(object? sender, EventArgs e)
-    {
-        if (pnlVisualEnemyModelParts != null) pnlVisualEnemyModelParts.Visible = chkVisualEnemyModelParts.Checked;
-        settings.VisualEnemyModelParts = chkVisualEnemyModelParts.Checked;
-        if (!restoringSession) SaveSettings();
-        if (chkVisualEnemyModelParts.Checked) RefreshVisualEnemyModelParts(GetVisualSelectedEnemies().FirstOrDefault());
-    }
-
     private void chkVisualEnemyInactive_CheckedChanged(object? sender, EventArgs e)
     {
         settings.VisualShowInactiveEnemies = chkVisualEnemyInactive.Checked;
@@ -2349,6 +2321,7 @@ public partial class Form1
         visualViewport.SmdTransformModeRequested-=visualViewport_SmdTransformModeRequested;visualViewport.SmdTransformModeRequested+=visualViewport_SmdTransformModeRequested;
         visualViewport.DuplicateSmdRequested-=visualViewport_DuplicateSmdRequested;visualViewport.DuplicateSmdRequested+=visualViewport_DuplicateSmdRequested;
         visualViewport.DeleteSmdRequested-=visualViewport_DeleteSmdRequested;visualViewport.DeleteSmdRequested+=visualViewport_DeleteSmdRequested;
+        visualViewport.SeparateSmdFacesRequested-=SeparateSelectedSmdFaces;visualViewport.SeparateSmdFacesRequested+=SeparateSelectedSmdFaces;
     }
     private void visualViewport_SmdSelectionChanged(IReadOnlyList<ScenarioEntry> entries)
     { tabVisualEntities.SelectedIndex=4;lstVisualSmdEntries.SelectedIndexChanged-=lstVisualSmdEntries_SelectedIndexChanged;try{lstVisualSmdEntries.ClearSelected();foreach(ScenarioEntry item in entries){int index=lstVisualSmdEntries.Items.IndexOf(item);if(index>=0)lstVisualSmdEntries.SetSelected(index,true);}}finally{lstVisualSmdEntries.SelectedIndexChanged+=lstVisualSmdEntries_SelectedIndexChanged;}lstVisualSmdEntries_SelectedIndexChanged(null,EventArgs.Empty); }
@@ -2386,7 +2359,7 @@ public partial class Form1
         int next=Math.Min(selected.Min(x=>x.FileOrder),scene.EntryCount-physical.Length-1);if(physical.Length>0)SmdEmbeddedBinService.RemoveEntries(visualSmdPath,physical.Select(x=>x.FileOrder).ToArray(),scene.EntryCount,scene.BinCount);ReloadVisualSmd(next);ExtractLog($"Visual Editor: {physical.Length} entry(s) removida(s) e {placeholders.Length} índice(s) protegido(s) preservado(s) como slots invisíveis.");
     }
     private void lstVisualSmdEntries_KeyDown(object? sender,KeyEventArgs e)
-    {if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){if(chkVisualSmdEditMode.Checked&&visualViewport.DeleteSelectedSmdFaces()){btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();}else DeleteSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}}
+    {if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}else if(e.Control&&e.KeyCode==Keys.K){SeparateSelectedSmdFaces();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){if(chkVisualSmdEditMode.Checked&&visualViewport.DeleteSelectedSmdFaces()){btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();}else DeleteSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}}
 
     private async void btnVisualSmdImport_Click(object? sender, EventArgs e)
     {
@@ -2396,40 +2369,39 @@ public partial class Form1
         if(modelDialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
         try
         {
-            ExternalModelStats stats=ExternalPs2ModelConverter.Analyze(modelDialog.FileName);int shared=current.Entries.Count(x=>x.BinId==entry.BinId);
-            string? texture=FindExternalModelTexture(modelDialog.FileName);
-            if(texture==null)
-            {
-                using var textureDialog=new OpenFileDialog{Filter="Imagens (*.png;*.bmp;*.jpg;*.jpeg)|*.png;*.bmp;*.jpg;*.jpeg|Todos os arquivos (*.*)|*.*",Title="Selecione a textura do modelo (Cancelar = manter textura atual)"};
-                if(textureDialog.ShowLocalizedDialog(this)==DialogResult.OK)texture=textureDialog.FileName;
-            }
-            string warning=shared>1?$"\n\nATENÇÃO: o BIN {entry.BinId} é compartilhado por {shared} entries. Todas usarão o novo modelo.":"";
-            string textureText=texture==null?"manter a textura atual":Path.GetFileName(texture);
-            DialogResult importChoice=MessageBox.Show(this,$"Modelo: {Path.GetFileName(modelDialog.FileName)}\nVértices: {stats.Vertices:N0}\nFaces: {stats.Faces:N0}\nReceptor: BIN {entry.BinId}\nTextura: {textureText}{warning}\n\nSIM: adicionar como novo BIN + nova entry no final.\nNÃO: substituir o BIN selecionado.\nCANCELAR: não importar.","Importar modelo SMD",MessageBoxButtons.YesNoCancel,shared>1?MessageBoxIcon.Warning:MessageBoxIcon.Question);if(importChoice==DialogResult.Cancel)return;bool addAsNew=importChoice==DialogResult.Yes;
+            ExternalModelStats stats=ExternalPs2ModelConverter.Analyze(modelDialog.FileName);
+            IReadOnlyList<ExternalModelMaterialTexture> textures=FindExternalModelTextures(modelDialog.FileName);
             string? converter=ResolveSmdExternalConverterPath();if(converter==null)return;
             if(current.IsModified&&!SaveVisualSmd())return;
             string backup=GetVisualAevBackupPath(visualSmdPath);Directory.CreateDirectory(Path.GetDirectoryName(backup)!);if(!File.Exists(backup))File.Copy(visualSmdPath,backup);
             byte[] receiver=SmdEmbeddedBinService.Extract(visualSmdPath,entry.BinId,current.BinCount);
             string tplPath=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");
-            if(!File.Exists(tplPath))RE4_PS2_MOD_WORKSPACE.Core.Smd.SmdTextureService.ExtractTpl(visualSmdPath,tplPath);
+            if(!EnsureCurrentSmdTpl(visualSmdPath,tplPath))return;
+            IReadOnlyList<byte> receiverTextures=SmdEmbeddedBinService.ReadBinMaterialTextures(receiver);
+            using var textureOptions=new SmdModelImportTextureDialog(textures,receiverTextures);
+            if(textureOptions.ShowLocalizedDialog(this)!=DialogResult.OK)return;
+            SmdModelTextureImportMode textureMode=textureOptions.Mode;bool createNewEntry=textureOptions.CreateNewEntry;
+            if(textureMode==SmdModelTextureImportMode.ReplaceShared&&MessageBox.Show(this,"Esta opção altera índices globais do TPL. Outros modelos que usam as mesmas texturas também mudarão.\n\nDeseja realmente sobrescrever as texturas compartilhadas?","Sobrescrever texturas globais",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
             UseWaitCursor=true;btnVisualSmdImport.Enabled=false;lblVisualStatus.Text="Convertendo modelo para BIN PS2...";
             string generated=await ExternalPs2ModelConverter.ConvertAsync(converter,modelDialog.FileName,receiver);
-            byte[] converted=File.ReadAllBytes(generated);int selectedAfter=entry.FileOrder;
+            byte[] converted=File.ReadAllBytes(generated);int selectedAfter=entry.FileOrder;byte importedBinId=entry.BinId;
+            string? stagedTpl=null;bool tplChanged=false;
             try
             {
-                if(addAsNew&&texture!=null){int newTexture=new TextureWorkspaceService().AppendFromImage(tplPath,texture);if(newTexture>byte.MaxValue)throw new InvalidDataException("O TPL atingiu o limite de índices suportado pelo material BIN.");SmdEmbeddedBinService.SetBinMaterialTexture(converted,(byte)newTexture);}
-                if(addAsNew)selectedAfter=SmdEmbeddedBinService.AppendEntry(visualSmdPath,entry,current.EntryCount,current.BinCount,converted);else SmdEmbeddedBinService.Replace(visualSmdPath,entry.BinId,current.BinCount,converted);
+                if(textureMode!=SmdModelTextureImportMode.Preserve){stagedTpl=Path.Combine(Path.GetTempPath(),"re4_smd_import_"+Guid.NewGuid().ToString("N")+".tpl");File.Copy(tplPath,stagedTpl,true);}
+                ApplyImportedModelTextures(converted,receiverTextures,textures,textureMode,stagedTpl??tplPath);tplChanged=textureMode!=SmdModelTextureImportMode.Preserve;
+                if(createNewEntry)
+                {
+                    ScenarioEntry importedTemplate=CloneSmdEntry(entry);
+                    selectedAfter=SmdEmbeddedBinService.AppendEntry(visualSmdPath,importedTemplate,current.EntryCount,current.BinCount,converted);
+                    importedBinId=checked((byte)current.BinCount);
+                }
+                else SmdEmbeddedBinService.Replace(visualSmdPath,entry.BinId,current.BinCount,converted);
+                if(tplChanged){File.Copy(stagedTpl!,tplPath,true);RE4_PS2_MOD_WORKSPACE.Core.Smd.SmdTextureService.InjectTpl(visualSmdPath,tplPath);}
             }
-            finally{try{File.Delete(generated);}catch{}}
-            if(texture!=null&&!addAsNew)
-            {
-                int[] textureIndices=entry.LocalTriangles.Select(x=>x.TextureIndex).Where(x=>x>=0).Distinct().ToArray();
-                if(textureIndices.Length==0)throw new InvalidDataException("O BIN receptor não possui materiais com textura para receber a imagem.");
-                var textureService=new TextureWorkspaceService();foreach(int index in textureIndices)textureService.ReplaceFromImage(tplPath,index,texture);
-            }
-            if(texture!=null)RE4_PS2_MOD_WORKSPACE.Core.Smd.SmdTextureService.InjectTpl(visualSmdPath,tplPath);
+            finally{try{File.Delete(generated);}catch{}try{if(stagedTpl!=null)File.Delete(stagedTpl);}catch{}}
             ScenarioCameraState camera=visualViewport.GetCameraState();float flySpeed=visualViewport.FlySpeed;ScenarioScene reloaded=await Task.Run(()=>Ps2ScenarioReader.Read(visualSmdPath));visualViewport.SetScene(reloaded);visualViewport.SetCameraState(camera);visualViewport.FlySpeed=flySpeed;WireVisualSmdEvents();RefreshVisualSmdEntryList(reloaded.Entries.FirstOrDefault(x=>x.FileOrder==selectedAfter));visualViewport.SetTextureSource(tplPath);visualViewport.ReloadTextures(tplPath);
-            btnVisualSaveSmd.Enabled=true;lblVisualStatus.Text=$"Modelo importado • BIN {entry.BinId} • {stats.Faces:N0} faces";ExtractLog($"Visual Editor: {Path.GetFileName(modelDialog.FileName)} importado no BIN SMD {entry.BinId} com {(texture==null?"textura preservada":Path.GetFileName(texture))}.");
+            btnVisualSaveSmd.Enabled=true;lblVisualStatus.Text=$"Modelo importado • BIN {importedBinId} • {(createNewEntry?"nova entry":"BIN existente")} • {stats.Faces:N0} faces";ExtractLog($"Visual Editor: {Path.GetFileName(modelDialog.FileName)} importado no BIN SMD {importedBinId} • {(createNewEntry?"nova entry criada":"BIN existente substituído")} • texturas: {textureMode}.");
         }
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Importar modelo SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);ExtractLog("Visual Editor: erro ao importar modelo SMD: "+ex.Message);}
         finally{UseWaitCursor=false;btnVisualSmdImport.Enabled=lstVisualSmdEntries?.SelectedItem is ScenarioEntry;}
@@ -2460,6 +2432,72 @@ public partial class Form1
         using var dialog=new SaveFileDialog{Title="Exportar modelo BIN",Filter="Modelo BIN do PS2 (*.bin)|*.bin",FileName=$"smd_bin_{entry.BinId:D3}.bin"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
         try{SmdModelExporter.ExportBin(visualSmdPath,entry,scene.BinCount,dialog.FileName);int shared=scene.Entries.Count(x=>x.BinId==entry.BinId);lblVisualStatus.Text=$"BIN {entry.BinId:D3} exportado"+(shared>1?$" • compartilhado por {shared} entries":"");ExtractLog($"Visual Editor: BIN SMD {entry.BinId:D3} exportado para {dialog.FileName}.");}
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar BIN",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private void SeparateSelectedSmdFaces()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;
+        if(entry==null||scene==null||visualViewport==null||!chkVisualSmdEditMode.Checked||string.IsNullOrWhiteSpace(visualSmdPath))return;
+        IReadOnlyList<int> selectedFlags=visualViewport.GetSelectedSmdFaceFlags(),allFlags=visualViewport.GetAllSmdFaceFlags();if(selectedFlags.Count==0){MessageBox.Show(this,"Ative o Edit Mode e arraste para selecionar algumas faces do objeto.","Separar faces",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+        if(scene.IsModified&&!SaveVisualSmd())return;
+        if(MessageBox.Show(this,$"Separar {selectedFlags.Count:N0} faces da entry {entry.FileOrder:D3} (BIN {entry.BinId:D3})?\n\nAs faces selecionadas virarão uma nova entry para edição independente. O restante continuará na entry atual. Outras entries que compartilham este BIN não serão alteradas.","Separar faces selecionadas",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+        try
+        {
+            EnsureVisualSmdBackup();int originalIndex=entry.FileOrder;string recovery=visualSmdPath+".facesplit_recovery";File.Copy(visualSmdPath,recovery,true);int newEntry=-1;
+            try
+            {
+                newEntry=SmdEmbeddedBinService.SplitBinFacesIntoEntry(visualSmdPath,entry,scene.EntryCount,scene.BinCount,allFlags,selectedFlags);
+                ScenarioScene check=Ps2ScenarioReader.Read(visualSmdPath);ScenarioEntry kept=check.Entries.First(x=>x.FileOrder==originalIndex),separated=check.Entries.First(x=>x.FileOrder==newEntry);
+                if(kept.LocalTriangles.Count!=allFlags.Count-selectedFlags.Count||separated.LocalTriangles.Count!=selectedFlags.Count)throw new InvalidDataException("A validação da separação não preservou exatamente as faces escolhidas; o SMD original foi restaurado.");
+                RecenterSmdEntryPivot(visualSmdPath,separated,check.EntryCount,check.BinCount);
+            }
+            catch{File.Copy(recovery,visualSmdPath,true);throw;}
+            finally{try{File.Delete(recovery);}catch{}}
+            ReloadVisualSmd(newEntry);
+            lblVisualStatus.Text=$"{selectedFlags.Count:N0} faces separadas e pivô centralizado na entry {newEntry:D3}";
+            ExtractLog($"Visual Editor: {selectedFlags.Count:N0} faces do BIN SMD {entry.BinId:D3} separadas da entry {originalIndex:D3}; nova entry {newEntry:D3} criada.");
+        }
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Separar faces",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private void RecalculateSelectedSmdPivot()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;
+        if(entry==null||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;
+        if(scene.IsModified&&!SaveVisualSmd())return;
+        string recovery=visualSmdPath+".pivot_recovery";File.Copy(visualSmdPath,recovery,true);
+        try
+        {
+            EnsureVisualSmdBackup();ScenarioScene fresh=Ps2ScenarioReader.Read(visualSmdPath);ScenarioEntry target=fresh.Entries.First(x=>x.FileOrder==entry.FileOrder);
+            RecenterSmdEntryPivot(visualSmdPath,target,fresh.EntryCount,fresh.BinCount);
+            ReloadVisualSmd(target.FileOrder);lblVisualStatus.Text=$"Pivô da entry {target.FileOrder:D3} centralizado";ExtractLog($"Visual Editor: pivô da entry SMD {target.FileOrder:D3} recalculado para o centro do modelo.");
+        }
+        catch(Exception ex){File.Copy(recovery,visualSmdPath,true);try{ReloadVisualSmd(entry.FileOrder);}catch{}MessageBox.Show(this,ex.Message,"Recalcular pivô",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        finally{try{File.Delete(recovery);}catch{}}
+    }
+
+    private static void RecenterSmdEntryPivot(string smdPath,ScenarioEntry entry,int entryCount,int binCount)
+    {
+        if(entry.LocalTriangles.Count==0)throw new InvalidOperationException("Esta entry não possui geometria para calcular o centro do modelo.");
+        Vector3 min=new(float.PositiveInfinity),max=new(float.NegativeInfinity);
+        foreach(ScenarioTriangle triangle in entry.LocalTriangles){min=Vector3.Min(min,Vector3.Min(triangle.A,Vector3.Min(triangle.B,triangle.C)));max=Vector3.Max(max,Vector3.Max(triangle.A,Vector3.Max(triangle.B,triangle.C)));}
+        Vector3 center=(min+max)*.5f;if(!float.IsFinite(center.X)||!float.IsFinite(center.Y)||!float.IsFinite(center.Z))throw new InvalidDataException("Não foi possível calcular o centro da geometria.");
+        var edits=new Dictionary<int,(Vector3 Position,float Factor)>();
+        void Add(int offset,Vector3 position,float factor){if(offset>=0)edits[offset]=(position-center,factor);}
+        foreach(ScenarioTriangle t in entry.LocalTriangles){Add(t.SourceOffsetA,t.A,t.SourceFactor);Add(t.SourceOffsetB,t.B,t.SourceFactor);Add(t.SourceOffsetC,t.C,t.SourceFactor);}
+        if(edits.Count==0)throw new InvalidOperationException("A geometria não possui offsets de vértice editáveis no BIN.");
+        Vector3 delta=new(center.X*entry.ScaleX,center.Y*entry.ScaleY,center.Z*entry.ScaleZ);
+        float c=MathF.Cos(entry.RotationX),s=MathF.Sin(entry.RotationX);delta=new(delta.X,delta.Y*c-delta.Z*s,delta.Y*s+delta.Z*c);
+        c=MathF.Cos(entry.RotationY);s=MathF.Sin(entry.RotationY);delta=new(delta.X*c+delta.Z*s,delta.Y,-delta.X*s+delta.Z*c);
+        c=MathF.Cos(entry.RotationZ);s=MathF.Sin(entry.RotationZ);delta=new(delta.X*c-delta.Y*s,delta.X*s+delta.Y*c,delta.Z);
+        int shared=Ps2ScenarioReader.Read(smdPath).Entries.Count(x=>x.BinId==entry.BinId);byte binId=entry.BinId;
+        if(shared>1)binId=SmdEmbeddedBinService.CloneBinForEntry(smdPath,entry,entryCount,binCount);
+        int effectiveBinCount=binCount+(shared>1?1:0);
+        SmdEmbeddedBinService.SetBinVertexPositions(smdPath,binId,effectiveBinCount,edits);
+        entry.BinId=binId;entry.PositionX+=delta.X;entry.PositionY+=delta.Y;entry.PositionZ+=delta.Z;
+        ScenarioScene updated=Ps2ScenarioReader.Read(smdPath);ScenarioEntry updatedEntry=updated.Entries.First(x=>x.FileOrder==entry.FileOrder);
+        updatedEntry.PositionX=entry.PositionX;updatedEntry.PositionY=entry.PositionY;updatedEntry.PositionZ=entry.PositionZ;updatedEntry.BinId=binId;
+        Ps2ScenarioWriter.WriteTransforms(updated,smdPath);
     }
 
     private void EditSelectedSmdTextures()
@@ -2516,11 +2554,41 @@ public partial class Form1
         string[] names={"RE4_PS2_BIN_TOOL.exe","Re4Ps2BINrepack.exe"};foreach(string folder in new[]{Application.StartupPath,Path.Combine(Application.StartupPath,"Tools")})foreach(string name in names){string path=Path.Combine(folder,name);if(File.Exists(path))return path;}
         using var dialog=new OpenFileDialog{Filter="RE4 PS2 BIN Tool (*.exe)|*.exe",Title="Selecione a RE4 PS2 BIN Tool"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return null;settings.Ps2BinToolPath=dialog.FileName;SaveSettings();return dialog.FileName;
     }
-    private static string? FindExternalModelTexture(string modelPath)
+    private bool EnsureCurrentSmdTpl(string smdPath,string tplPath)
+    {
+        if(!File.Exists(tplPath)){SmdTextureService.ExtractTpl(smdPath,tplPath);return true;}
+        if(SmdTextureService.TplMatchesSmd(smdPath,tplPath))return true;
+        DialogResult choice=MessageBox.Show(this,"O TPL de trabalho é diferente do TPL que está dentro deste SMD.\n\nSIM: usar as alterações de textura que estão no arquivo de trabalho.\nNÃO: descartar esse arquivo e reler o TPL do SMD.\nCANCELAR: interromper a importação.","TPL de trabalho diferente",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2);
+        if(choice==DialogResult.Cancel)return false;if(choice==DialogResult.No)SmdTextureService.ExtractTpl(smdPath,tplPath);return true;
+    }
+    private static void ApplyImportedModelTextures(byte[] converted,IReadOnlyList<byte> receiverTextures,IReadOnlyList<ExternalModelMaterialTexture> textures,SmdModelTextureImportMode mode,string tplPath)
+    {
+        int materialCount=SmdEmbeddedBinService.ReadBinMaterialTextures(converted).Count;if(materialCount==0)throw new InvalidDataException("O BIN convertido não possui materiais editáveis.");
+        byte Existing(int i)=>receiverTextures.Count==0?(byte)0:receiverTextures[Math.Min(i,receiverTextures.Count-1)];
+        if(mode==SmdModelTextureImportMode.Preserve){for(int i=0;i<materialCount;i++)SmdEmbeddedBinService.SetBinMaterialTextureAt(converted,i,Existing(i));return;}
+        var service=new TextureWorkspaceService();var imageIndices=new Dictionary<string,byte>(StringComparer.OrdinalIgnoreCase);var byMaterial=textures.ToDictionary(x=>x.MaterialIndex);var replacedTargets=new HashSet<byte>();
+        for(int i=0;i<materialCount;i++)
+        {
+            if(!byMaterial.TryGetValue(i,out ExternalModelMaterialTexture? materialTexture)){SmdEmbeddedBinService.SetBinMaterialTextureAt(converted,i,Existing(i));continue;}
+            string image=materialTexture.ImagePath;if(imageIndices.TryGetValue(image,out byte reused)){SmdEmbeddedBinService.SetBinMaterialTextureAt(converted,i,reused);continue;}
+            int target;if(mode==SmdModelTextureImportMode.ReplaceShared&&i<receiverTextures.Count&&replacedTargets.Add(receiverTextures[i])){target=receiverTextures[i];service.ReplaceFromImage(tplPath,target,image);}else target=service.AppendFromImage(tplPath,image);
+            if(target>byte.MaxValue)throw new InvalidDataException("O TPL atingiu o limite de 256 texturas.");byte index=(byte)target;imageIndices[image]=index;SmdEmbeddedBinService.SetBinMaterialTextureAt(converted,i,index);
+        }
+    }
+    private static IReadOnlyList<ExternalModelMaterialTexture> FindExternalModelTextures(string modelPath)
     {
         string directory=Path.GetDirectoryName(modelPath)??"";string mtl=Path.ChangeExtension(modelPath,".mtl");
-        if(File.Exists(mtl))foreach(string raw in File.ReadLines(mtl)){string line=raw.Trim();if(!line.StartsWith("map_Kd ",StringComparison.OrdinalIgnoreCase))continue;string value=line[7..].Trim().Trim('"');string candidate=Path.IsPathRooted(value)?value:Path.Combine(directory,value);if(File.Exists(candidate))return candidate;}
-        string stem=Path.Combine(directory,Path.GetFileNameWithoutExtension(modelPath));foreach(string extension in new[]{".png",".bmp",".jpg",".jpeg"})if(File.Exists(stem+extension))return stem+extension;return null;
+        if(File.Exists(mtl))
+        {
+            var materialNames=new HashSet<string>(StringComparer.OrdinalIgnoreCase);var images=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);string material="Material";
+            foreach(string raw in File.ReadLines(mtl))
+            {
+                string line=raw.Trim();if(line.StartsWith("newmtl ",StringComparison.OrdinalIgnoreCase)){material=line[7..].Trim();materialNames.Add(material);continue;}if(!line.StartsWith("map_Kd ",StringComparison.OrdinalIgnoreCase))continue;
+                materialNames.Add(material);string value=line[7..].Trim().Trim('"');string candidate=Path.IsPathRooted(value)?value:Path.GetFullPath(Path.Combine(directory,value));if(File.Exists(candidate))images[material]=candidate;
+            }
+            string[] ordered=materialNames.OrderBy(x=>x,StringComparer.OrdinalIgnoreCase).ToArray();var found=new List<ExternalModelMaterialTexture>();for(int i=0;i<ordered.Length;i++)if(images.TryGetValue(ordered[i],out string? image))found.Add(new ExternalModelMaterialTexture(i,ordered[i],image));if(found.Count>0)return found;
+        }
+        string stem=Path.Combine(directory,Path.GetFileNameWithoutExtension(modelPath));foreach(string extension in new[]{".png",".bmp",".jpg",".jpeg"})if(File.Exists(stem+extension))return new[]{new ExternalModelMaterialTexture(0,"Material",stem+extension)};return Array.Empty<ExternalModelMaterialTexture>();
     }
     private void EnsureVisualSmdBackup(){string backup=GetVisualAevBackupPath(visualSmdPath!);Directory.CreateDirectory(Path.GetDirectoryName(backup)!);if(!File.Exists(backup))File.Copy(visualSmdPath!,backup);}
     private static ScenarioEntry CloneSmdEntry(ScenarioEntry e)=>new(){RawData=(byte[])e.RawData.Clone(),BinId=e.BinId,PositionX=e.PositionX,PositionY=e.PositionY,PositionZ=e.PositionZ,RotationX=e.RotationX,RotationY=e.RotationY,RotationZ=e.RotationZ,ScaleX=e.ScaleX,ScaleY=e.ScaleY,ScaleZ=e.ScaleZ,TextureIndex=e.TextureIndex,LocalTriangles=e.LocalTriangles};

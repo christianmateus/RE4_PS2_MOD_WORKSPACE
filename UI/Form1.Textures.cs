@@ -15,6 +15,8 @@ public partial class Form1
     private int textureThumbnailSize = 104;
     private bool textureDropBusy;
     private int thumbnailRequestId;
+    private CancellationTokenSource? externalTplSyncCancellation;
+    private int externalTplSyncGeneration;
 
 
     private void RefreshTextureDatList()
@@ -414,10 +416,83 @@ public partial class Form1
         }
         var psi = new System.Diagnostics.ProcessStartInfo(settings.TplManagerPath) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(settings.TplManagerPath)! };
         psi.ArgumentList.Add(tplPath);
-        System.Diagnostics.Process.Start(psi);
+        System.Diagnostics.Process? process = System.Diagnostics.Process.Start(psi);
+        if (process != null && activeTextureSource is { IsEff: false } source &&
+            Path.GetFullPath(source.FullPath).Equals(Path.GetFullPath(activeTextureSmdPath ?? ""), StringComparison.OrdinalIgnoreCase))
+            _ = WatchExternalSmdTplAsync(process, source, tplPath);
         ExtractLog("TPL aberto no TPL Manager: " + tplPath);
     }
 
+    private async Task WatchExternalSmdTplAsync(System.Diagnostics.Process process, TextureSmdItem source, string tplPath)
+    {
+        externalTplSyncCancellation?.Cancel();
+        externalTplSyncCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        externalTplSyncCancellation = cancellation;
+        int generation = Interlocked.Increment(ref externalTplSyncGeneration);
+        string lastHash = File.Exists(tplPath) ? RE4_PS2_MOD_WORKSPACE.Core.Workspace.ChangeDetectionService.HashFile(tplPath) : string.Empty;
+
+        try
+        {
+            while (!cancellation.IsCancellationRequested && !process.HasExited)
+            {
+                await Task.Delay(700, cancellation.Token);
+                if (!File.Exists(tplPath)) continue;
+                string currentHash;
+                try { currentHash = await Task.Run(() => RE4_PS2_MOD_WORKSPACE.Core.Workspace.ChangeDetectionService.HashFile(tplPath), cancellation.Token); }
+                catch (IOException) { continue; }
+                if (string.Equals(currentHash, lastHash, StringComparison.OrdinalIgnoreCase)) continue;
+                await Task.Delay(900, cancellation.Token);
+                string stableHash;
+                try { stableHash = await Task.Run(() => RE4_PS2_MOD_WORKSPACE.Core.Workspace.ChangeDetectionService.HashFile(tplPath), cancellation.Token); }
+                catch (IOException) { continue; }
+                if (!string.Equals(currentHash, stableHash, StringComparison.OrdinalIgnoreCase)) continue;
+                lastHash = stableHash;
+                if (generation != externalTplSyncGeneration) return;
+                await InjectExternalSmdTplAsync(source, tplPath);
+            }
+            if (!cancellation.IsCancellationRequested && generation == externalTplSyncGeneration && File.Exists(tplPath))
+            {
+                await Task.Delay(300, cancellation.Token);
+                string finalHash = await Task.Run(() => RE4_PS2_MOD_WORKSPACE.Core.Workspace.ChangeDetectionService.HashFile(tplPath), cancellation.Token);
+                if (!string.Equals(finalHash, lastHash, StringComparison.OrdinalIgnoreCase))
+                    await InjectExternalSmdTplAsync(source, tplPath);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (!IsDisposed && generation == externalTplSyncGeneration)
+                BeginInvoke(new Action(() => MessageBox.Show(this, "Não foi possível sincronizar o TPL alterado com o SMD.\n\n" + ex.Message, "Sincronização TPL/SMD", MessageBoxButtons.OK, MessageBoxIcon.Warning)));
+        }
+        finally
+        {
+            if (generation == externalTplSyncGeneration && ReferenceEquals(externalTplSyncCancellation, cancellation))
+            {
+                externalTplSyncCancellation.Dispose();
+                externalTplSyncCancellation = null;
+            }
+            process.Dispose();
+        }
+    }
+
+    private async Task InjectExternalSmdTplAsync(TextureSmdItem source, string tplPath)
+    {
+        if (!File.Exists(source.FullPath) || !File.Exists(tplPath) || SmdTextureService.TplMatchesSmd(source.FullPath, tplPath)) return;
+        string backup = GetSmdBackupPath(source.FullPath);
+        await Task.Run(() => SmdTextureService.InjectTpl(source.FullPath, tplPath, backup));
+        if (!IsDisposed && !Disposing)
+        {
+            RefreshVisualEditorTexturesForSmd(source.FullPath, tplPath);
+            if (activeTextureSource?.Key == source.Key)
+            {
+                await ReloadTextureCatalogKeepingSelectionAsync(lvTextures.SelectedItems.Count == 1 && lvTextures.SelectedItems[0].Tag is TextureInfo selected ? selected.Index : 0);
+                await RefreshChangeStatusAsync();
+                _ = RefreshTrackedDatsAsync();
+            }
+        }
+        ExtractLog($"TPL externo sincronizado com {Path.GetFileName(source.FullPath)}.");
+    }
     private string GetTplWorkPath(string smdPath, string? datName = null)
     {
         string root = project.RootPath ?? Path.GetDirectoryName(smdPath)!;

@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 using System.ComponentModel;
 
@@ -55,7 +55,7 @@ public sealed class ScenarioEntry
     [Browsable(false)] public int FileOrder { get; set; }
     [Browsable(false)] public IReadOnlyList<ScenarioTriangle> LocalTriangles { get; set; } = Array.Empty<ScenarioTriangle>();
     [Category("Object"), DisplayName("Entry")] public int Index => FileOrder;
-    [Category("Object"), DisplayName("BIN ID"), ReadOnly(true)] public byte BinId { get; set; }
+    [Category("Object"), DisplayName("BIN ID")] public byte BinId { get; set; }
     [Category("Position")] public float PositionX { get; set; }
     [Category("Position")] public float PositionY { get; set; }
     [Category("Position")] public float PositionZ { get; set; }

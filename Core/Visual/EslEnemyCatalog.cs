@@ -79,4 +79,11 @@ public static class EslEnemyCatalog
     }
     public static IReadOnlyList<EnemyInfo> All => Data.Values.OrderBy(x => x.Id).ToArray();
     public static IReadOnlyDictionary<byte, string> GetSubtypes(byte type) => Data.TryGetValue(type, out var enemy) ? enemy.Subtypes : new Dictionary<byte, string>();
+    public static string GetVariantLabel(byte type,byte subtype)=>$"em{type:X2}-{subtype:X2} • {GetFullName(type,subtype)}";
+    public static IReadOnlyList<string> AllVariants=>Data.Values.OrderBy(x=>x.Id).SelectMany(x=>x.Subtypes.OrderBy(s=>s.Key).Select(s=>GetVariantLabel(x.Id,s.Key))).ToArray();
+    public static bool TryParseVariantLabel(string? text,out byte type,out byte subtype)
+    {
+        type=subtype=0;if(string.IsNullOrWhiteSpace(text)||text.Length<7||!text.StartsWith("em",StringComparison.OrdinalIgnoreCase))return false;
+        return byte.TryParse(text.AsSpan(2,2),System.Globalization.NumberStyles.HexNumber,null,out type)&&text[4]=='-'&&byte.TryParse(text.AsSpan(5,2),System.Globalization.NumberStyles.HexNumber,null,out subtype);
+    }
 }

@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 namespace RE4_PS2_MOD_WORKSPACE.Core.Animation;
-public sealed record FcvSmdImportResult(FcvAnimation Animation,int FramesRead,int RotationTracksUpdated,bool RootTranslationUpdated);
+public sealed record FcvSmdImportResult(FcvAnimation Animation,int FramesRead,int RotationTracksUpdated,int IkTargetsUpdated,bool RootTranslationUpdated);
 public static class FcvSmdRoundTrip
 {
  static readonly CultureInfo C=CultureInfo.InvariantCulture;
@@ -20,9 +20,50 @@ public static class FcvSmdRoundTrip
  public static FcvSmdImportResult Import(string path,Ps2BinSkeleton sk,FcvAnimation template)
  {
   var frames=Read(path,sk);if(frames.Count==0||frames.Keys.First()!=0)throw new InvalidDataException("SMD timeline must start at frame 0.");int count=frames.Keys.Last()+1;if(count>ushort.MaxValue)throw new InvalidDataException("Too many SMD frames.");for(int f=0;f<count;f++)if(!frames.ContainsKey(f))throw new InvalidDataException($"Missing SMD frame {f}.");Validate(path,sk);
-  var result=Clone(template,(ushort)count);var world=new Quaternion[count,sk.Bones.Count];for(int f=0;f<count;f++)for(int i=0;i<sk.Bones.Count;i++){if(!frames[f].TryGetValue(i,out var p))throw new InvalidDataException($"Frame {f}: missing bone {i}.");var q=FromSmdRotation(Q(p.Rot));int parent=sk.Bones[i].ParentIndex;world[f,i]=parent<0?q:Quaternion.Normalize(world[f,parent]*q);}
-  int changed=0;bool root=false;foreach(var t in result.Tracks){if(!sk.FirstIndexById.TryGetValue(t.NodeId,out int bi))continue;int enc=t.DataType>>4;if(t.Type is 0x02 or 0x10 or 0x40&&RotEnc(enc)){var v=Enumerable.Range(0,count).Select(f=>FcvEuler(t.Type==0x10?world[f,bi]:FromSmdRotation(Q(frames[f][bi].Rot)))).ToArray();Set(t.X,v.Select(x=>x.X),enc,true);Set(t.Y,v.Select(x=>x.Y),enc,true);Set(t.Z,v.Select(x=>x.Z),enc,true);changed++;}else if(sk.Bones[bi].ParentIndex<0&&t.Type is 0x01 or 0x04&&enc==0){var bind=sk.Bones[bi].LocalPosition;var v=Enumerable.Range(0,count).Select(f=>FromSmdPosition(frames[f][bi].Pos)).ToArray();Set(t.X,v.Select(x=>t.Type==1?x.X-bind.X:x.X),0,false);Set(t.Y,v.Select(x=>t.Type==1?x.Y-bind.Y:x.Y),0,false);Set(t.Z,v.Select(x=>t.Type==1?x.Z-bind.Z:x.Z),0,false);root=true;}}
-  return new(result,count,changed,root);
+  var result=Clone(template,(ushort)count);var worldRot=new Quaternion[count,sk.Bones.Count];var worldPos=new Vector3[count,sk.Bones.Count];
+  for(int f=0;f<count;f++)for(int i=0;i<sk.Bones.Count;i++)
+  {
+   if(!frames[f].TryGetValue(i,out var p))throw new InvalidDataException($"Frame {f}: missing bone {i}.");
+   Quaternion localRotation=FromSmdRotation(Q(p.Rot));Vector3 localPosition=FromSmdPosition(p.Pos);int parent=sk.Bones[i].ParentIndex;
+   worldRot[f,i]=parent<0?localRotation:Quaternion.Normalize(worldRot[f,parent]*localRotation);
+   worldPos[f,i]=parent<0?localPosition:worldPos[f,parent]+Vector3.Transform(localPosition,worldRot[f,parent]);
+  }
+  int changed=0,targets=0;bool root=false;int rootBone=Enumerable.Range(0,sk.Bones.Count).FirstOrDefault(i=>sk.Bones[i].ParentIndex<0);
+  foreach(var t in result.Tracks)
+  {
+   if(!sk.FirstIndexById.TryGetValue(t.NodeId,out int bi))continue;int enc=t.DataType>>4;
+   // IK-root rotations (10/20/30/A0) are intentionally preserved. The exported SMD already
+   // contains the solved limb, so baking that result back into the controller and then running
+   // the original target again would solve the arm/leg twice.
+   if(t.Type is 0x02 or 0x40&&RotEnc(enc))
+   {
+    var v=Enumerable.Range(0,count).Select(f=>FcvEuler(FromSmdRotation(Q(frames[f][bi].Rot)))).ToArray();Set(t.X,v.Select(x=>x.X),enc,true);Set(t.Y,v.Select(x=>x.Y),enc,true);Set(t.Z,v.Select(x=>x.Z),enc,true);changed++;
+   }
+   else if(sk.Bones[bi].ParentIndex<0&&t.Type is 0x01 or 0x04&&enc==0)
+   {
+    var bind=sk.Bones[bi].LocalPosition;var v=Enumerable.Range(0,count).Select(f=>FromSmdPosition(frames[f][bi].Pos)).ToArray();Set(t.X,v.Select(x=>t.Type==1?x.X-bind.X:x.X),0,false);Set(t.Y,v.Select(x=>t.Type==1?x.Y-bind.Y:x.Y),0,false);Set(t.Z,v.Select(x=>t.Type==1?x.Z-bind.Z:x.Z),0,false);root=true;
+   }
+   else if(t.Type==0x04&&IsIkTarget(result,sk,bi)&&enc==0)
+   {
+    Vector3[] values=Enumerable.Range(0,count).Select(f=>
+    {
+     Vector3 rootMotion=worldPos[f,rootBone]-sk.Bones[rootBone].LocalPosition;
+     return Vector3.Transform(worldPos[f,bi]-rootMotion,Quaternion.Inverse(worldRot[f,rootBone]));
+    }).ToArray();
+    Set(t.X,values.Select(x=>x.X),0,false);Set(t.Y,values.Select(x=>x.Y),0,false);Set(t.Z,values.Select(x=>x.Z),0,false);targets++;
+   }
+  }
+  return new(result,count,changed,targets,root);
+ }
+ static bool IsIkTarget(FcvAnimation animation,Ps2BinSkeleton sk,int bone)
+ {
+  int p=sk.Bones[bone].ParentIndex;
+  for(int depth=0;p>=0&&depth<3;depth++,p=sk.Bones[p].ParentIndex)
+  {
+   byte id=sk.Bones[p].Id;
+   if(animation.Tracks.Any(t=>t.NodeId==id&&(t.Type&0x30)!=0))return true;
+  }
+  return false;
  }
  static (Vector3,Quaternion) Local(Ps2BinSkeleton s,FcvSkeletonPose p,int i){int parent=s.Bones[i].ParentIndex;if(parent<0)return(p.WorldPositions[i],p.WorldRotations[i]);var inv=Quaternion.Inverse(p.WorldRotations[parent]);return(Vector3.Transform(p.WorldPositions[i]-p.WorldPositions[parent],inv),Quaternion.Normalize(inv*p.WorldRotations[i]));}
  static Quaternion Q(Vector3 e)=>Quaternion.Normalize(Quaternion.CreateFromAxisAngle(Vector3.UnitZ,e.Z)*Quaternion.CreateFromAxisAngle(Vector3.UnitY,e.Y)*Quaternion.CreateFromAxisAngle(Vector3.UnitX,e.X));
@@ -69,8 +110,8 @@ public static class FcvSmdRoundTrip
  static Vector3 SmdEuler(Quaternion value){var q=Quaternion.Normalize(value);float x=MathF.Atan2(2*(q.W*q.X+q.Y*q.Z),1-2*(q.X*q.X+q.Y*q.Y));float y=MathF.Asin(Math.Clamp(2*(q.W*q.Y-q.Z*q.X),-1,1));float z=MathF.Atan2(2*(q.W*q.Z+q.X*q.Y),1-2*(q.Y*q.Y+q.Z*q.Z));return new(x,y,z);}
  static Vector3 FcvEuler(Quaternion value){var q=Quaternion.Normalize(value);float x=MathF.Asin(Math.Clamp(2*(q.W*q.X-q.Y*q.Z),-1,1));float y=MathF.Atan2(2*(q.W*q.Y+q.X*q.Z),1-2*(q.X*q.X+q.Y*q.Y));float z=MathF.Atan2(2*(q.W*q.Z+q.X*q.Y),1-2*(q.X*q.X+q.Z*q.Z));return new(x,y,z);}
  static void Set(FcvAxis a,IEnumerable<float> values,int enc,bool rotation){a.Keys.Clear();int f=0;foreach(float v in values)a.Keys.Add(new((ushort)f++,rotation?Encode(v,enc):v,0,0,0));}
- static double Encode(float r,int e)=>e switch{0 or 1=>r,4 or 5 or 6=>Math.Clamp(Math.Round(r/Math.PI*32767),short.MinValue,short.MaxValue),8 or 9 or 10=>Math.Clamp(Math.Round(r/Math.PI*127),sbyte.MinValue,sbyte.MaxValue),_=>0};
- static bool RotEnc(int e)=>e is 0 or 1 or 4 or 5 or 6 or 8 or 9 or 10;static string N(float v)=>v.ToString("R",C);
+ static double Encode(float r,int e)=>e switch{0 or 1 or 2 or 15=>r,4 or 5 or 6=>Math.Clamp(Math.Round(r*10000.0),short.MinValue,short.MaxValue),8 or 9 or 10=>Math.Clamp(Math.Round(r*10000.0),sbyte.MinValue,sbyte.MaxValue),_=>0};
+ static bool RotEnc(int e)=>e is 0 or 1 or 2 or 4 or 5 or 6 or 8 or 9 or 10 or 15;static string N(float v)=>v.ToString("R",C);
  static SortedDictionary<int,Dictionary<int,Pose>> Read(string path,Ps2BinSkeleton sk)
  {
   var r=new SortedDictionary<int,Dictionary<int,Pose>>();var nodeMap=ReadNodeMap(path,sk);bool section=false;int time=-1;

@@ -30,7 +30,6 @@ public sealed class AppSettings
     public bool VisualSoundLayer { get; set; } = false;
     public string? SelectedEnemyEslName { get; set; }
     public bool VisualEnemyLabels { get; set; } = false;
-    public bool VisualEnemyModelParts { get; set; } = false;
     public bool VisualEnemySnap { get; set; } = false;
     public bool VisualEnemyAnimated { get; set; } = false;
     public bool VisualShowInactiveEnemies { get; set; } = false;
@@ -45,6 +44,13 @@ public sealed class AppSettings
     public bool VisualPropertiesPanelCollapsed { get; set; } = false;
     public string? LastCharacterDatPath { get; set; }
     public string? LastAnimationDatPath { get; set; }
+    public string? LastAnimationFcvFile { get; set; }
+    public bool AnimationLabShowSkeleton { get; set; } = true;
+    public bool AnimationLabRestPose { get; set; } = false;
+    public bool AnimationLabIgnoreRootMotion { get; set; } = true;
+    public int AnimationLabBackgroundBrightness { get; set; } = 24;
+    public int AnimationInspectorAxisIndex { get; set; } = 0;
+    public int AnimationViewTabIndex { get; set; } = 0;
     public bool HasCharacterCamera { get; set; }
     public float CharacterCameraX { get; set; }
     public float CharacterCameraY { get; set; }

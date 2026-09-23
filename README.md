@@ -1,4 +1,4 @@
-# RE4 PS2 MOD WORKSPACE — v0.7.0
+# RE4 PS2 MOD WORKSPACE — v0.7.1
 
 ![Screenshot](Images/screenshot7.png)
 

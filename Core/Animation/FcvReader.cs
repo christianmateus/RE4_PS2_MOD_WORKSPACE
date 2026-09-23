@@ -23,7 +23,20 @@ public sealed class FcvTrack
     public FcvAxis X { get; init; } = new();
     public FcvAxis Y { get; init; } = new();
     public FcvAxis Z { get; init; } = new();
-    public string TypeName => Type switch { 0x01 => "Movement (Relative)", 0x02 => "Rotation (Relative)", 0x04 => "Translation (Relative)", 0x08 => "Scale (Relative)", 0x10 => "Rotation (Absolute?)", 0x20 => "Translation (Absolute?)", 0x40 => "Scale (Absolute?)", 0x80 => "Flip Bone", _ => $"Unknown 0x{Type:X2}" };
+    public string TypeName => Type switch
+    {
+        0x01 => "Root Position",
+        0x02 => "Rotation",
+        0x04 => "Translation / IK Target",
+        0x08 => "Scale",
+        0x10 => "Rotation / IK Root",
+        0x20 => "Rotation / Toe IK Root",
+        0x30 => "Rotation / IK Root",
+        0x40 => "Root Rotation",
+        0x80 => "Flip Bone",
+        0xA0 => "Rotation / Toe IK Root",
+        _ => $"Unknown 0x{Type:X2}"
+    };
     public override string ToString() => $"#{Index:D2}  Node {NodeId:X2}  {TypeName}  [{Type:X2}/{DataType:X2}]";
 }
 
@@ -91,14 +104,14 @@ public static class FcvReader
             {
                 0x0 => (br.ReadSingle(), br.ReadSingle(), br.ReadSingle(), 0),
                 0x1 => (br.ReadSingle(), br.ReadInt16(), br.ReadInt16(), 0),
-                0x2 => (br.ReadInt16(), br.ReadInt16(), br.ReadInt16(), 0),
+                0x2 => (br.ReadSingle(), unchecked((sbyte)br.ReadByte()), unchecked((sbyte)br.ReadByte()), 0),
                 0x4 => (br.ReadInt16(), br.ReadSingle(), br.ReadSingle(), 0),
-                0x5 => (br.ReadInt16(), br.ReadInt16(), br.ReadUInt16(), 0),
+                0x5 => (br.ReadInt16(), br.ReadInt16(), br.ReadInt16(), 0),
                 0x6 => (br.ReadInt16(), unchecked((sbyte)br.ReadByte()), unchecked((sbyte)br.ReadByte()), 0),
                 0x8 => (unchecked((sbyte)br.ReadByte()), br.ReadSingle(), br.ReadSingle(), 0),
                 0x9 => (unchecked((sbyte)br.ReadByte()), br.ReadInt16(), br.ReadInt16(), 0),
                 0xA => (unchecked((sbyte)br.ReadByte()), unchecked((sbyte)br.ReadByte()), unchecked((sbyte)br.ReadByte()), 0),
-                0xF => (unchecked((sbyte)br.ReadByte()), br.ReadByte(), br.ReadByte(), br.ReadByte()),
+                0xF => (br.ReadSingle(), 0, 0, 0),
                 _ => throw new InvalidDataException($"Encoding FCV desconhecido: 0x{encoding:X1}0")
             };
             axis.Keys.Add(new FcvKey(frames[i], v, tin, tout, extra));
