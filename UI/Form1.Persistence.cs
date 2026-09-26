@@ -6,16 +6,15 @@ public partial class Form1
     {
         try
         {
-            if (File.Exists(settingsFile)) settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(settingsFile)) ?? new();
+            settings = ReadJsonWithRecovery(settingsFile, new AppSettings());
             if (!string.IsNullOrWhiteSpace(settings.LastWorkspace)) LoadProject(settings.LastWorkspace);
         }
-        catch { settings = new(); project = new(); }
+        catch (Exception ex) { settings = new(); project = new(); Trace.WriteLine("[Persistence] Não foi possível restaurar as configurações: " + ex.Message); }
     }
 
     private void SaveSettings()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(settingsFile)!);
-        File.WriteAllText(settingsFile, JsonSerializer.Serialize(settings, JsonOptions()));
+        WriteJsonAtomically(settingsFile, settings);
     }
 
     private void LoadProject(string root)
@@ -23,7 +22,7 @@ public partial class Form1
         try
         {
             var file = Path.Combine(root, ".re4workspace.json");
-            project = File.Exists(file) ? JsonSerializer.Deserialize<WorkspaceProject>(File.ReadAllText(file)) ?? new() : new WorkspaceProject();
+            project = ReadJsonWithRecovery(file, new WorkspaceProject());
             project.RootPath = root;
         }
         catch { project = new WorkspaceProject { RootPath = root }; }
@@ -34,9 +33,43 @@ public partial class Form1
         if (string.IsNullOrWhiteSpace(project.RootPath)) return;
         MigrateActiveDatState();
         EnsureFolders();
-        File.WriteAllText(Path.Combine(project.RootPath, ".re4workspace.json"), JsonSerializer.Serialize(project, JsonOptions()));
+        WriteJsonAtomically(Path.Combine(project.RootPath, ".re4workspace.json"), project);
         settings.LastWorkspace = project.RootPath;
         SaveSettings();
+    }
+
+    private static void WriteJsonAtomically<T>(string path, T value)
+    {
+        string directory = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(directory);
+        string temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        string previous = path + ".previous";
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(value, JsonOptions()));
+            using (JsonDocument.Parse(File.ReadAllText(temporary))) { }
+            if (File.Exists(path)) File.Replace(temporary, path, previous, true);
+            else File.Move(temporary, path);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) try { File.Delete(temporary); } catch { }
+        }
+    }
+
+    private static T ReadJsonWithRecovery<T>(string path, T fallback)
+    {
+        foreach (string candidate in new[] { path, path + ".previous" })
+        {
+            if (!File.Exists(candidate)) continue;
+            try
+            {
+                T? value = JsonSerializer.Deserialize<T>(File.ReadAllText(candidate));
+                if (value is not null) return value;
+            }
+            catch (Exception ex) { Trace.WriteLine($"[Persistence] JSON inválido em '{candidate}': {ex.Message}"); }
+        }
+        return fallback;
     }
 
     private static JsonSerializerOptions JsonOptions() => new() { WriteIndented = true };

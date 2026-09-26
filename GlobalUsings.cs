@@ -1,4 +1,6 @@
+global using System.IO;
 global using RE4_PS2_MOD_WORKSPACE.Core.Afs;
+global using RE4_PS2_MOD_WORKSPACE.Core.Video;
 global using RE4_PS2_MOD_WORKSPACE.Core.Dat;
 global using RE4_PS2_MOD_WORKSPACE.Core.Iso;
 global using RE4_PS2_MOD_WORKSPACE.Core.Smd;

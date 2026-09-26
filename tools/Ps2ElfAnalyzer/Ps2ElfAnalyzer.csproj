@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup><Compile Include="..\..\Core\Iso\Iso9660.cs" Link="Iso9660.cs" /><Compile Include="..\..\Core\Afs\AfsService.cs" Link="AfsService.cs" /><Compile Include="..\..\Core\Patching\GanadoScalePatch.cs" Link="GanadoScalePatch.cs" /></ItemGroup>
+</Project>

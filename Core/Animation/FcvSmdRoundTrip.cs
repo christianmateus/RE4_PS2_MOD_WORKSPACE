@@ -109,7 +109,36 @@ public static class FcvSmdRoundTrip
  }
  static Vector3 SmdEuler(Quaternion value){var q=Quaternion.Normalize(value);float x=MathF.Atan2(2*(q.W*q.X+q.Y*q.Z),1-2*(q.X*q.X+q.Y*q.Y));float y=MathF.Asin(Math.Clamp(2*(q.W*q.Y-q.Z*q.X),-1,1));float z=MathF.Atan2(2*(q.W*q.Z+q.X*q.Y),1-2*(q.Y*q.Y+q.Z*q.Z));return new(x,y,z);}
  static Vector3 FcvEuler(Quaternion value){var q=Quaternion.Normalize(value);float x=MathF.Asin(Math.Clamp(2*(q.W*q.X-q.Y*q.Z),-1,1));float y=MathF.Atan2(2*(q.W*q.Y+q.X*q.Z),1-2*(q.X*q.X+q.Y*q.Y));float z=MathF.Atan2(2*(q.W*q.Z+q.X*q.Y),1-2*(q.X*q.X+q.Z*q.Z));return new(x,y,z);}
- static void Set(FcvAxis a,IEnumerable<float> values,int enc,bool rotation){a.Keys.Clear();int f=0;foreach(float v in values)a.Keys.Add(new((ushort)f++,rotation?Encode(v,enc):v,0,0,0));}
+ static void Set(FcvAxis a,IEnumerable<float> values,int enc,bool rotation)
+ {
+  double[] encoded=values.Select(v=>rotation?Encode(v,enc):EncodeRaw(v,enc)).ToArray();
+  a.Keys.Clear();if(encoded.Length==0)return;if(encoded.Length==1){a.Keys.Add(new(0,encoded[0],0,0,0));return;}
+  double tolerance=ReductionTolerance(enc,rotation);var keep=new SortedSet<int>{0,encoded.Length-1};var pending=new Stack<(int Start,int End)>();pending.Push((0,encoded.Length-1));
+  while(pending.Count>0)
+  {
+   var(start,end)=pending.Pop();if(end-start<=1)continue;double left=Decode(encoded[start],enc,rotation),right=Decode(encoded[end],enc,rotation),delta=right-left;
+   double tangent=DecodeTangent(EncodeTangent(delta,enc),enc);double worst=tolerance;int split=-1;
+   for(int frame=start+1;frame<end;frame++)
+   {
+    double u=(double)(frame-start)/(end-start),sample=Hermite(left,right,tangent,tangent,u),actual=Decode(encoded[frame],enc,rotation),error=Math.Abs(actual-sample);
+    if(error>worst){worst=error;split=frame;}
+   }
+   if(split>=0){keep.Add(split);pending.Push((start,split));pending.Push((split,end));}
+  }
+  int[] frames=keep.ToArray();for(int i=0;i<frames.Length;i++)
+  {
+   int frame=frames[i];double value=encoded[frame],decoded=Decode(value,enc,rotation),tin=0,tout=0;
+   if(i>0){double previous=Decode(encoded[frames[i-1]],enc,rotation);tin=EncodeTangent(decoded-previous,enc);}
+   if(i+1<frames.Length){double next=Decode(encoded[frames[i+1]],enc,rotation);tout=EncodeTangent(next-decoded,enc);}
+   a.Keys.Add(new((ushort)frame,value,tin,tout,0));
+  }
+ }
+ static double ReductionTolerance(int enc,bool rotation)=>rotation?(enc is 8 or 9 or 10?0.00015:0.001):(enc is 8 or 9 or 10?0.25:0.5);
+ static double Hermite(double a,double b,double outgoing,double incoming,double u){double u2=u*u,u3=u2*u;return(2*u3-3*u2+1)*a+(u3-2*u2+u)*outgoing+(-2*u3+3*u2)*b+(u3-u2)*incoming;}
+ static double EncodeRaw(float value,int enc)=>enc switch{0 or 1 or 2 or 15=>value,4 or 5 or 6=>Math.Clamp(Math.Round(value),short.MinValue,short.MaxValue),8 or 9 or 10=>Math.Clamp(Math.Round(value),sbyte.MinValue,sbyte.MaxValue),_=>value};
+ static double Decode(double value,int enc,bool rotation)=>rotation&&enc is 4 or 5 or 6 or 8 or 9 or 10?value*0.0001:value;
+ static double EncodeTangent(double value,int enc)=>enc switch{0 or 4 or 8=>value,1 or 5 or 9=>Math.Clamp(Math.Round(value*10000.0),short.MinValue,short.MaxValue),2 or 6 or 10=>Math.Clamp(Math.Round(value*10000.0),sbyte.MinValue,sbyte.MaxValue),_=>0};
+ static double DecodeTangent(double value,int enc)=>enc switch{0 or 4 or 8=>value,1 or 2 or 5 or 6 or 9 or 10=>value*0.0001,_=>0};
  static double Encode(float r,int e)=>e switch{0 or 1 or 2 or 15=>r,4 or 5 or 6=>Math.Clamp(Math.Round(r*10000.0),short.MinValue,short.MaxValue),8 or 9 or 10=>Math.Clamp(Math.Round(r*10000.0),sbyte.MinValue,sbyte.MaxValue),_=>0};
  static bool RotEnc(int e)=>e is 0 or 1 or 2 or 4 or 5 or 6 or 8 or 9 or 10 or 15;static string N(float v)=>v.ToString("R",C);
  static SortedDictionary<int,Dictionary<int,Pose>> Read(string path,Ps2BinSkeleton sk)

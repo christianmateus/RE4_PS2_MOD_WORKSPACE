@@ -2,21 +2,21 @@
 
 public partial class Form1
 {
-    private void btnBrowseWorkspace_Click(object? sender, EventArgs e)
+    private async void btnBrowseWorkspace_Click(object? sender, EventArgs e)
     {
         var selected = BrowseFolder(txtWorkspacePath.Text);
         if (selected == null) return;
-        SetWorkspace(selected);
+        await SetWorkspaceAsync(selected);
     }
 
-    private void btnCreateWorkspace_Click(object? sender, EventArgs e)
+    private async void btnCreateWorkspace_Click(object? sender, EventArgs e)
     {
         string? root = string.IsNullOrWhiteSpace(txtWorkspacePath.Text) ? BrowseFolder() : txtWorkspacePath.Text.Trim();
         if (string.IsNullOrWhiteSpace(root)) return;
 
         try
         {
-            SetWorkspace(root);
+            if (!await SetWorkspaceAsync(root)) return;
             MessageBox.Show($"Workspace criado com sucesso.\n\n{root}\n\nPastas criadas: Original, Extracted, Mods, Build e Temp.", "RE4 PS2 Mod Workspace", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -25,9 +25,10 @@ public partial class Form1
         }
     }
 
-    private void SetWorkspace(string root)
+    private async Task<bool> SetWorkspaceAsync(string root)
     {
         root = Path.GetFullPath(root);
+        if (!string.Equals(project.RootPath, root, StringComparison.OrdinalIgnoreCase) && !await ConfirmSavePendingChangesAsync("trocar de projeto")) return false;
         if (!string.Equals(project.RootPath, root, StringComparison.OrdinalIgnoreCase)) LoadProject(root);
         project.RootPath = root;
         EnsureFolders();
@@ -36,6 +37,7 @@ public partial class Form1
         lblWorkspaceCurrent.Text = root;
         RefreshDashboard();
         WriteLog("Workspace definido: " + root);
+        return true;
     }
 
     private void btnOpenWorkspace_Click(object? sender, EventArgs e) => OpenFolder(project.RootPath);

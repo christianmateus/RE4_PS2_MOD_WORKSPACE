@@ -4,10 +4,12 @@ public partial class Form1
 {
     private HashSet<string>? buildSelectionOverride;
 
-    private async void btnBuildAll_Click(object? sender, EventArgs e)
+    private async void btnBuildAll_Click(object? sender, EventArgs e) => await RunBuildAllAsync(true);
+
+    private async Task RunBuildAllAsync(bool launchEmulator)
     {
         if (!RequireWorkspace()) return;
-        if (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path)) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (launchEmulator && (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path))) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
         try
@@ -17,7 +19,7 @@ public partial class Form1
                 await SyncCharacterDatToContentAsync(state);
             await SaveVisualEditorAllAsync(false);
             SetBuildBusy(true, "Preparando o build de todos os DATs modificados...");
-            WriteLog("=== BUILD ALL & TEST ===");
+            WriteLog(launchEmulator ? "=== BUILD ALL & TEST ===" : "=== SOMENTE BUILD • SELEÇÃO ===");
             var statuses = await GetTrackedDatStatusesAsync();
             HashSet<string>? selectedKeys = buildSelectionOverride;
             var targets = statuses.Where(x => selectedKeys == null
@@ -29,9 +31,11 @@ public partial class Form1
             {
                 if (looseTargets.Count == 0)
                 {
-                    WriteLog("Nenhum arquivo selecionado precisa de build. Abrindo a ISO de Build existente.");
+                    WriteLog(launchEmulator ? "Nenhum arquivo selecionado precisa de build. Abrindo a ISO de Build existente." : "Nenhum arquivo selecionado precisa de build; a ISO já está atualizada.");
                     if (!File.Exists(buildIso)) throw new FileNotFoundException("Nenhum arquivo precisa de build, mas a ISO de Build ainda não existe.");
-                    LaunchPcsx2WithIso(buildIso); return;
+                    await ApplyGanadoScalePatchAsync(buildIso);
+                    if (launchEmulator) LaunchPcsx2WithIso(buildIso);
+                    return;
                 }
             }
             if (File.Exists(buildIso) && !string.IsNullOrWhiteSpace(project.BuildIsoSourcePath) && !string.Equals(Path.GetFullPath(project.BuildIsoSourcePath), Path.GetFullPath(project.IsoPath), StringComparison.OrdinalIgnoreCase))
@@ -84,13 +88,17 @@ public partial class Form1
             }
             await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso, selectedKeys);
             if (selectedKeys == null) await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
+            await ApplyGanadoScalePatchAsync(buildIso);
             project.ActiveBuildIsoPath = buildIso; project.BuildIsoSourcePath = project.IsoPath;
             var activeState = !string.IsNullOrWhiteSpace(project.ActiveDatName) ? GetDatState(project.ActiveDatName, false) : null;
             if (activeState != null) { project.ActiveBuildDatPath = activeState.BuildDatPath; project.LastBuildUtc = activeState.LastBuildUtc; }
             SaveProject(); UpdateBuildUi(); await RefreshTrackedDatsAsync(); await RefreshChangeStatusAsync();
-            WriteLog($"BUILD concluído: {targets.Length} DAT(s) e {looseTargets.Count} arquivo(s) do AFS processado(s). Abrindo PCSX2...");
-            SetBuildBusy(true, "Build All concluído. Abrindo o PCSX2...");
-            LaunchPcsx2WithIso(buildIso);
+            WriteLog($"BUILD concluído: {targets.Length} DAT(s) e {looseTargets.Count} arquivo(s) do AFS processado(s)." + (launchEmulator ? " Abrindo PCSX2..." : " ISO pronta para uso."));
+            if (launchEmulator)
+            {
+                SetBuildBusy(true, "Build All concluído. Abrindo o PCSX2...");
+                LaunchPcsx2WithIso(buildIso);
+            }
         }
         catch (Exception ex) { WriteLog("ERRO NO BUILD ALL: " + ex.Message); MessageBox.Show(ex.Message, "Build All", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { buildSelectionOverride = null; SetBuildBusy(false); await RefreshTrackedDatsAsync(); }

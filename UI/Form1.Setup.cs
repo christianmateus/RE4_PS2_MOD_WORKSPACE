@@ -62,7 +62,7 @@ public partial class Form1
             throw new InvalidDataException("A ISO selecionada não contém nenhum arquivo AFS compatível.");
 
         progress.Report("Criando a estrutura do workspace...");
-        SetWorkspace(value.WorkspacePath);
+        if (!await SetWorkspaceAsync(value.WorkspacePath)) throw new OperationCanceledException("A troca de workspace foi cancelada.");
         project.IsoPath = value.IsoPath;
         settings.Pcsx2Path = value.Pcsx2Path;
         settings.TplManagerPath = string.IsNullOrWhiteSpace(value.TplManagerPath) ? null : value.TplManagerPath;

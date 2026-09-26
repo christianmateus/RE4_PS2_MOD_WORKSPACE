@@ -53,12 +53,52 @@ public sealed class EslEnemyEntry
     [Category("Location"), DisplayName("Scenario"), ReadOnly(true), Description("Stage + Room: Stage 1 / Room 02 = r102.dat")] public string ScenarioName => $"r{StageID:X1}{RoomID:X2}.dat";
     [Category("Unknown"), DisplayName("Unknown 2")] public byte Unknown2 { get; set; }
     [Category("Unknown"), DisplayName("Unknown 3")] public byte Unknown3 { get; set; }
-    [Category("Unknown"), DisplayName("Unknown 4")] public byte Unknown4 { get; set; }
+    [Browsable(false)] public byte Unknown4 { get; set; }
+    [Category("Transform"), DisplayName("Tamanho individual"), Description("Multiplicador exclusivo deste inimigo (em09 ou em10–em4F). Automático preserva o tamanho original do jogo."), TypeConverter(typeof(EslIndividualScaleConverter))]
+    public EslIndividualScaleValue IndividualScale
+    {
+        get => Enum.IsDefined(typeof(EslIndividualScaleValue),Unknown4) ? (EslIndividualScaleValue)Unknown4 : EslIndividualScaleValue.Automatico;
+        set => Unknown4=(byte)value;
+    }
+    [Browsable(false)] public float IndividualScaleMultiplier => Unknown4 == 0 ? 1f : Unknown4 / 16f;
     [Category("Unknown"), DisplayName("Unknown 5")] public byte Unknown5 { get; set; }
     [Category("Unknown"), DisplayName("Unknown 6")] public byte Unknown6 { get; set; }
     [Category("Unknown"), DisplayName("Unknown 7")] public byte Unknown7 { get; set; }
     [Browsable(false)] public Vector3 Position => new(PosX, PosY, PosZ);
     public override string ToString() => $"#{Index:D3}  {EslEnemyCatalog.GetFullName(EnemyType, Subtype)}  HP {Health}";
+}
+
+public enum EslIndividualScaleValue : byte
+{
+    Automatico=0, Scale050=8, Scale075=12, Scale100=16, Scale125=20,
+    Scale150=24, Scale200=32, Scale250=40, Scale300=48
+}
+
+public sealed class EslIndividualScaleConverter : EnumConverter
+{
+    public EslIndividualScaleConverter():base(typeof(EslIndividualScaleValue)){}
+    public override bool CanConvertFrom(ITypeDescriptorContext? context,Type sourceType)
+        => sourceType==typeof(string)||base.CanConvertFrom(context,sourceType);
+    public override object? ConvertFrom(ITypeDescriptorContext? context,CultureInfo? culture,object value)
+    {
+        if(value is string text)
+        {
+            text=text.Trim();
+            foreach(EslIndividualScaleValue scale in Enum.GetValues<EslIndividualScaleValue>())
+                if(string.Equals(Label(scale),text,StringComparison.CurrentCultureIgnoreCase))return scale;
+        }
+        return base.ConvertFrom(context,culture,value);
+    }
+    public override object? ConvertTo(ITypeDescriptorContext? context,CultureInfo? culture,object? value,Type destinationType)
+        => destinationType==typeof(string)&&value is EslIndividualScaleValue scale ? Label(scale) : base.ConvertTo(context,culture,value,destinationType);
+    private static string Label(EslIndividualScaleValue scale)=>scale switch
+        {
+            EslIndividualScaleValue.Automatico=>"Automático (original)", EslIndividualScaleValue.Scale050=>"0,50×",
+            EslIndividualScaleValue.Scale075=>"0,75×", EslIndividualScaleValue.Scale100=>"1,00×",
+            EslIndividualScaleValue.Scale125=>"1,25×", EslIndividualScaleValue.Scale150=>"1,50×",
+            EslIndividualScaleValue.Scale200=>"2,00×", EslIndividualScaleValue.Scale250=>"2,50×",
+            EslIndividualScaleValue.Scale300=>"3,00×", _=>scale.ToString()
+        };
 }
 
 public sealed class EslEnemyVariantConverter : StringConverter

@@ -14,7 +14,7 @@ public partial class Form1
             if (busy) pnlBuildBusy.BringToFront();
         }
 
-        foreach (Button button in new[] { btnBuildOneClick, btnBuildAll, btnBuildRefreshChanges, btnBuildRefreshTracked, btnBuildRecreateIso, btnBuildClean, btnBuildResetWorkspace, btnBuildFolder })
+        foreach (Button button in new[] { btnBuildOneClick, btnBuildOnly, btnBuildAll, btnBuildRefreshTracked, btnBuildRecreateIso, btnBuildClean, btnBuildResetWorkspace, btnBuildFolder })
             if (button != null && !button.IsDisposed) button.Enabled = !busy;
 
         UseWaitCursor = busy;

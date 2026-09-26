@@ -13,18 +13,46 @@ namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
+    private bool applyingVisualSidePanelState;
+
     private void ToggleVisualLayersPanel(){settings.VisualLayersPanelCollapsed=!settings.VisualLayersPanelCollapsed;ApplyVisualSidePanelState();if(!restoringSession)SaveSettings();}
     private void ToggleVisualPropertiesPanel(){settings.VisualPropertiesPanelCollapsed=!settings.VisualPropertiesPanelCollapsed;ApplyVisualSidePanelState();if(!restoringSession)SaveSettings();}
     private void ApplyVisualSidePanelState()
     {
         if(splitVisualWorkspace==null||tblVisualWorkspaceRight==null)return;
-        splitVisualWorkspace.Panel1Collapsed=settings.VisualLayersPanelCollapsed;
-        pnlVisualPropertiesHost.Visible=!settings.VisualPropertiesPanelCollapsed;
-        tblVisualWorkspaceRight.ColumnStyles[1].Width=settings.VisualPropertiesPanelCollapsed?0F:(tblVisualWorkspaceRight.ClientSize.Width<850?260F:310F);
-        if(btnVisualLayersToggle!=null){btnVisualLayersToggle.Text=settings.VisualLayersPanelCollapsed?"MOSTRAR LAYERS":"OCULTAR LAYERS";btnVisualLayersToggle.AccessibleName=settings.VisualLayersPanelCollapsed?"Mostrar Layers e abas":"Recolher Layers e abas";}
-        if(btnVisualPropertiesToggle!=null){btnVisualPropertiesToggle.Text=settings.VisualPropertiesPanelCollapsed?"MOSTRAR PROPS":"OCULTAR PROPS";btnVisualPropertiesToggle.AccessibleName=settings.VisualPropertiesPanelCollapsed?"Mostrar Propriedades":"Recolher Propriedades";}
-        splitVisualWorkspace.PerformLayout();
+        applyingVisualSidePanelState=true;
+        try
+        {
+            splitVisualWorkspace.Panel1Collapsed=settings.VisualLayersPanelCollapsed;
+            if(!settings.VisualLayersPanelCollapsed)
+            {
+                int minimum=Math.Max(1,splitVisualWorkspace.Panel1MinSize);
+                int maximum=Math.Max(minimum,splitVisualWorkspace.ClientSize.Width-splitVisualWorkspace.Panel2MinSize-splitVisualWorkspace.SplitterWidth);
+                splitVisualWorkspace.SplitterDistance=Math.Clamp(settings.VisualLayersPanelWidth,minimum,maximum);
+            }
+            pnlVisualPropertiesHost.Visible=!settings.VisualPropertiesPanelCollapsed;
+            tblVisualWorkspaceRight.ColumnStyles[1].Width=settings.VisualPropertiesPanelCollapsed?0F:(tblVisualWorkspaceRight.ClientSize.Width<850?260F:310F);
+            if(btnVisualLayersToggle!=null){btnVisualLayersToggle.Text=settings.VisualLayersPanelCollapsed?"MOSTRAR LAYERS":"OCULTAR LAYERS";btnVisualLayersToggle.AccessibleName=settings.VisualLayersPanelCollapsed?"Mostrar Layers e abas":"Recolher Layers e abas";}
+            if(btnVisualPropertiesToggle!=null){btnVisualPropertiesToggle.Text=settings.VisualPropertiesPanelCollapsed?"MOSTRAR PROPS":"OCULTAR PROPS";btnVisualPropertiesToggle.AccessibleName=settings.VisualPropertiesPanelCollapsed?"Mostrar Propriedades":"Recolher Propriedades";}
+            splitVisualWorkspace.PerformLayout();
+        }
+        finally{applyingVisualSidePanelState=false;}
         visualViewport?.Invalidate();
+    }
+
+    private void splitVisualWorkspace_SplitterMoved(object? sender, SplitterEventArgs e)
+    {
+        if(applyingVisualSidePanelState||restoringSession||!IsHandleCreated||splitVisualWorkspace.Panel1Collapsed)return;
+        int width=splitVisualWorkspace.SplitterDistance;
+        if(settings.VisualLayersPanelWidth==width)return;
+        settings.VisualLayersPanelWidth=width;
+        SaveSettings();
+    }
+
+    private void CaptureVisualLayersPanelWidth()
+    {
+        if(splitVisualWorkspace==null||splitVisualWorkspace.Panel1Collapsed)return;
+        settings.VisualLayersPanelWidth=splitVisualWorkspace.SplitterDistance;
     }
 
     private bool syncingVisualDat;
@@ -34,6 +62,7 @@ public partial class Form1
     private bool syncingVisualEnemyFilter;
     private bool syncingVisualEnemyQuickSelect;
     private bool syncingViewportEnemyPicker;
+    private int lastVisualEntityTabIndex = -1;
     private Panel? viewportEnemyPicker;
     private ComboBox? viewportEnemyType;
     private EslEnemyEntry? viewportEnemyPickerEntry;
@@ -196,17 +225,7 @@ public partial class Form1
     {
         if (syncingVisualDat || loadingVisualEditor || cmbVisualDat.SelectedItem is not TextureDatItem item) return;
 
-        if (visualAevModified || visualCollisionModified || visualViewport?.Scene?.IsModified == true || visualEtsScene?.IsModified == true || visualItaScene?.IsModified == true || visualEseScene?.IsModified == true || visualFseScene?.IsModified == true || visualDseScene?.IsModified == true || visualLitScene?.IsModified == true || visualViewport?.RtpScene?.IsModified == true)
-        {
-            DialogResult answer = MessageBox.Show(
-                "O Visual Editor possui alterações não salvas.\n\nTrocar de DAT e descartar essas alterações?",
-                "Visual Editor", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (answer != DialogResult.Yes)
-            {
-                RefreshVisualDatList();
-                return;
-            }
-        }
+        if (!await ConfirmSavePendingChangesAsync("trocar de cenário/DAT", includeOtherEditors: false)) { RefreshVisualDatList(); return; }
 
         // Preserve a câmera do cenário que está saindo antes de alterar o DAT ativo.
         SaveVisualCameraStateForActiveDat();
@@ -341,6 +360,16 @@ public partial class Form1
         lblVisualPropertiesTitle.Text = entries.Count == 1 ? $"PROPERTIES • ENEMY #{entries[0].Index:D3}" : $"PROPERTIES • {entries.Count} ENEMIES";
         visualViewport?.SelectEnemyEntry(entries[0]);
         syncingVisualEnemyQuickSelect = true; cmbVisualEnemyQuickSelect.SelectedItem = entries[0]; syncingVisualEnemyQuickSelect = false;
+    }
+
+    private void ClearVisualEnemySelection()
+    {
+        if(lstVisualEnemyEntries==null||lstVisualEnemyEntries.SelectedItems.Count==0)return;
+        lstVisualEnemyEntries.ClearSelected();
+        syncingVisualEnemyQuickSelect=true;
+        try{cmbVisualEnemyQuickSelect.SelectedIndex=-1;}
+        finally{syncingVisualEnemyQuickSelect=false;}
+        visualViewport?.SelectEnemyEntry(null);
     }
 
     private void btnVisualEnemyGizmoMove_Click(object? sender, EventArgs e) => SetEnemyGizmoMode(EnemyGizmoMode.Move);
@@ -754,7 +783,7 @@ public partial class Form1
             {
                 string[] coreEffs=FindCoreEffFiles();
                 (visualEffScene,visualEffTextures)=await Task.Run(()=>(Ps2EffReader.Read(eff),EffTextureCatalog.Build(eff,coreEffs)));visualViewport.SetEffScene(visualEffScene);LoadVisualEffViewportTextures();WireVisualEffEvents();RefreshVisualEffEntries();
-                ExtractLog($"Visual Editor: EFF carregado: {Path.GetFileName(eff)} • {visualEffScene.Effect0Groups.Count} grupos E0 • {visualEffScene.Effect1Groups.Count} grupos E1 • {visualEffScene.EntryCount} efeitos.");
+                ExtractLog($"Visual Editor: EFF carregado: {Path.GetFileName(eff)} • {visualEffScene.EstGroups.Count} grupos EST • {visualEffScene.SstGroups.Count} grupos SST • {visualEffScene.EntryCount} efeitos.");
                 ExtractLog($"Visual Editor: diagnóstico EFF • {visualViewport.FireEmitterCount} emissores de fogo • {visualViewport.EffTextureCount} texturas enviadas ao viewport • camada ligada.");
             }
             else{visualEffScene=null;visualEffTextures=null;visualViewport.SetEffScene(null);lstVisualEffEntries.Items.Clear();ClearVisualEffTexture();}
@@ -1012,13 +1041,13 @@ public partial class Form1
     private void lstVisualEffEntries_SelectedIndexChanged(object? sender,EventArgs e)
     {
         EffEntry? entry=lstVisualEffEntries.SelectedItem as EffEntry;visualViewport?.SelectEffEntry(entry);pgVisualProperties.SelectedObject=entry;
-        lblVisualPropertiesTitle.Text=entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • EFF E{entry.EffectTable} G{entry.GroupIndex:00} #{entry.EntryIndex:00}";
+        lblVisualPropertiesTitle.Text=entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • EFF {entry.SequenceTable} G{entry.GroupIndex:00} #{entry.EntryIndex:00}";
         ShowVisualEffTexture(entry);
     }
     private void visualViewport_EffEntryClicked(EffEntry? entry)
     {
         if(entry==null)return;if(tabVisualEntities!=null)tabVisualEntities.SelectedIndex=6;RefreshVisualEffEntries(entry);pgVisualProperties.SelectedObject=entry;
-        lblVisualPropertiesTitle.Text=$"PROPERTIES • EFF E{entry.EffectTable} G{entry.GroupIndex:00} #{entry.EntryIndex:00}";
+        lblVisualPropertiesTitle.Text=$"PROPERTIES • EFF {entry.SequenceTable} G{entry.GroupIndex:00} #{entry.EntryIndex:00}";
     }
     private async void btnVisualExtractCore_Click(object? sender,EventArgs e)
     {
@@ -1232,8 +1261,8 @@ public partial class Form1
         if(objectTab && e.Control && e.KeyCode is Keys.D1 or Keys.NumPad1){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Move);return;}
         if(objectTab && e.Control && e.KeyCode is Keys.D2 or Keys.NumPad2){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Rotate);return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;FocusSelectedEnemy();return;}
-        if(visualOpen && !e.Control && e.KeyCode==Keys.G){e.Handled=true;e.SuppressKeyPress=true;SetEnemyGizmoMode(EnemyGizmoMode.Move);return;}
-        if(visualOpen && !e.Control && e.KeyCode==Keys.R){e.Handled=true;e.SuppressKeyPress=true;SetEnemyGizmoMode(EnemyGizmoMode.Rotate);return;}
+        if(visualOpen && !e.Control && e.KeyCode==Keys.G){e.Handled=true;e.SuppressKeyPress=true;if(tabVisualEntities.SelectedIndex==0)SetAevGizmoMode(AevGizmoMode.Move);else SetEnemyGizmoMode(EnemyGizmoMode.Move);return;}
+        if(visualOpen && !e.Control && e.KeyCode==Keys.R){e.Handled=true;e.SuppressKeyPress=true;if(tabVisualEntities.SelectedIndex==0)SetAevGizmoMode(AevGizmoMode.Rotate);else SetEnemyGizmoMode(EnemyGizmoMode.Rotate);return;}
         if (!e.Control) return;
         if (soundsOpen && e.KeyCode == Keys.Z)
         {
@@ -1321,7 +1350,15 @@ public partial class Form1
 
     private void lstVisualAevEntries_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Control && e.KeyCode == Keys.D)
+        if (!e.Control && e.KeyCode == Keys.G)
+        {
+            SetAevGizmoMode(AevGizmoMode.Move); e.Handled = true; e.SuppressKeyPress = true;
+        }
+        else if (!e.Control && e.KeyCode == Keys.R)
+        {
+            SetAevGizmoMode(AevGizmoMode.Rotate); e.Handled = true; e.SuppressKeyPress = true;
+        }
+        else if (e.Control && e.KeyCode == Keys.D)
         {
             DuplicateSelectedAev();
             e.Handled = true;
@@ -1339,7 +1376,7 @@ public partial class Form1
     {
         if (lstVisualAevEntries.SelectedItem is AevEntry listEntry) return listEntry;
         if (pgVisualProperties.SelectedObject is AevPropertyView view) return view.Entry;
-        return null;
+        return visualViewport?.SelectedAevEntry;
     }
 
     private void SetAevPropertiesObject(AevEntry? entry)
@@ -1730,7 +1767,7 @@ public partial class Form1
         else if (scene != null) lblVisualStatus.Text = $"{scene.Triangles.Count:N0} tris • {visualViewport.LoadedTextureCount:N0} tex";
         else if (aev != null) lblVisualStatus.Text = $"{aev.Count:N0} AEV{modified}";
         else if(esl != null) lblVisualStatus.Text = $"{esl.ActiveCount:N0} enemies{modified}";
-        else lblVisualStatus.Text = "v0.7.1 • Visual Editor";
+        else lblVisualStatus.Text = "v0.8.0 • Visual Editor";
         UpdateTopVisualSaveState();
     }
 
@@ -1761,6 +1798,14 @@ public partial class Form1
         UpdateVisualStatus();
         if (string.Equals(visualSmdPath, smdPath, StringComparison.OrdinalIgnoreCase))
             UpdateSmdTexturePreview(lstVisualSmdEntries?.SelectedItem as ScenarioEntry);
+    }
+
+    private void SetAevGizmoMode(AevGizmoMode mode)
+    {
+        if (visualViewport == null) return;
+        visualViewport.SetAevTransformMode(mode);
+        btnVisualAevMove.BackColor = mode == AevGizmoMode.Move ? Accent : Surface2;
+        btnVisualAevRotate.BackColor = mode == AevGizmoMode.Rotate ? Accent : Surface2;
     }
     private void ApplyVisualLayerSettings()
     {
@@ -2147,6 +2192,8 @@ public partial class Form1
     private void tabVisualEntities_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (tabVisualEntities.SelectedIndex < 0) return;
+        if(lastVisualEntityTabIndex>=0&&lastVisualEntityTabIndex!=tabVisualEntities.SelectedIndex)ClearVisualEnemySelection();
+        lastVisualEntityTabIndex=tabVisualEntities.SelectedIndex;
         UpdateVisualContextActions();
         if (visualViewport != null) { visualViewport.SmdEditingEnabled = tabVisualEntities.SelectedIndex == 4;visualViewport.FseEditingEnabled=tabVisualEntities.SelectedIndex==10&&tabVisualSound.SelectedIndex==1;visualViewport.Invalidate(); }
         if (pnlVisualSmdTexturePreview != null) pnlVisualSmdTexturePreview.Visible = tabVisualEntities.SelectedIndex == 4;
@@ -2326,12 +2373,14 @@ public partial class Form1
     private void visualViewport_SmdSelectionChanged(IReadOnlyList<ScenarioEntry> entries)
     { tabVisualEntities.SelectedIndex=4;lstVisualSmdEntries.SelectedIndexChanged-=lstVisualSmdEntries_SelectedIndexChanged;try{lstVisualSmdEntries.ClearSelected();foreach(ScenarioEntry item in entries){int index=lstVisualSmdEntries.Items.IndexOf(item);if(index>=0)lstVisualSmdEntries.SetSelected(index,true);}}finally{lstVisualSmdEntries.SelectedIndexChanged+=lstVisualSmdEntries_SelectedIndexChanged;}lstVisualSmdEntries_SelectedIndexChanged(null,EventArgs.Empty); }
     private void visualViewport_SmdTransformModeRequested(SmdGizmoMode mode)=>SetSmdGizmoMode(mode);
-    private void visualViewport_DuplicateSmdRequested()=>DuplicateSelectedSmdEntries();
+    private void visualViewport_DuplicateSmdRequested()=>DuplicateSelectedSmd();
     private void visualViewport_DeleteSmdRequested()=>DeleteSelectedSmdEntries();
     private void visualViewport_SmdEntryEdited(ScenarioEntry entry)
     { btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();if(ReferenceEquals(pgVisualProperties.SelectedObject,entry))pgVisualProperties.Refresh();UpdateTopVisualSaveState(); }
     private void SetSmdGizmoMode(SmdGizmoMode mode)
     { if(visualViewport==null)return;visualViewport.SmdTransformMode=mode;visualViewport.RefreshSmdGeometry(lstVisualSmdEntries.SelectedItem as ScenarioEntry);btnVisualSmdMove.BackColor=mode==SmdGizmoMode.Move?Accent:Surface2;btnVisualSmdRotate.BackColor=mode==SmdGizmoMode.Rotate?Accent:Surface2;btnVisualSmdScale.BackColor=mode==SmdGizmoMode.Scale?Accent:Surface2; }
+    private void SetSmdSelectionMode(SmdMeshSelectionMode mode)
+    {if(visualViewport==null)return;visualViewport.SetSmdSelectionMode(mode);btnVisualSmdVertex.BackColor=mode==SmdMeshSelectionMode.Vertex?Accent:Surface2;btnVisualSmdEdge.BackColor=mode==SmdMeshSelectionMode.Edge?Accent:Surface2;btnVisualSmdFace.BackColor=mode==SmdMeshSelectionMode.Face?Accent:Surface2;}
     private bool SaveVisualSmd()
     {
         if(visualViewport?.Scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return false;
@@ -2348,6 +2397,15 @@ public partial class Form1
     {
         ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();if(selected.Length==0||visualViewport?.Scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(visualViewport.Scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();int entries=visualViewport.Scene.EntryCount,bins=visualViewport.Scene.BinCount,last=-1;foreach(ScenarioEntry source in selected){var clone=CloneSmdEntry(source);clone.PositionX+=1f;last=SmdEmbeddedBinService.AppendEntry(visualSmdPath,clone,entries++,bins);}ReloadVisualSmd(last);ExtractLog($"Visual Editor: {selected.Length} entry(s) SMD duplicada(s) no final.");
     }
+    private void DuplicateSelectedSmd()
+    {if(chkVisualSmdEditMode.Checked)DuplicateSelectedSmdFaces();else DuplicateSelectedSmdEntries();}
+    private void DuplicateSelectedSmdFaces()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry==null||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;
+        IReadOnlyList<int> selected=visualViewport.GetSelectedSmdFaceFlags();if(selected.Count==0){MessageBox.Show(this,"Selecione uma ou mais faces antes de duplicar.","Duplicar faces",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+        try{if(scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();int created=SmdEmbeddedBinService.DuplicateFacesAsEntry(visualSmdPath,entry,scene.EntryCount,scene.BinCount,visualViewport.GetAllSmdFaceFlags(),selected);ReloadVisualSmd(created);ExtractLog($"Visual Editor: {selected.Count} face(s) duplicada(s), preservando material e textura.");}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Duplicar faces",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
     private void DeleteSelectedSmdEntries()
     {
         ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();ScenarioScene? scene=visualViewport?.Scene;if(selected.Length==0||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(selected.Length>=scene.EntryCount){MessageBox.Show(this,"O SMD precisa manter pelo menos uma entry.","Excluir entries",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
@@ -2359,7 +2417,7 @@ public partial class Form1
         int next=Math.Min(selected.Min(x=>x.FileOrder),scene.EntryCount-physical.Length-1);if(physical.Length>0)SmdEmbeddedBinService.RemoveEntries(visualSmdPath,physical.Select(x=>x.FileOrder).ToArray(),scene.EntryCount,scene.BinCount);ReloadVisualSmd(next);ExtractLog($"Visual Editor: {physical.Length} entry(s) removida(s) e {placeholders.Length} índice(s) protegido(s) preservado(s) como slots invisíveis.");
     }
     private void lstVisualSmdEntries_KeyDown(object? sender,KeyEventArgs e)
-    {if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}else if(e.Control&&e.KeyCode==Keys.K){SeparateSelectedSmdFaces();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){if(chkVisualSmdEditMode.Checked&&visualViewport.DeleteSelectedSmdFaces()){btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();}else DeleteSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}}
+    {if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedSmd();e.Handled=true;e.SuppressKeyPress=true;}else if(e.Control&&e.KeyCode==Keys.K){SeparateSelectedSmdFaces();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){if(chkVisualSmdEditMode.Checked){if(visualViewport.DeleteSelectedSmdFaces()){btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();}}else DeleteSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}}
 
     private async void btnVisualSmdImport_Click(object? sender, EventArgs e)
     {

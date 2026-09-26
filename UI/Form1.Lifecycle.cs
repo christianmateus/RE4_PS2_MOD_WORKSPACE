@@ -2,6 +2,7 @@ namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
+    private bool closingAfterPendingChanges;
     private async void Form1_Shown(object? sender, EventArgs e)
     {
         ShowStartupLoading("Preparando o aplicativo...");
@@ -46,15 +47,57 @@ public partial class Form1
         }
     }
 
-    private void Form1_FormClosing(object? sender, FormClosingEventArgs e)
+    private async void Form1_FormClosing(object? sender, FormClosingEventArgs e)
     {
-        if (messagesModified && !ConfirmDiscardMessageChanges()) { e.Cancel = true; return; }
+        if (!closingAfterPendingChanges && (messagesModified || HasUnsavedVisualChanges() || currentSnd?.IsModified == true))
+        {
+            e.Cancel = true;
+            if (!await ConfirmSavePendingChangesAsync("fechar o aplicativo")) return;
+            closingAfterPendingChanges = true;
+            BeginInvoke(Close);
+            return;
+        }
         externalTplSyncCancellation?.Cancel();
         StopSoundPreview();
+        CleanupVideoPreview();
+        CaptureVisualLayersPanelWidth();
         SaveVisualCameraStateForActiveDat();
         characterCustomizer?.SaveCameraState();
         SaveProject();
         SaveSettings();
+    }
+
+    private async Task<bool> ConfirmSavePendingChangesAsync(string action, bool includeOtherEditors = true)
+    {
+        bool hasMessages = includeOtherEditors && messagesModified;
+        bool hasVisual = HasUnsavedVisualChanges();
+        bool hasSound = includeOtherEditors && currentSnd?.IsModified == true;
+        if (!hasMessages && !hasVisual && !hasSound) return true;
+        var pending = new List<string>();
+        if (hasVisual) pending.Add("componentes do Editor Visual");
+        if (hasMessages) pending.Add("mensagens MDT");
+        if (hasSound) pending.Add("banco de sons SND");
+        DialogResult answer = MessageBox.Show(this,
+            $"Há alterações não salvas em {string.Join(" e ", pending)}.\n\nDeseja salvá-las antes de {action}?",
+            "Alterações não salvas", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1);
+        if (answer == DialogResult.Cancel) return false;
+        if (answer == DialogResult.No) return true;
+        if (hasMessages)
+        {
+            btnMessageSave_Click(null, EventArgs.Empty);
+            if (messagesModified) return false;
+        }
+        if (hasVisual)
+        {
+            await SaveVisualEditorAllAsync(updateUi: false, preserveEditorState: true);
+            if (HasUnsavedVisualChanges()) return false;
+        }
+        if (hasSound)
+        {
+            btnSoundSave_Click(null, EventArgs.Empty);
+            if (currentSnd?.IsModified == true) return false;
+        }
+        return true;
     }
 
     private void CreateStartupLoadingOverlay()
@@ -137,10 +180,10 @@ public partial class Form1
     private void ShowPage(Panel page, Button navButton, string title)
     {
         if (pnlCharacters != null && pnlCharacters.Visible && page != pnlCharacters) characterCustomizer?.SaveCameraState();
-        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlMessages, pnlVisualEditor, pnlCharacters, pnlEnemies, pnlAnimations, pnlSounds, pnlBuild, pnlTools, pnlSettings, pnlLogs }) panel.Visible = false;
+        foreach (Panel panel in new[] { pnlDashboard, pnlWorkspace, pnlAssets, pnlTextures, pnlMessages, pnlVisualEditor, pnlCharacters, pnlEnemies, pnlAnimations, pnlSounds, pnlVideos, pnlBuild, pnlTools, pnlSettings, pnlLogs }) panel.Visible = false;
         page.Visible = true;
         page.BringToFront();
-        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavMessages, btnNavVisualEditor, btnNavCharacters, btnNavEnemies, btnNavAnimations, btnNavSounds, btnNavBuild, btnNavTools, btnNavSettings, btnNavLogs })
+        foreach (Button button in new[] { btnNavDashboard, btnNavWorkspace, btnNavAssets, btnNavTextures, btnNavMessages, btnNavVisualEditor, btnNavCharacters, btnNavEnemies, btnNavAnimations, btnNavSounds, btnNavVideos, btnNavBuild, btnNavTools, btnNavSettings, btnNavLogs })
         {
             button.BackColor = Color.FromArgb(18, 20, 24);
             button.ForeColor = Color.FromArgb(145, 151, 163);
@@ -149,6 +192,7 @@ public partial class Form1
         navButton.ForeColor = Color.FromArgb(238, 240, 244);
         lblTopTitle.Text = title;
         bool visualEditorOpen = page == pnlVisualEditor;
+        if (visualEditorOpen) ApplyVisualSidePanelState();
         if (btnTopSaveScenario != null) btnTopSaveScenario.Visible = visualEditorOpen;
         if (!visualEditorOpen && lblTopVisualModified != null) lblTopVisualModified.Visible = false;
         else if (visualEditorOpen) UpdateTopVisualSaveState();
@@ -200,6 +244,7 @@ public partial class Form1
         {
             settings.LastCharacterDatPath = path;
             ActivateCharacterDat(path);
+            _ = RefreshVisualEnemyModelFromDatAsync(path);
             if (!restoringSession) SaveSettings();
         }, characterRoots, savedCamera, camera =>
         {
@@ -278,16 +323,18 @@ public partial class Form1
             lblLogo.Text = collapsed ? "RE4" : "RE4 PS2";
             lblLogo.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             lblLogoSub.Visible = !collapsed;
-            lblVersion.Text = "v0.7.1";
+            lblVersion.Text = "v0.8.0";
             lblVersion.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             btnSidebarToggle.Text = collapsed ? "›" : "RETRAIR  ‹";
             btnSidebarToggle.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleRight;
+            lblSidebarModules.Visible = !collapsed;
 
             (Button Button, string Short)[] items =
             {
                 (btnNavDashboard,"DB"),(btnNavWorkspace,"PR"),(btnNavAssets,"AR"),(btnNavTextures,"TX"),
                 (btnNavMessages,"MS"),(btnNavVisualEditor,"VE"),(btnNavCharacters,"CH"),(btnNavEnemies,"IN"),
-                (btnNavAnimations,"AN"),(btnNavBuild,"B&T"),(btnNavTools,"TL"),(btnNavSettings,"CFG"),(btnNavLogs,"LOG")
+                (btnNavAnimations,"AN"),(btnNavSounds,"SO"),(btnNavVideos,"VI"),(btnNavBuild,"B&T"),
+                (btnNavTools,"TL"),(btnNavSettings,"CFG"),(btnNavLogs,"LOG")
             };
             foreach ((Button button, string shortText) in items)
             {
@@ -314,6 +361,7 @@ public partial class Form1
             case "Enemies": btnNavEnemies_Click(null, EventArgs.Empty); break;
             case "Animations": btnNavAnimations_Click(null, EventArgs.Empty); break;
             case "Sounds": btnNavSounds_Click(null, EventArgs.Empty); break;
+            case "Videos": btnNavVideos_Click(null, EventArgs.Empty); break;
             case "Build": btnNavBuild_Click(null, EventArgs.Empty); break;
             case "Tools": btnNavTools_Click(null, EventArgs.Empty); break;
             case "Settings": btnNavSettings_Click(null, EventArgs.Empty); break;

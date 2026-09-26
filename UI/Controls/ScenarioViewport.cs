@@ -28,6 +28,7 @@ public enum EnemyGizmoMode
 }
 
 public enum EtsGizmoMode { Move, Rotate }
+public enum AevGizmoMode { Move, Rotate }
 public enum CamGizmoMode { Move, Scale, Vertex, Face, Frame }
 
 public readonly record struct ScenarioCameraState(float X, float Y, float Z, float Yaw, float Pitch);
@@ -103,6 +104,7 @@ public sealed partial class ScenarioViewport : GLControl
     private int aevSelectedFaceVao;
     private int aevSelectedFaceVbo;
     private int aevSelectedFaceVertexCount;
+    private readonly int[] aevGizmoVaos = new int[3], aevGizmoVbos = new int[3], aevGizmoVertexCounts = new int[3];
     private int aevHandleVao;
     private int aevHandleVbo;
     private int aevHandleVertexCount;
@@ -168,7 +170,7 @@ public sealed partial class ScenarioViewport : GLControl
     private int labelTextureUniform;
     private readonly Dictionary<string, LabelTexture> labelTextures = new(StringComparer.Ordinal);
 
-    private int draggingAevHandle = -1; // 0..3 corners, 4 bottom, 5 top, 6 move X/Z, 7 move Y
+    private int draggingAevHandle = -1; // edit: 0..3 corners, 4 bottom, 5 top; transform: 6 X, 7 Y, 8 Z, 9 rotate Y
     private AevEntry? draggingAevEntry;
     private AevVertexState? dragStartState;
     private float heightDragStartMouseY;
@@ -178,6 +180,9 @@ public sealed partial class ScenarioViewport : GLControl
     private float verticalMoveDragStartMouseY;
     private float verticalMoveStartY;
     private float verticalMovePixelsPerWorldUnit = 1f;
+    private float aevRotationStartAngle;
+    public AevGizmoMode AevTransformMode { get; set; } = AevGizmoMode.Move;
+    public bool AevEditMode { get; private set; }
     private readonly Stack<Action> aevUndo = new();
     private readonly Stack<Action> enemyUndo = new();
 
@@ -303,7 +308,7 @@ public sealed partial class ScenarioViewport : GLControl
         movementTimer.Tick += MovementTimer_Tick;
         movementTimer.Start();
         fpsRenderTimer = new System.Windows.Forms.Timer { Interval = 16 };
-        fpsRenderTimer.Tick += (_, _) => { if (showFps && Visible) Invalidate(); };
+        fpsRenderTimer.Tick += (_, _) => { if ((showFps || HasAnimatedLit) && Visible) Invalidate(); };
         lastMovementTick = Environment.TickCount64;
     }
 
@@ -450,6 +455,20 @@ public sealed partial class ScenarioViewport : GLControl
     public void SelectAevEntry(AevEntry? entry)
     {
         selectedAevFileOrder = entry?.FileOrder ?? -1;
+        aevGpuDirty = true;
+        Invalidate();
+    }
+
+    public void SetAevTransformMode(AevGizmoMode mode)
+    {
+        AevTransformMode = mode;
+        aevGpuDirty = true;
+        Invalidate();
+    }
+
+    public void SetAevEditMode(bool enabled)
+    {
+        AevEditMode = enabled;
         aevGpuDirty = true;
         Invalidate();
     }
@@ -990,12 +1009,29 @@ uniform vec4 uLitAmbient;
 uniform vec4 uLitPosRange[32];
 uniform vec4 uLitColorIntensity[32];
 uniform vec4 uLitDirectionType[32];
+uniform vec4 uLitAttnA[32];
+uniform vec4 uLitAttnK[32];
+uniform vec4 uLitBehavior0[32];
+uniform vec4 uLitBehavior1[32];
+uniform vec4 uLitMeta[32];
+uniform float uLitTime;
 uniform int uFogEnabled;
 uniform int uFogType;
 uniform vec3 uFogColor;
 uniform vec2 uFogRange;
 uniform vec3 uCameraPosition;
 out vec4 FragColor;
+
+vec3 litRotateX(vec3 v,float a){float c=cos(a),s=sin(a);return vec3(v.x,v.y*c-v.z*s,v.y*s+v.z*c);}
+vec3 litRotateY(vec3 v,float a){float c=cos(a),s=sin(a);return vec3(v.x*c+v.z*s,v.y,-v.x*s+v.z*c);}
+vec3 litRotateZ(vec3 v,float a){float c=cos(a),s=sin(a);return vec3(v.x*c-v.y*s,v.x*s+v.y*c,v.z);}
+float litRangeFade(float distanceToLight,float radius,float width)
+{
+    if(radius<=0.00001)return 1.0;
+    width=clamp(abs(width),0.00001,radius);
+    if(distanceToLight<=radius-width)return 1.0;
+    return clamp((radius-distanceToLight)/width,0.0,1.0);
+}
 void main()
 {
     float shade = 1.0;
@@ -1029,21 +1065,50 @@ void main()
             vec3 color = uLitColorIntensity[i].rgb;
             float intensity = max(0.0, uLitColorIntensity[i].a);
             int kind = int(uLitDirectionType[i].w + 0.5);
-            if (kind == 5) illumination += color * intensity * max(dot(n, -normalize(uLitDirectionType[i].xyz)), 0.0);
-            else if (kind == 7) illumination += color * intensity * 0.55;
-            else
+            int behavior = int(uLitMeta[i].x + 0.5);
+            vec3 direction = normalize(uLitDirectionType[i].xyz);
+            float frames = uLitTime * 30.0;
+            if(behavior==1)
             {
-                vec3 delta = uLitPosRange[i].xyz - vWorldPos;
-                float distanceToLight = length(delta);
-                float t = clamp(distanceToLight / max(0.001, uLitPosRange[i].w), 0.0, 1.0);
-                float attenuation = kind == 2 ? (1.0-t)*(1.0-t) : 1.0-t;
-                vec3 toLight = distanceToLight > 0.001 ? delta/distanceToLight : n;
-                float diffuse = kind == 0 ? 1.0 : max(dot(n, toLight), 0.0);
-                if (kind == 3 || kind == 6) attenuation *= pow(max(dot(-toLight, normalize(uLitDirectionType[i].xyz)), 0.0), 8.0);
-                illumination += color * intensity * diffuse * attenuation;
+                float noise=fract(sin(floor(frames)+float(i)*91.73)*43758.5453)*2.0-1.0;
+                color=clamp(color+vec3(noise*uLitMeta[i].y),0.0,2.0);
             }
+            else if(behavior==2)intensity*=max(0.0,uLitBehavior0[i].x+uLitBehavior0[i].y*sin(uLitBehavior0[i].w+uLitBehavior0[i].z*6.2831853*uLitTime));
+            else if(behavior==3){vec3 rotation=uLitBehavior0[i].xyz*frames;direction=normalize(litRotateZ(litRotateY(litRotateX(direction,rotation.x),rotation.y),rotation.z));}
+            else if(behavior==6)intensity*=clamp(uLitBehavior0[i].x+uLitBehavior0[i].y*frames,0.0,1.0);
+            else if(behavior==7){vec3 angle=uLitBehavior0[i].xyz;vec3 speed=vec3(uLitBehavior0[i].w,uLitBehavior1[i].x,uLitBehavior1[i].y);angle+=speed*frames;direction=normalize(vec3(cos(angle.x)*sin(angle.y),sin(angle.x),cos(angle.x)*cos(angle.y)));}
+            else if(behavior==16){float wait=max(0.0,uLitMeta[i].z);intensity*=pow(0.3,max(0.0,frames-wait));}
+
+            vec3 delta=uLitPosRange[i].xyz-vWorldPos;
+            float distanceToLight=length(delta);
+            float radius=uLitPosRange[i].w;
+            vec3 toLight=distanceToLight>0.001?delta/distanceToLight:n;
+            float diffuse=max(dot(n,toLight),0.0);
+            float attenuation=1.0;
+            if(kind==0)attenuation=litRangeFade(distanceToLight,radius,abs(uLitAttnA[i].w));
+            else if(kind==1)attenuation=radius<=0.00001?1.0:max(0.0,1.0-distanceToLight/radius);
+            else if(kind==2){attenuation=radius<=0.00001?1.0:1.0/(1.0+9.0*(distanceToLight/radius)*(distanceToLight/radius));attenuation*=litRangeFade(distanceToLight,radius,abs(uLitAttnA[i].w));}
+            else if(kind==3||kind==6)
+            {
+                attenuation=litRangeFade(distanceToLight,radius,uLitAttnA[i].y);
+                float cutoff=cos(radians(clamp(abs(uLitAttnA[i].x),0.1,179.0)));
+                float cone=dot(-toLight,direction);
+                attenuation*=smoothstep(cutoff,min(1.0,cutoff+0.08),cone);
+                if(kind==6&&radius>0.00001)attenuation*=1.0/(1.0+9.0*(distanceToLight/radius)*(distanceToLight/radius));
+            }
+            else if(kind==4)
+            {
+                float cone=dot(-toLight,direction);
+                float angular=max(0.0,uLitAttnA[i].x+uLitAttnA[i].y*cone+uLitAttnA[i].z*cone*cone);
+                float gameDistance=distanceToLight*100.0;
+                float denominator=uLitAttnK[i].x+uLitAttnK[i].y*gameDistance+uLitAttnK[i].z*gameDistance*gameDistance;
+                attenuation=angular/max(0.0001,denominator);
+            }
+            else if(kind==5){diffuse=max(dot(n,-direction),0.0);attenuation=litRangeFade(distanceToLight,radius,uLitAttnA[i].y);}
+            else if(kind==7){float local=litRangeFade(distanceToLight,radius,abs(uLitAttnA[i].w));illumination=max(illumination,color*intensity*local);continue;}
+            illumination+=color*intensity*diffuse*max(0.0,attenuation);
         }
-        rgb = baseColor.rgb * clamp(illumination, vec3(0.035), vec3(4.0));
+        rgb = baseColor.rgb * clamp(illumination, vec3(0.0), vec3(4.0));
     }
     if (uUnlit == 0 && uFogEnabled != 0)
     {
@@ -1140,6 +1205,7 @@ void main()
         aevSelectedFaceVbo = GL.GenBuffer();
         aevHandleVao = GL.GenVertexArray();
         aevHandleVbo = GL.GenBuffer();
+        for (int i = 0; i < 3; i++) { aevGizmoVaos[i] = GL.GenVertexArray(); aevGizmoVbos[i] = GL.GenBuffer(); }
         enemyVao=GL.GenVertexArray(); enemyVbo=GL.GenBuffer(); selectedEnemyVao=GL.GenVertexArray(); selectedEnemyVbo=GL.GenBuffer();
         for(int i=0;i<3;i++){enemyGizmoVaos[i]=GL.GenVertexArray();enemyGizmoVbos[i]=GL.GenBuffer();}
         enemyModelVao=GL.GenVertexArray(); enemyModelVbo=GL.GenBuffer(); selectedEnemyModelVao=GL.GenVertexArray(); selectedEnemyModelVbo=GL.GenBuffer();
@@ -1440,6 +1506,7 @@ void main()
         aevFaceVertexCount = 0;
         aevSelectedFaceVertexCount = 0;
         aevHandleVertexCount = 0;
+        Array.Clear(aevGizmoVertexCounts);
         if (aevScene == null || !glReady) return;
 
         var allLines = new List<float>(aevScene.Count * 96);
@@ -1447,6 +1514,7 @@ void main()
         var allFaces = new List<float>(aevScene.Count * 216);
         var selectedFaces = new List<float>(216);
         var handles = new List<float>(192);
+        var gizmoAxes = new[] { new List<float>(64), new List<float>(64), new List<float>(64) };
 
         foreach (AevEntry entry in aevScene.Entries)
         {
@@ -1459,13 +1527,13 @@ void main()
             {
                 AddAevVolumeLines(selectedLines, entry);
                 AddAevVolumeFaces(selectedFaces, entry);
-                if (entry.IsSquare)
+                if (AevEditMode && entry.IsSquare)
                 {
                     AddAevCornerHandles(handles, entry, scene?.Radius ?? 1f);
                     AddAevHeightHandles(handles, entry, scene?.Radius ?? 1f);
                 }
-                if (entry.IsSquare || entry.IsCircle)
-                    AddAevMoveHandle(handles, entry, scene?.Radius ?? 1f);
+                if (!AevEditMode && (entry.IsSquare || entry.IsCircle) && (AevTransformMode == AevGizmoMode.Move || entry.IsSquare))
+                    AddAevTransformGizmo(gizmoAxes, entry, scene?.Radius ?? 1f, AevTransformMode);
             }
         }
 
@@ -1474,6 +1542,7 @@ void main()
         UploadLineBuffer(aevFaceVao, aevFaceVbo, allFaces, out aevFaceVertexCount);
         UploadLineBuffer(aevSelectedFaceVao, aevSelectedFaceVbo, selectedFaces, out aevSelectedFaceVertexCount);
         UploadLineBuffer(aevHandleVao, aevHandleVbo, handles, out aevHandleVertexCount);
+        for (int i = 0; i < 3; i++) UploadLineBuffer(aevGizmoVaos[i], aevGizmoVbos[i], gizmoAxes[i], out aevGizmoVertexCounts[i]);
     }
 
     private static void UploadLineBuffer(int vao, int vbo, List<float> values, out int vertexCount)
@@ -1493,8 +1562,9 @@ void main()
 
     private static void AddAevVolumeLines(List<float> values, AevEntry entry)
     {
-        // RE4 PS2 AEV uses the opposite vertical sign from the SMD geometry as decoded
-        // by this viewport. Keep the raw values intact in Properties and convert only for GL.
+        // The game treats this value as AreaXZ4::floor and the upper bound as
+        // floor + height (areaHitCheck_xz4 / area_xz4_Disp). SMD and AEV therefore
+        // share the same vertical sign in the decoded PS2 coordinate space.
         GetAevYRange(entry, out float y0, out float y1);
 
         if (entry.IsCircle)
@@ -1609,14 +1679,12 @@ void main()
 
     private static void GetAevYRange(AevEntry entry, out float y0, out float y1)
     {
-        float rawY0 = entry.Y;
-        float rawY1 = entry.Y + entry.Height;
-        y0 = entry.IsPs2Layout ? -rawY0 : rawY0;
-        y1 = entry.IsPs2Layout ? -rawY1 : rawY1;
+        y0 = entry.Y;
+        y1 = entry.Y + entry.Height;
         if (y1 < y0) (y0, y1) = (y1, y0);
     }
 
-    private static void AddAevMoveHandle(List<float> values, AevEntry entry, float sceneRadius)
+    private static void AddAevTransformGizmo(List<float>[] axes, AevEntry entry, float sceneRadius, AevGizmoMode mode)
     {
         GetAevYRange(entry, out float y0, out float y1);
         System.Numerics.Vector2 center2 = entry.IsCircle ? entry.Position1 : GetAevCenterXZ(entry);
@@ -1628,17 +1696,31 @@ void main()
         float size = Math.Max(0.12f, Math.Max(sceneRadius * 0.0023f, extent * 0.05f));
         NVector3 origin = new(center2.X, (y0 + y1) * 0.5f, center2.Y);
 
-        // Horizontal X/Z move arrow. Dragging this handle remains free on the X/Z plane.
-        NVector3 sideEnd = origin + new NVector3(size * 4.2f, 0f, 0f);
-        AddAevLine(values, origin, sideEnd);
-        AddAevLine(values, sideEnd, sideEnd + new NVector3(-size, 0f, -size * 0.65f));
-        AddAevLine(values, sideEnd, sideEnd + new NVector3(-size, 0f,  size * 0.65f));
+        float length = size * 4.2f;
+        if (mode == AevGizmoMode.Move)
+        {
+            AddAevAxisArrow(axes[0], origin, NVector3.UnitX, length, size);
+            AddAevAxisArrow(axes[1], origin, NVector3.UnitY, length, size);
+            AddAevAxisArrow(axes[2], origin, NVector3.UnitZ, length, size);
+        }
+        else
+        {
+            const int segments = 48;
+            for (int i = 0; i < segments; i++)
+            {
+                float a0 = MathF.Tau * i / segments, a1 = MathF.Tau * (i + 1) / segments;
+                AddAevLine(axes[1], origin + new NVector3(MathF.Cos(a0) * length, 0, MathF.Sin(a0) * length), origin + new NVector3(MathF.Cos(a1) * length, 0, MathF.Sin(a1) * length));
+            }
+        }
+    }
 
-        // Vertical move arrow. This moves the complete volume in Y without changing Height.
-        NVector3 upEnd = origin + new NVector3(0f, size * 4.2f, 0f);
-        AddAevLine(values, origin, upEnd);
-        AddAevLine(values, upEnd, upEnd + new NVector3(-size * 0.65f, -size, 0f));
-        AddAevLine(values, upEnd, upEnd + new NVector3( size * 0.65f, -size, 0f));
+    private static void AddAevAxisArrow(List<float> values, NVector3 origin, NVector3 axis, float length, float size)
+    {
+        NVector3 end = origin + axis * length;
+        AddAevLine(values, origin, end);
+        NVector3 side = axis == NVector3.UnitY ? NVector3.UnitX : NVector3.UnitY;
+        AddAevLine(values, end, end - axis * size + side * size * .55f);
+        AddAevLine(values, end, end - axis * size - side * size * .55f);
     }
 
     private static void AddAevHeightHandles(List<float> values, AevEntry entry, float sceneRadius)
@@ -2205,10 +2287,11 @@ void main()
     }
     private void DrawAevGpu()
     {
-        // Editor overlay: faces give spatial context while the outline stays readable
-        // even inside the scenario geometry.
+        // AEV volumes participate in the scenario depth test, so the floor and walls
+        // clip the portion that is physically behind them. Only editing handles remain
+        // an overlay, otherwise a partly buried volume could become impossible to edit.
         GL.Disable(EnableCap.CullFace);
-        GL.Disable(EnableCap.DepthTest);
+        GL.Enable(EnableCap.DepthTest);
         GL.DepthMask(false);
         GL.Uniform1(uUnlit, 1);
         GL.Uniform1(uUseTexture, 0);
@@ -2248,12 +2331,24 @@ void main()
             GL.DrawArrays(PrimitiveType.Lines, 0, aevSelectedVertexCount);
         }
 
+        GL.Disable(EnableCap.DepthTest);
+
         if (aevHandleVertexCount > 0)
         {
             GL.Uniform3(uColor, 1.0f, 0.95f, 0.30f);
             GL.BindVertexArray(aevHandleVao);
             GL.LineWidth(5f);
             GL.DrawArrays(PrimitiveType.Lines, 0, aevHandleVertexCount);
+        }
+
+        NVector3[] gizmoColors = { new(1f, .18f, .12f), new(.20f, 1f, .24f), new(.16f, .45f, 1f) };
+        for (int i = 0; i < 3; i++)
+        {
+            if (aevGizmoVertexCounts[i] <= 0) continue;
+            GL.Uniform3(uColor, gizmoColors[i].X, gizmoColors[i].Y, gizmoColors[i].Z);
+            GL.BindVertexArray(aevGizmoVaos[i]);
+            GL.LineWidth(6f);
+            GL.DrawArrays(PrimitiveType.Lines, 0, aevGizmoVertexCounts[i]);
         }
 
         GL.LineWidth(1f);
@@ -2658,12 +2753,12 @@ void main()
                 if (selected != null && (selected.IsSquare || selected.IsCircle))
                 {
                     int handle = -1;
-                    if (selected.IsSquare)
+                    if (AevEditMode && selected.IsSquare)
                     {
                         handle = PickAevCornerHandle(e.Location, selected);
                         if (handle < 0) handle = PickAevHeightHandle(e.Location, selected);
                     }
-                    if (handle < 0) handle = PickAevMoveHandle(e.Location, selected);
+                    else if (!AevEditMode) handle = PickAevTransformHandle(e.Location, selected);
 
                     if (handle >= 0)
                     {
@@ -2682,6 +2777,11 @@ void main()
                             verticalMoveDragStartMouseY = e.Y;
                             verticalMoveStartY = selected.Y;
                             verticalMovePixelsPerWorldUnit = CalculateVerticalPixelsPerWorldUnit(selected);
+                        }
+                        else if (handle == 9)
+                        {
+                            PointF centerScreen = ProjectAevCenter(selected);
+                            aevRotationStartAngle = MathF.Atan2(e.Y - centerScreen.Y, e.X - centerScreen.X);
                         }
                     }
                 }
@@ -3045,7 +3145,6 @@ void main()
                     {
                         SetAevCorner(draggingAevEntry, draggingAevHandle, new System.Numerics.Vector2(world.X, world.Z));
                         aevGpuDirty = true;
-                        AevEntryEdited?.Invoke(draggingAevEntry);
                     }
                 }
                 else if (draggingAevHandle is 4 or 5)
@@ -3063,9 +3162,8 @@ void main()
 
                     SetAevDisplayedYRange(draggingAevEntry, bottom, top);
                     aevGpuDirty = true;
-                    AevEntryEdited?.Invoke(draggingAevEntry);
                 }
-                else if (draggingAevHandle == 6)
+                else if (draggingAevHandle is 6 or 8)
                 {
                     GetAevYRange(draggingAevEntry, out _, out float topY);
                     float planeY = topY + Math.Max(0.05f, (scene?.Radius ?? 1f) * 0.002f);
@@ -3074,10 +3172,11 @@ void main()
                         dragStartState.HasValue)
                     {
                         System.Numerics.Vector2 delta = new(currentWorld.X - startWorld.X, currentWorld.Z - startWorld.Z);
+                        if (draggingAevHandle == 6) delta.Y = 0f;
+                        else delta.X = 0f;
                         dragStartState.Value.Apply(draggingAevEntry);
                         TranslateAev(draggingAevEntry, delta);
                         aevGpuDirty = true;
-                        AevEntryEdited?.Invoke(draggingAevEntry);
                     }
                 }
                 else if (draggingAevHandle == 7)
@@ -3085,12 +3184,17 @@ void main()
                     float pixelDelta = e.Y - verticalMoveDragStartMouseY;
                     float displayDelta = -pixelDelta / Math.Max(0.001f, verticalMovePixelsPerWorldUnit);
 
-                    // PS2 raw Y is sign-inverted by the viewport.
-                    float rawDelta = draggingAevEntry.IsPs2Layout ? -displayDelta : displayDelta;
-                    draggingAevEntry.Y = verticalMoveStartY + rawDelta;
+                    draggingAevEntry.Y = verticalMoveStartY + displayDelta;
 
                     aevGpuDirty = true;
-                    AevEntryEdited?.Invoke(draggingAevEntry);
+                }
+                else if (draggingAevHandle == 9 && dragStartState.HasValue)
+                {
+                    PointF centerScreen = ProjectAevCenter(draggingAevEntry);
+                    float angle = MathF.Atan2(e.Y - centerScreen.Y, e.X - centerScreen.X);
+                    dragStartState.Value.Apply(draggingAevEntry);
+                    RotateAev(draggingAevEntry, angle - aevRotationStartAngle);
+                    aevGpuDirty = true;
                 }
             }
             // Without a handle drag, LMB remains selection-only.
@@ -3244,7 +3348,9 @@ void main()
         return aevScene.Entries.FirstOrDefault(x => x.FileOrder == selectedAevFileOrder);
     }
 
-    private int PickAevMoveHandle(Point screen, AevEntry entry)
+    public AevEntry? SelectedAevEntry => GetSelectedAevEntry();
+
+    private int PickAevTransformHandle(Point screen, AevEntry entry)
     {
         GetAevYRange(entry, out float y0, out float y1);
         System.Numerics.Vector2 center2 = entry.IsCircle ? entry.Position1 : GetAevCenterXZ(entry);
@@ -3255,16 +3361,42 @@ void main()
         float size = Math.Max(0.12f, Math.Max((scene?.Radius ?? 1f) * 0.0023f, extent * 0.05f));
 
         NVector3 origin = new(center2.X, (y0 + y1) * 0.5f, center2.Y);
-        NVector3 sideEnd = origin + new NVector3(size * 4.2f, 0f, 0f);
+        float length = size * 4.2f;
+        if (AevTransformMode == AevGizmoMode.Rotate)
+        {
+            if (!entry.IsSquare) return -1;
+            float rotateDistance = float.PositiveInfinity;
+            const int segments = 48;
+            for (int i = 0; i < segments; i++)
+            {
+                float a0 = MathF.Tau * i / segments, a1 = MathF.Tau * (i + 1) / segments;
+                rotateDistance = Math.Min(rotateDistance, ScreenDistanceToWorldSegment(screen, origin + new NVector3(MathF.Cos(a0) * length, 0, MathF.Sin(a0) * length), origin + new NVector3(MathF.Cos(a1) * length, 0, MathF.Sin(a1) * length)));
+            }
+            return rotateDistance <= 11f ? 9 : -1;
+        }
+
+        NVector3 sideEnd = origin + new NVector3(length, 0f, 0f);
         NVector3 upEnd = origin + new NVector3(0f, size * 4.2f, 0f);
+        NVector3 depthEnd = origin + new NVector3(0f, 0f, length);
 
         float sideDistance = ScreenDistanceToWorldSegment(screen, origin, sideEnd);
         float upDistance = ScreenDistanceToWorldSegment(screen, origin, upEnd);
+        float depthDistance = ScreenDistanceToWorldSegment(screen, origin, depthEnd);
 
         const float threshold = 11f;
-        if (sideDistance <= threshold && sideDistance <= upDistance) return 6;
-        if (upDistance <= threshold) return 7;
+        float best = Math.Min(sideDistance, Math.Min(upDistance, depthDistance));
+        if (best > threshold) return -1;
+        if (sideDistance == best) return 6;
+        if (upDistance == best) return 7;
+        if (depthDistance == best) return 8;
         return -1;
+    }
+
+    private PointF ProjectAevCenter(AevEntry entry)
+    {
+        GetAevYRange(entry, out float y0, out float y1);
+        System.Numerics.Vector2 c = entry.IsCircle ? entry.Position1 : GetAevCenterXZ(entry);
+        return TryProjectWorldToScreen(new NVector3(c.X, (y0 + y1) * .5f, c.Y), out PointF screen) ? screen : PointF.Empty;
     }
 
     private float ScreenDistanceToWorldSegment(Point screen, NVector3 a, NVector3 b)
@@ -3332,18 +3464,8 @@ void main()
         if (top < bottom) (bottom, top) = (top, bottom);
         float height = Math.Max(0.01f, top - bottom);
 
-        if (entry.IsPs2Layout)
-        {
-            // PS2 AEV display conversion is worldY = -rawY.
-            // A positive raw Height therefore extends downward in display space.
-            entry.Y = -top;
-            entry.Height = height;
-        }
-        else
-        {
-            entry.Y = bottom;
-            entry.Height = height;
-        }
+        entry.Y = bottom;
+        entry.Height = height;
     }
 
     private int PickAevCornerHandle(Point screen, AevEntry entry)
@@ -3458,6 +3580,20 @@ void main()
         entry.Position2 += delta;
         entry.Position3 += delta;
         entry.Position4 += delta;
+    }
+
+    private static void RotateAev(AevEntry entry, float radians)
+    {
+        if (!entry.IsSquare) return;
+        System.Numerics.Vector2 center = GetAevCenterXZ(entry);
+        float c = MathF.Cos(radians), s = MathF.Sin(radians);
+        System.Numerics.Vector2 Rotate(System.Numerics.Vector2 p)
+        {
+            p -= center;
+            return center + new System.Numerics.Vector2(p.X * c - p.Y * s, p.X * s + p.Y * c);
+        }
+        entry.Position1 = Rotate(entry.Position1); entry.Position2 = Rotate(entry.Position2);
+        entry.Position3 = Rotate(entry.Position3); entry.Position4 = Rotate(entry.Position4);
     }
 
     private static void SetAevCorner(AevEntry entry, int corner, System.Numerics.Vector2 position)
@@ -3707,6 +3843,9 @@ void main()
                 if (aevVao != 0) GL.DeleteVertexArray(aevVao);
                 if (aevSelectedVbo != 0) GL.DeleteBuffer(aevSelectedVbo);
                 if (aevSelectedVao != 0) GL.DeleteVertexArray(aevSelectedVao);
+                if (aevHandleVbo != 0) GL.DeleteBuffer(aevHandleVbo);
+                if (aevHandleVao != 0) GL.DeleteVertexArray(aevHandleVao);
+                for(int i=0;i<3;i++){if(aevGizmoVbos[i]!=0)GL.DeleteBuffer(aevGizmoVbos[i]);if(aevGizmoVaos[i]!=0)GL.DeleteVertexArray(aevGizmoVaos[i]);}
                 if (enemyVbo != 0) GL.DeleteBuffer(enemyVbo);
                 if (enemyVao != 0) GL.DeleteVertexArray(enemyVao);
                 if (selectedEnemyVbo != 0) GL.DeleteBuffer(selectedEnemyVbo);

@@ -2,7 +2,10 @@
 
 public partial class Form1
 {
-    private async void btnBuildOneClick_Click(object? sender, EventArgs e)
+    private async void btnBuildOneClick_Click(object? sender, EventArgs e) => await RunBuildOneClickAsync(true);
+    private async void btnBuildOnly_Click(object? sender, EventArgs e) => await RunBuildOneClickAsync(false);
+
+    private async Task RunBuildOneClickAsync(bool launchEmulator)
     {
         if (!RequireWorkspace()) return;
         if (lvTrackedDats?.SelectedItems.Count > 0)
@@ -10,11 +13,11 @@ public partial class Form1
             buildSelectionOverride = lvTrackedDats.SelectedItems.Cast<ListViewItem>()
                 .Select(x => x.Tag as BuildListItem).Where(x => x != null).Select(x => x!.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            btnBuildAll_Click(sender, e);
+            await RunBuildAllAsync(launchEmulator);
             return;
         }
         if (string.IsNullOrWhiteSpace(project.ActiveDatName) || string.IsNullOrWhiteSpace(GetActiveContentPath())) { MessageBox.Show("Extraia um cenário primeiro.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path)) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (launchEmulator && (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path))) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
         string contentDir = GetActiveContentPath()!;
@@ -22,8 +25,8 @@ public partial class Form1
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
         try
         {
-            SetBuildBusy(true, $"Compilando e testando {project.ActiveDatName}...");
-            WriteLog("=== BUILD & TEST ===");
+            SetBuildBusy(true, launchEmulator ? $"Compilando e testando {project.ActiveDatName}..." : $"Compilando {project.ActiveDatName}...");
+            WriteLog(launchEmulator ? "=== BUILD & TEST ===" : "=== SOMENTE BUILD ===");
             // Character edits are made against the complete DAT. Expand them back
             // to Content before the regular repack evaluates file changes.
             await SyncActiveCharacterDatToContentAsync();
@@ -102,6 +105,7 @@ public partial class Form1
             // synchronized with the Build ISO independently of the DAT fast-build state.
             await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso);
             await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
+            await ApplyGanadoScalePatchAsync(buildIso);
 
             var builtSnapshot = await Task.Run(() => ChangeDetectionService.Capture(contentDir));
             ChangeDetectionService.Save(GetChangeStatePath(project.ActiveDatName), builtSnapshot);
@@ -111,10 +115,18 @@ public partial class Form1
             SaveProject();
             UpdateBuildUi();
             await RefreshChangeStatusAsync();
-            WriteLog("Abrindo ISO de Build no PCSX2...");
-            SetBuildBusy(true, "Build concluído. Abrindo o PCSX2...");
-            LaunchPcsx2WithIso(buildIso);
-            WriteLog("=== BUILD & TEST concluído ===");
+            if (launchEmulator)
+            {
+                WriteLog("Abrindo ISO de Build no PCSX2...");
+                SetBuildBusy(true, "Build concluído. Abrindo o PCSX2...");
+                LaunchPcsx2WithIso(buildIso);
+                WriteLog("=== BUILD & TEST concluído ===");
+            }
+            else
+            {
+                WriteLog($"=== BUILD concluído • ISO pronta em {buildIso} ===");
+                SetBuildBusy(true, "Build concluído. A ISO está pronta para uso.");
+            }
         }
         catch (Exception ex)
         {
@@ -132,6 +144,10 @@ public partial class Form1
     private async Task InjectCurrentEnemyEslIntoBuildIsoAsync(string buildIso)
     {
         if (selectedEnemyScene == null || string.IsNullOrWhiteSpace(currentEnemyEslPath) || !File.Exists(currentEnemyEslPath)) return;
+        // PropertyGrid edits live in the loaded scene until SAVE ESL is pressed. Build & Test must
+        // persist them before reading currentEnemyEslPath, otherwise the previous file is injected.
+        if (!SaveCurrentEnemyEsl(false))
+            throw new InvalidDataException("Não foi possível salvar automaticamente o ESL antes do Build.");
         string eslName = Path.GetFileName(currentEnemyEslPath);
         if (string.IsNullOrWhiteSpace(eslName) || !eslName.StartsWith("emleon", StringComparison.OrdinalIgnoreCase) || !eslName.EndsWith(".esl", StringComparison.OrdinalIgnoreCase)) return;
 
@@ -150,6 +166,9 @@ public partial class Form1
         var verify = await Task.Run(() => AfsService.OpenAfsFromIso(buildIso, afsFile));
         var verified = verify.Entries.First(x => x.Index == entry.Index);
         if (verified.CurrentSize != size) throw new InvalidDataException($"A validação do Current Size de {eslName} falhou após a injeção.");
-        WriteLog($"ESL AUTO INJECT concluído: {eslName}.");
+        int individualScales = selectedEnemyScene.Entries.Count(x => x.Unknown4 != 0);
+        int inactiveScales = selectedEnemyScene.Entries.Count(x => x.Active == 0 && x.Unknown4 != 0);
+        string inactiveNote = inactiveScales > 0 ? $" ({inactiveScales} inicialmente inativo(s))" : string.Empty;
+        WriteLog($"ESL AUTO INJECT concluído: {eslName} • {individualScales} inimigo(s) com tamanho individual{inactiveNote}.");
     }
 }

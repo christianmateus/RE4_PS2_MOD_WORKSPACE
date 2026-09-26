@@ -25,6 +25,20 @@ public partial class Form1
         editor.ShowDialog(this);
     }
 
+    private void OpenRelPatchManager()
+    {
+        string? conventional = string.IsNullOrWhiteSpace(project.RootPath) ? null : Path.Combine(project.RootPath, "Build", "RE4_PS2_MOD.iso");
+        string? buildIso = !string.IsNullOrWhiteSpace(project.ActiveBuildIsoPath) && File.Exists(project.ActiveBuildIsoPath)
+            ? project.ActiveBuildIsoPath : (!string.IsNullOrWhiteSpace(conventional) && File.Exists(conventional) ? conventional : null);
+        using var manager = new RelPatchManagerForm(buildIso, project.GanadoScaleMultiplier, value =>
+        {
+            project.GanadoScaleMultiplier = value;
+            SaveProject();
+            WriteLog($"Tamanho global dos Ganados definido para {value:0.00}×. Será aplicado no próximo Build.");
+        });
+        manager.ShowDialog(this);
+    }
+
     private void btnBrowseTpl_Click(object? sender, EventArgs e) => PickTool(txtTplManager, v => settings.TplManagerPath = v);
 
     private void btnBrowsePcsx2_Click(object? sender, EventArgs e) => PickTool(txtPcsx2, v => settings.Pcsx2Path = v);

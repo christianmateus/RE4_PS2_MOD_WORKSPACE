@@ -17,6 +17,7 @@ public sealed class WorkspaceProject
     public int ActiveWorkspaceTabIndex { get; set; }
     public string? SelectedContentRelativePath { get; set; }
     public int BuildIsoGeneration { get; set; }
+    public decimal GanadoScaleMultiplier { get; set; } = 1.00m;
     public List<DatProjectState> DatStates { get; set; } = new();
 }
 

@@ -13,6 +13,11 @@ public partial class Form1
     private bool enemySceneModified;
     private readonly Dictionary<byte, EnemyModelScene> visualEnemyModelCache = new();
     private readonly HashSet<byte> visualEnemyModelFailed = new();
+    private readonly Dictionary<byte, int> visualEnemyModelReloadVersions = new();
+    private readonly Dictionary<byte, (string Path, long Length, long WriteTicks)> visualEnemyDatSignatures = new();
+    private readonly HashSet<byte> visualEnemyDatReloadPending = new();
+    private readonly System.Windows.Forms.Timer visualEnemyDatWatchTimer = new() { Interval = 1000 };
+    private bool visualEnemyDatWatcherInitialized;
     private bool loadingVisualEnemyModels;
 
 
@@ -372,6 +377,8 @@ public partial class Form1
     private bool EnemyEntryPassesManagerFilter(EslEnemyEntry e)
     {
         if (chkEnemyActiveOnly.Checked && e.Active == 0) return false;
+        if (cmbEnemyLocationFilter.SelectedItem is EnemyLocationFilter { StageId: byte stageId, RoomId: byte roomId } &&
+            (e.StageID != stageId || e.RoomID != roomId)) return false;
         return true;
     }
 
@@ -434,6 +441,7 @@ public partial class Form1
                     }
                     EnemyModelScene model = await Task.Run(() => Ps2EnemyDatReader.Read(path, type));
                     visualEnemyModelCache[type] = model;
+                    TrackVisualEnemyDat(type, path);
                     ExtractLog($"Visual Editor: {datName} • {model.LoadedBinCount}/{model.BinCount} BINs • {model.Triangles.Count:N0} tris • {model.TexturePackages.Count} TPL(s).");
                 }
                 catch (Exception ex)
@@ -454,8 +462,87 @@ public partial class Form1
     {
         visualEnemyModelCache.Clear();
         visualEnemyModelFailed.Clear();
+        visualEnemyModelReloadVersions.Clear();
+        visualEnemyDatSignatures.Clear();
         visualViewport?.SetEnemyModels(visualEnemyModelCache);
         RefreshVisualEnemyAnimationChoices();
+    }
+
+    private void TrackVisualEnemyDat(byte enemyType, string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            visualEnemyDatSignatures[enemyType] = (Path.GetFullPath(path), file.Length, file.LastWriteTimeUtc.Ticks);
+        }
+        catch { return; }
+        if (visualEnemyDatWatcherInitialized) return;
+        visualEnemyDatWatcherInitialized = true;
+        visualEnemyDatWatchTimer.Tick += VisualEnemyDatWatchTimer_Tick;
+        visualEnemyDatWatchTimer.Start();
+    }
+
+    private async void VisualEnemyDatWatchTimer_Tick(object? sender, EventArgs e)
+    {
+        foreach (var pair in visualEnemyDatSignatures.ToArray())
+        {
+            byte enemyType = pair.Key;
+            string path = pair.Value.Path;
+            if (visualEnemyDatReloadPending.Contains(enemyType) || !File.Exists(path)) continue;
+            var file = new FileInfo(path);
+            if (file.Length == pair.Value.Length && file.LastWriteTimeUtc.Ticks == pair.Value.WriteTicks) continue;
+            visualEnemyDatReloadPending.Add(enemyType);
+            try
+            {
+                // Repack tools commonly replace the DAT in more than one write. Only open it
+                // after its size and timestamp have remained unchanged for a short interval.
+                long length = file.Length, ticks = file.LastWriteTimeUtc.Ticks;
+                await Task.Delay(450);
+                if (!File.Exists(path)) continue;
+                file.Refresh();
+                if (file.Length != length || file.LastWriteTimeUtc.Ticks != ticks) continue;
+                await RefreshVisualEnemyModelFromDatAsync(path);
+            }
+            finally { visualEnemyDatReloadPending.Remove(enemyType); }
+        }
+    }
+
+    private async Task<bool> RefreshVisualEnemyModelFromDatAsync(string path)
+    {
+        string stem = Path.GetFileNameWithoutExtension(path);
+        if (stem.Length != 4 || !stem.StartsWith("em", StringComparison.OrdinalIgnoreCase) ||
+            !byte.TryParse(stem.AsSpan(2), System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out byte enemyType)) return false;
+
+        // Do not eagerly load models which are not being displayed. If they become necessary,
+        // EnsureVisualEnemyModelsAsync will load their current DAT in the normal way.
+        bool isDisplayed = selectedEnemyScene?.Entries.Any(x => x.EnemyType == enemyType) == true;
+        if (!visualEnemyModelCache.ContainsKey(enemyType) && !isDisplayed) return false;
+
+        int version = visualEnemyModelReloadVersions.GetValueOrDefault(enemyType) + 1;
+        visualEnemyModelReloadVersions[enemyType] = version;
+        visualEnemyModelFailed.Remove(enemyType);
+        try
+        {
+            EnemyModelScene refreshed = await Task.Run(() => Ps2EnemyDatReader.Read(path, enemyType));
+            if (visualEnemyModelReloadVersions.GetValueOrDefault(enemyType) != version) return false;
+            visualEnemyModelCache[enemyType] = refreshed;
+            TrackVisualEnemyDat(enemyType, path);
+            if (visualViewport == null || visualViewport.IsDisposed) return true;
+            visualViewport.SetEnemyModels(visualEnemyModelCache);
+            visualViewport.SetEnemyAttachmentAnimation(null, 0f);
+            RefreshVisualEnemyAnimationChoices();
+            visualViewport.RefreshEnemyGeometry(selectedEnemyScene?.Entries.FirstOrDefault(x => x.EnemyType == enemyType));
+            UpdateVisualStatus();
+            ExtractLog($"Visual Editor: texturas e modelo de {stem}.dat recarregados após edição.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (visualEnemyModelReloadVersions.GetValueOrDefault(enemyType) == version)
+                ExtractLog($"Visual Editor: não foi possível atualizar {stem}.dat: {ex.Message}");
+            return false;
+        }
     }
 
     private void OnEnemySceneLoaded(EslScene? scene)

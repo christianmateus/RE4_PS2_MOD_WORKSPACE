@@ -72,6 +72,14 @@ public static class SmdEmbeddedBinService
         Buffer.BlockCopy(tail,0,output,newTplOffset,tail.Length);AtomicWrite(smdPath,output);return newEntryCount-1;
     }
 
+    public static int DuplicateFacesAsEntry(string smdPath,ScenarioEntry entry,int entryCount,int binCount,IReadOnlyCollection<int> allFaceFlags,IReadOnlyCollection<int> selectedFaceFlags)
+    {
+        ArgumentNullException.ThrowIfNull(entry);var all=allFaceFlags.Where(x=>x>=0).ToHashSet();var selected=selectedFaceFlags.Where(all.Contains).ToHashSet();if(selected.Count==0)throw new InvalidOperationException("Selecione ao menos uma face para duplicar.");
+        byte[] selectedBin=Extract(smdPath,entry.BinId,binCount);foreach(int flag in all.Where(x=>!selected.Contains(x))){if(flag<0||flag+2>selectedBin.Length)throw new InvalidDataException("Uma face aponta para fora do BIN.");selectedBin[flag]=1;selectedBin[flag+1]=0;}
+        // PS2 strips cannot grow safely in place without rebuilding their VIF segments. A
+        // private BIN clone preserves vertices, materials and texture for the duplicate.
+        return AppendEntry(smdPath,entry,entryCount,binCount,selectedBin);
+    }
     public static void SetMaterialTexture(string smdPath,int binId,int binCount,byte textureIndex)
     {
         byte[] bin=Extract(smdPath,binId,binCount);if(bin.Length<0x20)throw new InvalidDataException("BIN inválido.");ushort count=BitConverter.ToUInt16(bin,0x0A);uint materialOffset=BitConverter.ToUInt32(bin,0x0C);

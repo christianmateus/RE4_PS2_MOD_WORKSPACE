@@ -154,6 +154,8 @@ public sealed partial class ScenarioViewport
 
     private static bool ShouldRenderEffBillboard(EffEntry entry)
     {
+        // Generator records are controllers/emitters, not drawable sprites.
+        if(entry.Kind==EffEntryKind.Generator)return false;
         // Known particle sprites in the room EFFs. Fog/screen/light controllers need
         // dedicated volume or post-process renderers and must not become giant quads.
         // Current validation stage deliberately renders only flames.
@@ -165,20 +167,14 @@ public sealed partial class ScenarioViewport
     }
 
     private static bool IsEnvironmentalEff(EffEntry entry)=>
-        entry.ResourceId is 0x1E or 0x1F or 0x79 or 0x08 or 0x13 or 0x72 or 0xE9 or 0xFE or 0xF7 ||
+        (entry.Kind==EffEntryKind.Generator && entry.EspgenId is 0x42 or 0x45) ||
         entry.EspId is 0x08 or 0x0C or 0x11 or 0x14 or 0x45 or 0x46 or 0x4A or 0x4B;
 
     private static NVector3 GetEffWorldPosition(EffEntry entry)
     {
-        NVector3 result=entry.Group.Position+new NVector3(entry.PositionX,entry.PositionY,entry.PositionZ);
-        EffEntry current=entry;var visited=new HashSet<int>{entry.Index};
-        for(int depth=0;depth<16;depth++)
-        {
-            int encodedParent=current.Parent;if(encodedParent is 0x00 or 0xFE or 0xFF)break;
-            int parent=encodedParent-1;if(parent<0||parent>=entry.Group.Entries.Count||!visited.Add(parent))break;
-            current=entry.Group.Entries[parent];result+=new NVector3(current.PositionX,current.PositionY,current.PositionZ);
-        }
-        return result*EffWorldScale;
+        // Parent_no references a scene/event model and Parts_no one of that model's
+        // parts (or a world/screen sentinel); it is not another entry in this group.
+        return (entry.Group.Position+new NVector3(entry.PositionX,entry.PositionY,entry.PositionZ))*EffWorldScale;
     }
 
     private EffEntry? PickEffEntry(Point mouse)

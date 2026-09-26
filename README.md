@@ -1,4 +1,4 @@
-# RE4 PS2 MOD WORKSPACE — v0.7.1
+# RE4 PS2 MOD WORKSPACE — v0.8.0
 
 ![Screenshot](Images/screenshot7.png)
 
@@ -19,6 +19,7 @@ O **RE4 PS2 MOD WORKSPACE** é uma ferramenta em desenvolvimento para facilitar 
 - Extração individual ou em lote dos cenários
 - Gerenciamento de DATs, backups e restauração dos arquivos originais
 - Build rápido, Build All, recriação limpa da ISO e execução no PCSX2
+- Suporte a vídeos **CRI Sofdec (SFD)**, com reprodução, análise, extração, exportação, substituição e reconstrução usando vídeo MPEG-1 e áudio WAV/ADX
 - **Texture Manager**
   - Visualização, importação e exportação de texturas SMD e EFF
   - Substituição por PNG e Drag & Drop
@@ -63,6 +64,7 @@ The interface is available in Portuguese and English; translations are still bei
 - Individual or batch scenario extraction
 - DAT management with original-file backup and restore
 - Fast Build, Build All, clean ISO recreation and direct PCSX2 testing
+- **CRI Sofdec (SFD)** video support with playback, analysis, extraction, export, replacement and rebuilding from MPEG-1 video and WAV/ADX audio
 - **Texture Manager**
   - SMD and EFF texture preview, import and export
   - PNG replacement and Drag & Drop

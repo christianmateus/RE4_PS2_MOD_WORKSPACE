@@ -6,6 +6,7 @@ namespace RE4_PS2_MOD_WORKSPACE
         static void Main()
         {
             ApplicationConfiguration.Initialize();
+            ToolStripManager.Renderer = new DarkToolStripRenderer();
             LanguageService.InstallRuntimeLocalization();
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
             Application.ThreadException += (_, e) => LogStartupError(e.Exception);

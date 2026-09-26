@@ -7,6 +7,7 @@ namespace RE4_PS2_MOD_WORKSPACE;
 
 public enum SmdGizmoMode { Move, Rotate, Scale }
 public enum SmdTransformSpace { World, Local }
+public enum SmdMeshSelectionMode { Vertex, Edge, Face }
 
 public sealed partial class ScenarioViewport
 {
@@ -20,6 +21,8 @@ public sealed partial class ScenarioViewport
     private Point smdDragMouse;
     private System.Numerics.Vector2 smdDragScreenAxis;
     private float smdDragUnitsPerPixel;
+    private bool smdDirectMeshDrag;
+    private NVector3 smdDragCameraRight,smdDragCameraUp;
     private bool smdOverlayDirty = true;
     private int smdSelectedVao, smdSelectedVbo, smdSelectedCount;
     private readonly int[] smdGizmoVaos = new int[4], smdGizmoVbos = new int[4], smdGizmoCounts = new int[4];
@@ -29,6 +32,8 @@ public sealed partial class ScenarioViewport
     private float smdDisplayedGizmoLength;
     private readonly Stack<Action> smdUndo = new();
     private readonly HashSet<int> selectedSmdFaces=new();
+    private readonly HashSet<int> selectedSmdVertices=new();
+    private readonly HashSet<(int A,int B)> selectedSmdEdges=new();
     private Dictionary<int,NVector3>? smdFaceDragStart;
     private bool smdFaceDragging;
     private int smdFaceVao,smdFaceVbo,smdFaceCount;
@@ -48,8 +53,10 @@ public sealed partial class ScenarioViewport
     public SmdGizmoMode SmdTransformMode { get; set; }
     public SmdTransformSpace SmdTransformSpace { get; set; }
     public bool SmdSnapEnabled { get; set; }
+    public bool SmdMagnetEnabled { get; set; }
     public float SmdTransformSpeed { get; set; } = 4f;
     public bool SmdFaceEditMode { get; set; }
+    public SmdMeshSelectionMode SmdSelectionMode { get; private set; } = SmdMeshSelectionMode.Face;
     public bool IsSmdDragging => draggingSmd != null;
     public void SetSmdTransformSpace(SmdTransformSpace value){SmdTransformSpace=value;smdOverlayDirty=true;Invalidate();}
     public event Action<IReadOnlyList<ScenarioEntry>>? SmdSelectionChanged;
@@ -65,10 +72,13 @@ public sealed partial class ScenarioViewport
     public void SelectSmdEntry(ScenarioEntry? entry)
     { SelectSmdEntries(entry==null?Array.Empty<ScenarioEntry>():new[]{entry},entry); }
     public void SelectSmdEntries(IEnumerable<ScenarioEntry> entries,ScenarioEntry? primary=null)
-    { int previous=selectedSmdEntry;selectedSmdEntries.Clear();foreach(ScenarioEntry entry in entries)selectedSmdEntries.Add(entry.FileOrder);selectedSmdEntry=primary?.FileOrder??selectedSmdEntries.LastOrDefault(-1);if(previous!=selectedSmdEntry)selectedSmdFaces.Clear();smdOverlayDirty=true;Invalidate(); }
+    { int previous=selectedSmdEntry;selectedSmdEntries.Clear();foreach(ScenarioEntry entry in entries)selectedSmdEntries.Add(entry.FileOrder);selectedSmdEntry=primary?.FileOrder??selectedSmdEntries.LastOrDefault(-1);if(previous!=selectedSmdEntry)ClearSmdMeshSelection();smdOverlayDirty=true;Invalidate(); }
     public void SelectSmdFromViewport(ScenarioEntry? entry,bool additive)
-    { if(SmdFaceEditMode)return;if(!additive)selectedSmdEntries.Clear();if(entry==null){if(!additive)selectedSmdEntry=-1;}else if(additive&&selectedSmdEntries.Contains(entry.FileOrder)){selectedSmdEntries.Remove(entry.FileOrder);selectedSmdEntry=selectedSmdEntries.LastOrDefault(-1);}else{selectedSmdEntries.Add(entry.FileOrder);selectedSmdEntry=entry.FileOrder;}selectedSmdFaces.Clear();smdOverlayDirty=true;Invalidate();SmdSelectionChanged?.Invoke(SelectedSmdGroup()); }
-    public void SetSmdFaceEditMode(bool enabled){SmdFaceEditMode=enabled;selectedSmdFaces.Clear();smdOverlayDirty=true;Invalidate();}
+    { if(SmdFaceEditMode)return;if(!additive)selectedSmdEntries.Clear();if(entry==null){if(!additive)selectedSmdEntry=-1;}else if(additive&&selectedSmdEntries.Contains(entry.FileOrder)){selectedSmdEntries.Remove(entry.FileOrder);selectedSmdEntry=selectedSmdEntries.LastOrDefault(-1);}else{selectedSmdEntries.Add(entry.FileOrder);selectedSmdEntry=entry.FileOrder;}ClearSmdMeshSelection();smdOverlayDirty=true;Invalidate();SmdSelectionChanged?.Invoke(SelectedSmdGroup()); }
+    public void SetSmdFaceEditMode(bool enabled){SmdFaceEditMode=enabled;ClearSmdMeshSelection();smdOverlayDirty=true;Invalidate();}
+    public void SetSmdSelectionMode(SmdMeshSelectionMode mode){SmdSelectionMode=mode;ClearSmdMeshSelection();smdOverlayDirty=true;Invalidate();}
+    private void ClearSmdMeshSelection(){selectedSmdFaces.Clear();selectedSmdVertices.Clear();selectedSmdEdges.Clear();}
+    private bool HasSmdMeshSelection=>SmdSelectionMode switch{SmdMeshSelectionMode.Vertex=>selectedSmdVertices.Count>0,SmdMeshSelectionMode.Edge=>selectedSmdEdges.Count>0,_=>selectedSmdFaces.Count>0};
     public void RefreshSmdGeometry(ScenarioEntry? entry = null)
     { if (entry != null) selectedSmdEntry = entry.FileOrder; RebuildScenarioGeometry(); smdOverlayDirty = true; gpuDirty = true; Invalidate(); }
     public void FocusSmd(ScenarioEntry? entry)
@@ -76,7 +86,7 @@ public sealed partial class ScenarioViewport
     public bool UndoSmdEdit() { if (smdUndo.Count == 0) return false; smdUndo.Pop()(); return true; }
     public bool DeleteSelectedSmdFaces()
     {
-        ScenarioEntry? selected=SelectedSmd();if(!SmdEditingEnabled||!SmdFaceEditMode||selected==null||selectedSmdFaces.Count==0||scene==null)return false;
+        ScenarioEntry? selected=SelectedSmd();if(!SmdEditingEnabled||!SmdFaceEditMode||SmdSelectionMode!=SmdMeshSelectionMode.Face||selected==null||selectedSmdFaces.Count==0||scene==null)return false;
         int[] flags=selectedSmdFaces.Where(i=>i>=0&&i<selected.LocalTriangles.Count).Select(i=>selected.LocalTriangles[i].SourceStripFlagOffset).Where(o=>o>=0).Distinct().ToArray();if(flags.Length==0)return false;
         var before=scene.Entries.Where(e=>e.BinId==selected.BinId).ToDictionary(e=>e,e=>e.LocalTriangles);var flagSet=flags.ToHashSet();
         foreach(var entry in before.Keys)entry.LocalTriangles=entry.LocalTriangles.Where(t=>!flagSet.Contains(t.SourceStripFlagOffset)).ToArray();
@@ -88,11 +98,15 @@ public sealed partial class ScenarioViewport
     {smdFaceBoxSelecting=true;smdFaceBoxAdditive=(ModifierKeys&Keys.Control)!=0;smdFaceBoxStart=smdFaceBoxEnd=point;}
     private void CompleteSmdFaceBoxSelection()
     {
-        smdFaceBoxSelecting=false;RectangleF rect=MakeSelectionRect(smdFaceBoxStart,smdFaceBoxEnd);if(!smdFaceBoxAdditive)selectedSmdFaces.Clear();
+        smdFaceBoxSelecting=false;RectangleF rect=MakeSelectionRect(smdFaceBoxStart,smdFaceBoxEnd);if(!smdFaceBoxAdditive)ClearSmdMeshSelection();
         if(rect.Width>=3||rect.Height>=3)
         {
             ScenarioEntry? entry=SelectedSmd();if(entry!=null)for(int i=0;i<entry.LocalTriangles.Count;i++)
-            {ScenarioTriangle t=entry.LocalTriangles[i];if(!TryProjectWorldToScreen(TransformSmd(t.A,entry),out PointF a)||!TryProjectWorldToScreen(TransformSmd(t.B,entry),out PointF b)||!TryProjectWorldToScreen(TransformSmd(t.C,entry),out PointF c))continue;if(TriangleIntersectsRect(a,b,c,rect))selectedSmdFaces.Add(i);}
+            {ScenarioTriangle t=entry.LocalTriangles[i];if(!TryProjectWorldToScreen(TransformSmd(t.A,entry),out PointF a)||!TryProjectWorldToScreen(TransformSmd(t.B,entry),out PointF b)||!TryProjectWorldToScreen(TransformSmd(t.C,entry),out PointF c))continue;
+                if(SmdSelectionMode==SmdMeshSelectionMode.Face&&TriangleIntersectsRect(a,b,c,rect))selectedSmdFaces.Add(i);
+                else if(SmdSelectionMode==SmdMeshSelectionMode.Vertex){if(rect.Contains(a))selectedSmdVertices.Add(t.SourceOffsetA);if(rect.Contains(b))selectedSmdVertices.Add(t.SourceOffsetB);if(rect.Contains(c))selectedSmdVertices.Add(t.SourceOffsetC);}
+                else if(SmdSelectionMode==SmdMeshSelectionMode.Edge){AddEdge(t.SourceOffsetA,t.SourceOffsetB,a,b);AddEdge(t.SourceOffsetB,t.SourceOffsetC,b,c);AddEdge(t.SourceOffsetC,t.SourceOffsetA,c,a);}
+                void AddEdge(int x,int y,PointF p,PointF q){if(SmdEdgeIntersectsRect(p,q,rect))selectedSmdEdges.Add(NormalizeSmdEdge(x,y));}}
         }
         smdOverlayDirty=true;Invalidate();
     }
@@ -158,7 +172,9 @@ public sealed partial class ScenarioViewport
     private int PickSmdAxis(Point mouse, ScenarioEntry e)
     {
         (NVector3 o,NVector3[] basis,float length)=GetDisplayedSmdGizmoFrame(e); if(!TryProjectWorldToScreen(o,out PointF po)) return 0;
-        float best=11f; int axis=0;
+        // The rendered handles are deliberately thick. Use a matching hit area so
+        // handles placed over vertex/edge highlights do not fall through to box selection.
+        float best=16f; int axis=0;
         if(SmdTransformMode==SmdGizmoMode.Scale&&MathF.Sqrt((mouse.X-po.X)*(mouse.X-po.X)+(mouse.Y-po.Y)*(mouse.Y-po.Y))<=10f)return 4;
         if(SmdTransformMode==SmdGizmoMode.Rotate)
         {
@@ -184,24 +200,35 @@ public sealed partial class ScenarioViewport
     private bool TryBeginSmdDrag(Point mouse)
     {
         if (!SmdEditingEnabled) return false;
-        if(SmdFaceEditMode&&selectedSmdFaces.Count==0)return false;
+        if(SmdFaceEditMode&&!HasSmdMeshSelection)return false;
         ScenarioEntry? e=SelectedSmd(); if(e==null) return false;
-        int axis=PickSmdAxis(mouse,e); if(axis==0) return false;
+        int axis=PickSmdAxis(mouse,e);smdDirectMeshDrag=axis==0&&SmdFaceEditMode&&SmdSelectionMode!=SmdMeshSelectionMode.Face&&(ModifierKeys&Keys.Control)==0&&IsMouseOnSelectedSmdElement(e,mouse);if(axis==0&&!smdDirectMeshDrag)return false;if(smdDirectMeshDrag)axis=4;
         (NVector3 drawnOrigin,NVector3[] drawnAxes,float drawnLength)=GetDisplayedSmdGizmoFrame(e);
         draggingSmd=e; smdDragAxis=axis; smdDragMouse=mouse; smdDragStart=SmdTransformState.From(e);smdGroupDragStart=SelectedSmdGroup().ToDictionary(x=>x,SmdTransformState.From);if(smdGroupDragStart.Count==0)smdGroupDragStart[e]=smdDragStart;smdGroupPivot=drawnOrigin;
-        smdFaceDragging=SmdFaceEditMode&&selectedSmdFaces.Count>0;if(smdFaceDragging)
+        smdFaceDragging=SmdFaceEditMode&&HasSmdMeshSelection;if(smdFaceDragging)
         {
             smdFaceDragStart=new();var weldPositions=new List<NVector3>();
-            foreach(int index in selectedSmdFaces)if(index>=0&&index<e.LocalTriangles.Count){ScenarioTriangle t=e.LocalTriangles[index];weldPositions.Add(t.A);weldPositions.Add(t.B);weldPositions.Add(t.C);}
+            HashSet<int> selectedOffsets=GetSelectedSmdVertexOffsets(e);
+            foreach(var vertex in EnumerateSmdVertices(e))
+            {
+                if(vertex.Offset<0||!selectedOffsets.Contains(vertex.Offset))continue;
+                // Seed the transform from the selected source vertices themselves.
+                // Previously vertex/edge mode depended entirely on the weld search,
+                // which could leave the drag set empty for some strip layouts.
+                smdFaceDragStart.TryAdd(vertex.Offset,vertex.Position);
+                weldPositions.Add(vertex.Position);
+            }
             // PS2 strips frequently duplicate a logical vertex at segment/material seams.
             // Move every coincident copy so adjacent faces stay welded instead of opening holes.
             float epsilon=Math.Max(0.00001f,(scene?.Radius??1f)*0.000001f);float epsilonSq=epsilon*epsilon;
             foreach(ScenarioTriangle t in e.LocalTriangles){AddIfWelded(t.SourceOffsetA,t.A);AddIfWelded(t.SourceOffsetB,t.B);AddIfWelded(t.SourceOffsetC,t.C);}
             void AddIfWelded(int offset,NVector3 position){if(offset<0||smdFaceDragStart.ContainsKey(offset))return;if(weldPositions.Any(p=>NVector3.DistanceSquared(p,position)<=epsilonSq))smdFaceDragStart[offset]=position;}
+            if(smdFaceDragStart.Count==0){draggingSmd=null;smdFaceDragging=false;smdGroupDragStart=null;return false;}
         }
         NVector3 direction=axis==4?NVector3.UnitX:drawnAxes[axis-1];smdDragWorldAxis=direction;
         float length=drawnLength;
-        if(axis==4){smdDragScreenAxis=new(1f,0f);smdDragUnitsPerPixel=length/72f;}
+        if(smdDirectMeshDrag){GetCameraBasis(out _,out smdDragCameraRight,out smdDragCameraUp);smdDragScreenAxis=new(1f,0f);smdDragUnitsPerPixel=length/72f;}
+        else if(axis==4){smdDragScreenAxis=new(1f,0f);smdDragUnitsPerPixel=length/72f;}
         else if(TryProjectWorldToScreen(smdGroupPivot,out PointF po)&&TryProjectWorldToScreen(smdGroupPivot+direction*length,out PointF pe))
         {
             smdDragScreenAxis=new(pe.X-po.X,pe.Y-po.Y);float pixels=smdDragScreenAxis.Length();
@@ -222,7 +249,7 @@ public sealed partial class ScenarioViewport
         float pixels=System.Numerics.Vector2.Dot(new System.Numerics.Vector2(dx,dy),smdDragScreenAxis);
         if(smdFaceDragging)
         {
-            float amount=pixels*smdDragUnitsPerPixel*.25f*SmdTransformSpeed;if(SmdSnapEnabled)amount=MathF.Round(amount/.25f)*.25f;NVector3 world=smdDragWorldAxis*amount;NVector3 local=WorldDeltaToSmdLocal(world,e);var moved=smdFaceDragStart!.ToDictionary(x=>x.Key,x=>x.Value+local);ApplySmdVertexPositions(e,moved);foreach(var pair in moved)scene!.PendingVertexEdits[(e.BinId,pair.Key)]=(pair.Value,FindSmdFactor(e,pair.Key));scene!.IsModified=true;RefreshSmdWorldTriangles(e,true);smdOverlayDirty=true;Invalidate();return;
+            NVector3 world;if(smdDirectMeshDrag){world=(smdDragCameraRight*dx-smdDragCameraUp*dy)*smdDragUnitsPerPixel;if(SmdSnapEnabled)world=new(MathF.Round(world.X/.25f)*.25f,MathF.Round(world.Y/.25f)*.25f,MathF.Round(world.Z/.25f)*.25f);}else{float amount=pixels*smdDragUnitsPerPixel*.25f*SmdTransformSpeed;if(SmdSnapEnabled)amount=MathF.Round(amount/.25f)*.25f;world=smdDragWorldAxis*amount;}NVector3 local=WorldDeltaToSmdLocal(world,e);var moved=smdFaceDragStart!.ToDictionary(x=>x.Key,x=>x.Value+local);if(SmdMagnetEnabled)ApplySmdMagnet(e,moved);ApplySmdVertexPositions(e,moved);foreach(var pair in moved)scene!.PendingVertexEdits[(e.BinId,pair.Key)]=(pair.Value,FindSmdFactor(e,pair.Key));scene!.IsModified=true;RefreshSmdWorldTriangles(e,true);smdOverlayDirty=true;Invalidate();return;
         }
         if(SmdTransformMode==SmdGizmoMode.Move)
         {
@@ -245,7 +272,7 @@ public sealed partial class ScenarioViewport
     }
     private void EndSmdDrag()
     {
-        ScenarioEntry e=draggingSmd!; SmdTransformState before=smdDragStart;var groupBefore=smdGroupDragStart;bool wasFace=smdFaceDragging;var faceBefore=smdFaceDragStart; bool changed=wasFace||(groupBefore?.Any(x=>!x.Value.Equals(SmdTransformState.From(x.Key)))??!before.Equals(SmdTransformState.From(e)));var editedEntries=groupBefore?.Keys.ToArray()??new[]{e}; draggingSmd=null;smdDragAxis=0;smdFaceDragging=false;smdFaceDragStart=null;smdGroupDragStart=null;
+        ScenarioEntry e=draggingSmd!; SmdTransformState before=smdDragStart;var groupBefore=smdGroupDragStart;bool wasFace=smdFaceDragging;var faceBefore=smdFaceDragStart; bool changed=wasFace||(groupBefore?.Any(x=>!x.Value.Equals(SmdTransformState.From(x.Key)))??!before.Equals(SmdTransformState.From(e)));var editedEntries=groupBefore?.Keys.ToArray()??new[]{e}; draggingSmd=null;smdDragAxis=0;smdFaceDragging=false;smdDirectMeshDrag=false;smdFaceDragStart=null;smdGroupDragStart=null;
         smdOverlayDirty=true;Invalidate();
         if(changed){foreach(ScenarioEntry item in editedEntries)BakeSmdWorldTriangles(item);RefreshSmdBounds();foreach(ScenarioEntry item in editedEntries)SmdEntryEdited?.Invoke(item);smdUndo.Push(()=>{if(wasFace&&faceBefore!=null){ApplySmdVertexPositions(e,faceBefore);foreach(var pair in faceBefore)scene!.PendingVertexEdits[(e.BinId,pair.Key)]=(pair.Value,FindSmdFactor(e,pair.Key));}else if(groupBefore!=null)foreach(var pair in groupBefore)pair.Value.Apply(pair.Key);else before.Apply(e);scene!.IsModified=true;selectedSmdEntry=e.FileOrder;RebuildScenarioGeometry();gpuDirty=true;smdOverlayDirty=true;foreach(ScenarioEntry item in (groupBefore?.Keys.Cast<ScenarioEntry>()??new[]{e}))SmdEntryEdited?.Invoke(item);SmdSelectionChanged?.Invoke(SelectedSmdGroup());Invalidate();});}
     }
@@ -255,7 +282,7 @@ public sealed partial class ScenarioViewport
         smdOverlayDirty=false; EnsureSmdBuffers(); var selected=new List<float>();var faces=new List<float>();var axes=new[]{new List<float>(),new List<float>(),new List<float>(),new List<float>()};ScenarioEntry? e=SelectedSmd();
         if(e==null)smdDisplayedGizmoEntry=-1;
         if(e!=null&&!SmdFaceEditMode){UploadSmdGizmoOnly(e);return;}
-        if(e!=null){void L(List<float> v,NVector3 a,NVector3 b)=>v.AddRange(new[]{a.X,a.Y,a.Z,0f,0f,0f,b.X,b.Y,b.Z,0f,0f,0f});foreach(ScenarioEntry item in SelectedSmdGroup())for(int ti=0;ti<item.LocalTriangles.Count;ti++){var t=item.LocalTriangles[ti];var a=TransformSmd(t.A,item);var b=TransformSmd(t.B,item);var c=TransformSmd(t.C,item);var list=SmdFaceEditMode&&ReferenceEquals(item,e)&&selectedSmdFaces.Contains(ti)?faces:selected;L(list,a,b);L(list,b,c);L(list,c,a);}float len=SmdGizmoLength(e);NVector3 origin=GetSmdGizmoOrigin(e);NVector3[] basis=GetSmdAxes(e);SetDisplayedSmdGizmoFrame(e,origin,basis,len);if(SmdTransformMode==SmdGizmoMode.Rotate){const int segments=72;for(int ring=0;ring<3;ring++)for(int i=0;i<segments;i++){float a=MathF.Tau*i/segments,b=MathF.Tau*(i+1)/segments,ca=MathF.Cos(a)*len,sa=MathF.Sin(a)*len,cb=MathF.Cos(b)*len,sb=MathF.Sin(b)*len;NVector3 p=ring switch{0=>origin+basis[1]*ca+basis[2]*sa,1=>origin+basis[0]*ca+basis[2]*sa,_=>origin+basis[0]*ca+basis[1]*sa};NVector3 q=ring switch{0=>origin+basis[1]*cb+basis[2]*sb,1=>origin+basis[0]*cb+basis[2]*sb,_=>origin+basis[0]*cb+basis[1]*cb};L(axes[ring],p,q);}}else for(int i=0;i<3;i++){if(SmdTransformMode==SmdGizmoMode.Move)AddCamArrow(axes[i],origin,basis[i],len);else AddSmdScaleHandle(axes[i],origin,basis[i],basis[(i+1)%3],basis[(i+2)%3],len);}if(SmdTransformMode==SmdGizmoMode.Scale)AddSmdCenterHandle(axes[3],origin,basis,len*.075f);}
+        if(e!=null){void L(List<float> v,NVector3 a,NVector3 b)=>v.AddRange(new[]{a.X,a.Y,a.Z,0f,0f,0f,b.X,b.Y,b.Z,0f,0f,0f});float len=SmdGizmoLength(e);foreach(ScenarioEntry item in SelectedSmdGroup())for(int ti=0;ti<item.LocalTriangles.Count;ti++){var t=item.LocalTriangles[ti];var a=TransformSmd(t.A,item);var b=TransformSmd(t.B,item);var c=TransformSmd(t.C,item);L(selected,a,b);L(selected,b,c);L(selected,c,a);if(SmdFaceEditMode&&ReferenceEquals(item,e)){if(SmdSelectionMode==SmdMeshSelectionMode.Face&&selectedSmdFaces.Contains(ti)){L(faces,a,b);L(faces,b,c);L(faces,c,a);}else if(SmdSelectionMode==SmdMeshSelectionMode.Edge){if(selectedSmdEdges.Contains(NormalizeSmdEdge(t.SourceOffsetA,t.SourceOffsetB)))L(faces,a,b);if(selectedSmdEdges.Contains(NormalizeSmdEdge(t.SourceOffsetB,t.SourceOffsetC)))L(faces,b,c);if(selectedSmdEdges.Contains(NormalizeSmdEdge(t.SourceOffsetC,t.SourceOffsetA)))L(faces,c,a);}else if(SmdSelectionMode==SmdMeshSelectionMode.Vertex){float s=len*.025f;Mark(t.SourceOffsetA,a);Mark(t.SourceOffsetB,b);Mark(t.SourceOffsetC,c);void Mark(int o,NVector3 p){if(!selectedSmdVertices.Contains(o))return;L(faces,p-NVector3.UnitX*s,p+NVector3.UnitX*s);L(faces,p-NVector3.UnitY*s,p+NVector3.UnitY*s);L(faces,p-NVector3.UnitZ*s,p+NVector3.UnitZ*s);}}}}NVector3 origin=GetSmdGizmoOrigin(e);NVector3[] basis=GetSmdAxes(e);SetDisplayedSmdGizmoFrame(e,origin,basis,len);for(int i=0;i<3;i++)AddCamArrow(axes[i],origin,basis[i],len);}
         UploadLineBuffer(smdSelectedVao,smdSelectedVbo,selected,out smdSelectedCount);UploadLineBuffer(smdFaceVao,smdFaceVbo,faces,out smdFaceCount);for(int i=0;i<4;i++)UploadLineBuffer(smdGizmoVaos[i],smdGizmoVbos[i],axes[i],out smdGizmoCounts[i]);
     }
     private void UploadSmdGizmoOnly(ScenarioEntry e)
@@ -272,7 +299,7 @@ public sealed partial class ScenarioViewport
         if(!SmdEditingEnabled||SelectedSmd()==null)return;GL.Uniform1(uUseTexture,0);GL.Uniform1(uUnlit,1);GL.Disable(EnableCap.DepthTest);GL.Disable(EnableCap.CullFace);GL.Uniform3(uColor,1f,.82f,.12f);GL.BindVertexArray(smdSelectedVao);GL.LineWidth(2f);GL.DrawArrays(PrimitiveType.Lines,0,smdSelectedCount);GL.Uniform3(uColor,1f,.35f,.08f);GL.BindVertexArray(smdFaceVao);GL.LineWidth(5f);GL.DrawArrays(PrimitiveType.Lines,0,smdFaceCount);var colors=new[]{(1f,.15f,.12f),(.2f,.9f,.25f),(.15f,.48f,1f),(.92f,.92f,.92f)};for(int i=0;i<4;i++){bool active=draggingSmd!=null&&smdDragAxis==i+1;if(active)GL.Uniform3(uColor,1f,.95f,.25f);else GL.Uniform3(uColor,colors[i].Item1,colors[i].Item2,colors[i].Item3);GL.BindVertexArray(smdGizmoVaos[i]);GL.LineWidth(active?10f:6f);GL.DrawArrays(PrimitiveType.Lines,0,smdGizmoCounts[i]);}GL.LineWidth(1f);GL.Enable(EnableCap.DepthTest);GL.Enable(EnableCap.CullFace);GL.Uniform1(uUnlit,0);
     }
     private NVector3 GetSmdGizmoOrigin(ScenarioEntry e)
-    {if(draggingSmd!=null&&smdGroupDragStart!=null&&smdGroupDragStart.TryGetValue(e,out SmdTransformState start)){if(SmdTransformMode==SmdGizmoMode.Move)return smdGroupPivot+(e.Position-new NVector3(start.Px,start.Py,start.Pz));return smdGroupPivot;}if(!SmdFaceEditMode){IReadOnlyList<ScenarioEntry> group=SelectedSmdGroup();if(group.Count==1)return GetSmdEntryVisualCenter(e);NVector3 min=new(float.PositiveInfinity),max=new(float.NegativeInfinity);bool any=false;foreach(ScenarioEntry item in group)foreach(ScenarioTriangle t in item.LocalTriangles){NVector3 a=TransformSmd(t.A,item),b=TransformSmd(t.B,item),c=TransformSmd(t.C,item);min=NVector3.Min(min,NVector3.Min(a,NVector3.Min(b,c)));max=NVector3.Max(max,NVector3.Max(a,NVector3.Max(b,c)));any=true;}return any?(min+max)*.5f:e.Position;}if(selectedSmdFaces.Count==0)return GetSmdEntryVisualCenter(e);NVector3 sum=NVector3.Zero;int count=0;foreach(int i in selectedSmdFaces)if(i>=0&&i<e.LocalTriangles.Count){var t=e.LocalTriangles[i];sum+=TransformSmd((t.A+t.B+t.C)/3f,e);count++;}return count==0?GetSmdEntryVisualCenter(e):sum/count;}
+    {if(draggingSmd!=null&&smdGroupDragStart!=null&&smdGroupDragStart.TryGetValue(e,out SmdTransformState start)){if(SmdTransformMode==SmdGizmoMode.Move)return smdGroupPivot+(e.Position-new NVector3(start.Px,start.Py,start.Pz));return smdGroupPivot;}if(!SmdFaceEditMode){IReadOnlyList<ScenarioEntry> group=SelectedSmdGroup();if(group.Count==1)return GetSmdEntryVisualCenter(e);NVector3 min=new(float.PositiveInfinity),max=new(float.NegativeInfinity);bool any=false;foreach(ScenarioEntry item in group)foreach(ScenarioTriangle t in item.LocalTriangles){NVector3 a=TransformSmd(t.A,item),b=TransformSmd(t.B,item),c=TransformSmd(t.C,item);min=NVector3.Min(min,NVector3.Min(a,NVector3.Min(b,c)));max=NVector3.Max(max,NVector3.Max(a,NVector3.Max(b,c)));any=true;}return any?(min+max)*.5f:e.Position;}HashSet<int> offsets=GetSelectedSmdVertexOffsets(e);if(offsets.Count==0)return GetSmdEntryVisualCenter(e);var points=EnumerateSmdVertices(e).Where(v=>offsets.Contains(v.Offset)).GroupBy(v=>v.Offset).Select(g=>TransformSmd(g.First().Position,e)).ToArray();return points.Length==0?GetSmdEntryVisualCenter(e):points.Aggregate(NVector3.Zero,(a,b)=>a+b)/points.Length;}
     private NVector3 GetSmdEntryVisualCenter(ScenarioEntry e)
     {NVector3 min=new(float.PositiveInfinity),max=new(float.NegativeInfinity);bool any=false;foreach(ScenarioTriangle t in e.LocalTriangles){min=NVector3.Min(min,NVector3.Min(t.A,NVector3.Min(t.B,t.C)));max=NVector3.Max(max,NVector3.Max(t.A,NVector3.Max(t.B,t.C)));any=true;}return any?TransformSmd((min+max)*.5f,e):e.Position;}
     private float SmdGizmoLength(ScenarioEntry e)
@@ -293,8 +320,24 @@ public sealed partial class ScenarioViewport
     {axis=NVector3.Normalize(axis);float c=MathF.Cos(angle),s=MathF.Sin(angle);return value*c+NVector3.Cross(axis,value)*s+axis*NVector3.Dot(axis,value)*(1f-c);}
     private bool HandleSmdFaceClick(Point mouse,bool additive)
     {
-        if(!SmdEditingEnabled||!SmdFaceEditMode)return false;ScenarioEntry? e=SelectedSmd();if(e==null||!TryBuildPickRay(mouse,out NVector3 origin,out NVector3 direction))return true;int hit=-1;float best=float.PositiveInfinity;for(int i=0;i<e.LocalTriangles.Count;i++){var t=e.LocalTriangles[i];if(RayTriangle(origin,direction,TransformSmd(t.A,e),TransformSmd(t.B,e),TransformSmd(t.C,e),out float d)&&d<best){best=d;hit=i;}}if(!additive)selectedSmdFaces.Clear();if(hit>=0){if(additive&&!selectedSmdFaces.Add(hit))selectedSmdFaces.Remove(hit);else selectedSmdFaces.Add(hit);}smdOverlayDirty=true;Invalidate();return true;
+        if(!SmdEditingEnabled||!SmdFaceEditMode)return false;ScenarioEntry? e=SelectedSmd();if(e==null)return true;if(!additive)ClearSmdMeshSelection();
+        if(SmdSelectionMode==SmdMeshSelectionMode.Face&&TryBuildPickRay(mouse,out NVector3 origin,out NVector3 direction)){int hit=-1;float best=float.PositiveInfinity;for(int i=0;i<e.LocalTriangles.Count;i++){var t=e.LocalTriangles[i];if(RayTriangle(origin,direction,TransformSmd(t.A,e),TransformSmd(t.B,e),TransformSmd(t.C,e),out float d)&&d<best){best=d;hit=i;}}if(hit>=0)Toggle(selectedSmdFaces,hit,additive);}
+        else if(SmdSelectionMode==SmdMeshSelectionMode.Vertex){int hit=-1;float best=12f;foreach(var v in EnumerateSmdVertices(e)){if(!TryProjectWorldToScreen(TransformSmd(v.Position,e),out PointF p))continue;float d=MathF.Sqrt((p.X-mouse.X)*(p.X-mouse.X)+(p.Y-mouse.Y)*(p.Y-mouse.Y));if(d<best){best=d;hit=v.Offset;}}if(hit>=0)Toggle(selectedSmdVertices,hit,additive);}
+        else {var hit=(-1,-1);float best=10f;foreach(var edge in EnumerateSmdEdges(e)){if(!TryProjectWorldToScreen(TransformSmd(edge.P,e),out PointF p)||!TryProjectWorldToScreen(TransformSmd(edge.Q,e),out PointF q))continue;float d=DistancePointToSegment(mouse,p,q);if(d<best){best=d;hit=(edge.A,edge.B);}}if(hit.Item1>=0){var key=NormalizeSmdEdge(hit.Item1,hit.Item2);if(additive&&!selectedSmdEdges.Add(key))selectedSmdEdges.Remove(key);else selectedSmdEdges.Add(key);}}
+        smdOverlayDirty=true;Invalidate();return true;static void Toggle(HashSet<int> set,int value,bool add){if(add&&!set.Add(value))set.Remove(value);else set.Add(value);}
     }
+    private static (int A,int B) NormalizeSmdEdge(int a,int b)=>a<=b?(a,b):(b,a);
+    private bool IsMouseOnSelectedSmdElement(ScenarioEntry e,Point mouse)
+    {if(SmdSelectionMode==SmdMeshSelectionMode.Vertex){foreach(var v in EnumerateSmdVertices(e))if(selectedSmdVertices.Contains(v.Offset)&&TryProjectWorldToScreen(TransformSmd(v.Position,e),out PointF p)&&MathF.Sqrt((p.X-mouse.X)*(p.X-mouse.X)+(p.Y-mouse.Y)*(p.Y-mouse.Y))<=12f)return true;}
+        else if(SmdSelectionMode==SmdMeshSelectionMode.Edge){foreach(var edge in EnumerateSmdEdges(e))if(selectedSmdEdges.Contains(NormalizeSmdEdge(edge.A,edge.B))&&TryProjectWorldToScreen(TransformSmd(edge.P,e),out PointF p)&&TryProjectWorldToScreen(TransformSmd(edge.Q,e),out PointF q)&&DistancePointToSegment(mouse,p,q)<=10f)return true;}return false;}
+    private static bool SmdEdgeIntersectsRect(PointF a,PointF b,RectangleF r)
+    {if(r.Contains(a)||r.Contains(b))return true;PointF p0=new(r.Left,r.Top),p1=new(r.Right,r.Top),p2=new(r.Right,r.Bottom),p3=new(r.Left,r.Bottom);return Intersects(a,b,p0,p1)||Intersects(a,b,p1,p2)||Intersects(a,b,p2,p3)||Intersects(a,b,p3,p0);
+        static bool Intersects(PointF a,PointF b,PointF c,PointF d){if(Math.Max(a.X,b.X)<Math.Min(c.X,d.X)||Math.Max(c.X,d.X)<Math.Min(a.X,b.X)||Math.Max(a.Y,b.Y)<Math.Min(c.Y,d.Y)||Math.Max(c.Y,d.Y)<Math.Min(a.Y,b.Y))return false;float C(PointF p,PointF q,PointF z)=>(q.X-p.X)*(z.Y-p.Y)-(q.Y-p.Y)*(z.X-p.X);float x=C(a,b,c),y=C(a,b,d),z=C(c,d,a),w=C(c,d,b);return x*y<=0f&&z*w<=0f;}}
+    private static IEnumerable<(int Offset,NVector3 Position)> EnumerateSmdVertices(ScenarioEntry e){foreach(ScenarioTriangle t in e.LocalTriangles){yield return(t.SourceOffsetA,t.A);yield return(t.SourceOffsetB,t.B);yield return(t.SourceOffsetC,t.C);}}
+    private static IEnumerable<(int A,int B,NVector3 P,NVector3 Q)> EnumerateSmdEdges(ScenarioEntry e){var seen=new HashSet<(int,int)>();foreach(ScenarioTriangle t in e.LocalTriangles){foreach(var edge in new[]{(t.SourceOffsetA,t.SourceOffsetB,t.A,t.B),(t.SourceOffsetB,t.SourceOffsetC,t.B,t.C),(t.SourceOffsetC,t.SourceOffsetA,t.C,t.A)}){var key=NormalizeSmdEdge(edge.Item1,edge.Item2);if(seen.Add(key))yield return(key.A,key.B,edge.Item3,edge.Item4);}}}
+    private HashSet<int> GetSelectedSmdVertexOffsets(ScenarioEntry e)=>SmdSelectionMode switch{SmdMeshSelectionMode.Vertex=>selectedSmdVertices.ToHashSet(),SmdMeshSelectionMode.Edge=>selectedSmdEdges.SelectMany(x=>new[]{x.A,x.B}).ToHashSet(),_=>selectedSmdFaces.Where(i=>i>=0&&i<e.LocalTriangles.Count).SelectMany(i=>{var t=e.LocalTriangles[i];return new[]{t.SourceOffsetA,t.SourceOffsetB,t.SourceOffsetC};}).ToHashSet()};
+    private void ApplySmdMagnet(ScenarioEntry e,Dictionary<int,NVector3> moved)
+    {float best=14f;NVector3 correction=NVector3.Zero;var targets=EnumerateSmdVertices(e).Where(v=>!moved.ContainsKey(v.Offset)).GroupBy(v=>v.Offset).Select(g=>g.First());foreach(var source in moved)foreach(var targetVertex in targets){NVector3 a=TransformSmd(source.Value,e),b=TransformSmd(targetVertex.Position,e);if(!TryProjectWorldToScreen(a,out PointF pa)||!TryProjectWorldToScreen(b,out PointF pb))continue;float d=MathF.Sqrt((pa.X-pb.X)*(pa.X-pb.X)+(pa.Y-pb.Y)*(pa.Y-pb.Y));if(d<best){best=d;correction=targetVertex.Position-source.Value;}}if(best>=14f)return;foreach(int key in moved.Keys.ToArray())moved[key]+=correction;}
     private static NVector3 WorldDeltaToSmdLocal(NVector3 v,ScenarioEntry e)
     {v=RotateZ(v,-e.RotationZ);v=RotateY(v,-e.RotationY);v=RotateX(v,-e.RotationX);return new NVector3(MathF.Abs(e.ScaleX)<.000001f?0:v.X/e.ScaleX,MathF.Abs(e.ScaleY)<.000001f?0:v.Y/e.ScaleY,MathF.Abs(e.ScaleZ)<.000001f?0:v.Z/e.ScaleZ);}
     private static NVector3 RotateX(NVector3 v,float a){float c=MathF.Cos(a),s=MathF.Sin(a);return new(v.X,v.Y*c-v.Z*s,v.Y*s+v.Z*c);}

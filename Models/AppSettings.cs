@@ -41,6 +41,7 @@ public sealed class AppSettings
     public int AutoSaveIntervalMinutes { get; set; } = 5;
     public bool VisualShowFps { get; set; } = false;
     public bool VisualLayersPanelCollapsed { get; set; } = false;
+    public int VisualLayersPanelWidth { get; set; } = 210;
     public bool VisualPropertiesPanelCollapsed { get; set; } = false;
     public string? LastCharacterDatPath { get; set; }
     public string? LastAnimationDatPath { get; set; }

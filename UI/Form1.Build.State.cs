@@ -53,8 +53,6 @@ public partial class Form1
         return count;
     }
 
-    private async void btnBuildRefreshChanges_Click(object? sender, EventArgs e) => await RefreshChangeStatusAsync();
-
     private async Task RefreshChangeStatusAsync()
     {
         if (lblBuildChangeStatus == null || lblBuildChangeStatus.IsDisposed) return;
@@ -64,6 +62,7 @@ public partial class Form1
             lblBuildChangeStatus.Text = "Nenhum Content ativo. Extraia um cenário primeiro.";
             lblBuildChangeStatus.ForeColor = Color.FromArgb(145, 151, 163);
             if (btnBuildOneClick != null) btnBuildOneClick.Enabled = false;
+            if (btnBuildOnly != null) btnBuildOnly.Enabled = false;
             return;
         }
         try
@@ -84,6 +83,7 @@ public partial class Form1
                 lblBuildChangeStatus.ForeColor = Color.FromArgb(236, 180, 92);
             }
             btnBuildOneClick.Enabled = true;
+            btnBuildOnly.Enabled = true;
         }
         catch (Exception ex)
         {
@@ -146,7 +146,7 @@ public partial class Form1
                 bool neverBuilt = !status.State.LastBuildUtc.HasValue && !status.Diff.HasChanges && status.PendingTpl == 0 && (string.IsNullOrWhiteSpace(status.State.BuildDatPath) || !File.Exists(status.State.BuildDatPath));
                 string stateText = neverBuilt ? "NÃO COMPILADO" : status.NeedsRepack ? (status.PendingTpl > 0 ? "MODIFICADO + TPL" : "MODIFICADO") : (status.NeedsInject ? "AGUARDA INJEÇÃO" : "ATUALIZADO");
                 var item = new ListViewItem(status.State.DatName) { Tag = new BuildListItem("dat:" + status.State.DatName, "DAT", status.State.DatName, DatName: status.State.DatName) };
-                item.SubItems.Add("DAT / cenário");
+                item.SubItems.Add(GetDatOriginLabel(status.State.DatName));
                 item.SubItems.Add(stateText);
                 item.SubItems.Add(status.Diff.Total.ToString("N0"));
                 item.SubItems.Add(status.State.LastBuildUtc.HasValue ? status.State.LastBuildUtc.Value.ToLocalTime().ToString("dd/MM HH:mm:ss") : "Nunca");
@@ -169,13 +169,31 @@ public partial class Form1
         finally { if (lvTrackedDats != null && !lvTrackedDats.IsDisposed) lvTrackedDats.EndUpdate(); }
     }
 
-    private async void btnBuildRefreshTracked_Click(object? sender, EventArgs e) => await RefreshTrackedDatsAsync();
+    private async void btnBuildRefreshTracked_Click(object? sender, EventArgs e)
+    {
+        await RefreshTrackedDatsAsync();
+        await RefreshChangeStatusAsync();
+    }
+
+    private static string GetDatOriginLabel(string datName)
+    {
+        string name = Path.GetFileNameWithoutExtension(datName).ToLowerInvariant();
+        if (name.Length >= 2 && name[0] == 'r' && name.Skip(1).All(char.IsDigit)) return "DAT / Cenário";
+        if (name.StartsWith("em", StringComparison.Ordinal)) return "DAT / Inimigo";
+        if (name.StartsWith("pl", StringComparison.Ordinal)) return "DAT / Personagem";
+        if (name.StartsWith("wep", StringComparison.Ordinal) || name.StartsWith("wp", StringComparison.Ordinal)) return "DAT / Arma";
+        if (name.StartsWith("itm", StringComparison.Ordinal) || name.StartsWith("item", StringComparison.Ordinal)) return "DAT / Item";
+        if (name.StartsWith("ev", StringComparison.Ordinal)) return "DAT / Evento";
+        if (name.StartsWith("om", StringComparison.Ordinal)) return "DAT / Objeto";
+        return "DAT / Recurso";
+    }
 
     private void lvTrackedDats_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (btnBuildOneClick == null || btnBuildOneClick.IsDisposed) return;
         int count = lvTrackedDats.SelectedItems.Count;
         btnBuildOneClick.Text = count > 0 ? $"BUILD & TEST\r\nSELEÇÃO ({count})" : "BUILD & TEST\r\nARQUIVO ATIVO";
+        btnBuildOnly.Text = count > 0 ? $"SOMENTE BUILD\r\nSELEÇÃO ({count})" : "SOMENTE BUILD\r\nARQUIVO ATIVO";
     }
 
     private void UpdateBuildUi(long? rebuiltSize = null)
