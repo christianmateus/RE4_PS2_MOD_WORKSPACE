@@ -1,10 +1,13 @@
 ﻿using System.ComponentModel;
+using System.Drawing.Design;
 using System.Globalization;
+using System.Windows.Forms.Design;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
 public sealed class AevPropertyView : ICustomTypeDescriptor
 {
+    private byte[]? doorTeleportUndoData;
     public AevEntry Entry { get; }
     public AevPropertyView(AevEntry entry) => Entry = entry;
 
@@ -52,6 +55,20 @@ public sealed class AevPropertyView : ICustomTypeDescriptor
 
     // TYPE 0x01 - Door Way. aev.js absolute 112/116/120/124/128/129.
     // ParameterBuffer begins entry +0x5C => +0x60 is buffer[4].
+    [Category("Door Parameters"), DisplayName("Teleport Location"), Description("Local de chegada, organizado por sala de destino e pela sala de origem."), TypeConverter(typeof(AevTeleportLocationConverter)), Editor(typeof(AevTeleportLocationEditor),typeof(UITypeEditor))]
+    public string DoorTeleportLocation
+    {
+        get
+        {
+            AevTeleportLocation? match=Ensure(4,18)?AevTeleportLocationCatalog.FindByData(Entry.ParameterBuffer.AsSpan(4,18)):null;
+            return match?.DisplayName??$"Personalizado: r{DoorStageId:X1}{DoorRoomId:X2}".ToLowerInvariant();
+        }
+        set
+        {
+            AevTeleportLocation? location=AevTeleportLocationCatalog.FindByDisplayName(value);if(location==null)throw new FormatException("Selecione uma localização conhecida na lista.");Require(4,18);doorTeleportUndoData=Entry.ParameterBuffer.AsSpan(4,18).ToArray();Buffer.BlockCopy(location.Data,0,Entry.ParameterBuffer,4,18);
+        }
+    }
+    public byte[]? ConsumeDoorTeleportUndoData(){byte[]? value=doorTeleportUndoData;doorTeleportUndoData=null;return value;}
     [Category("Door Parameters"), DisplayName("Teleport X")] public float DoorX { get => GetF32(4); set => SetF32(4, value); }
     [Category("Door Parameters"), DisplayName("Teleport Y")] public float DoorY { get => GetF32(8); set => SetF32(8, value); }
     [Category("Door Parameters"), DisplayName("Teleport Z")] public float DoorZ { get => GetF32(12); set => SetF32(12, value); }
@@ -152,7 +169,7 @@ public sealed class AevPropertyView : ICustomTypeDescriptor
         switch (Entry.Type)
         {
             case 0x01:
-                names.UnionWith(new[] { nameof(DoorX), nameof(DoorY), nameof(DoorZ), nameof(DoorFacing), nameof(DoorStageId), nameof(DoorRoomId) });
+                names.UnionWith(new[] { nameof(DoorTeleportLocation), nameof(DoorX), nameof(DoorY), nameof(DoorZ), nameof(DoorFacing), nameof(DoorStageId), nameof(DoorRoomId) });
                 break;
             case 0x02:
                 names.UnionWith(new[] { nameof(CutsceneByte1), nameof(CutsceneByte2), nameof(CutsceneByte3) });
@@ -199,6 +216,28 @@ public sealed class AevPropertyView : ICustomTypeDescriptor
     public EventDescriptorCollection GetEvents(Attribute[]? attributes) => TypeDescriptor.GetEvents(this, attributes, true);
     public EventDescriptorCollection GetEvents() => TypeDescriptor.GetEvents(this, true);
     public object GetPropertyOwner(PropertyDescriptor? pd) => this;
+}
+
+public sealed class AevTeleportLocationConverter : TypeConverter
+{
+    public override bool GetStandardValuesSupported(ITypeDescriptorContext? context)=>true;
+    public override bool GetStandardValuesExclusive(ITypeDescriptorContext? context)=>true;
+    public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context)=>new(AevTeleportLocationCatalog.Locations.Select(x=>x.DisplayName).ToArray());
+}
+
+public sealed class AevTeleportLocationEditor : UITypeEditor
+{
+    public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext? context)=>UITypeEditorEditStyle.DropDown;
+    public override object? EditValue(ITypeDescriptorContext? context,IServiceProvider provider,object? value)
+    {
+        if(provider.GetService(typeof(IWindowsFormsEditorService)) is not IWindowsFormsEditorService service)return value;
+        string[] values=AevTeleportLocationCatalog.Locations.Select(x=>x.DisplayName).ToArray();
+        using var list=new ListBox{BorderStyle=BorderStyle.FixedSingle,BackColor=Color.FromArgb(28,31,37),ForeColor=Color.Gainsboro,Font=new Font("Segoe UI",9F),IntegralHeight=false};
+        list.Items.AddRange(values);int selected=Array.FindIndex(values,x=>x.Equals(value as string,StringComparison.OrdinalIgnoreCase));if(selected>=0){list.SelectedIndex=selected;list.TopIndex=Math.Max(0,selected-5);}
+        int widest=values.Length==0?320:values.Max(x=>TextRenderer.MeasureText(x,list.Font).Width);list.Width=Math.Clamp(widest+SystemInformation.VerticalScrollBarWidth+18,360,720);list.Height=Math.Min(440,Math.Max(120,values.Length*list.ItemHeight+4));
+        object? result=value;list.MouseClick+=(_,e)=>{if(list.IndexFromPoint(e.Location)>=0&&list.SelectedItem is string choice){result=choice;service.CloseDropDown();}};list.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter&&list.SelectedItem is string choice){result=choice;service.CloseDropDown();}else if(e.KeyCode==Keys.Escape)service.CloseDropDown();};
+        service.DropDownControl(list);return result;
+    }
 }
 
 public sealed class AevEventTypeNameConverter : TypeConverter

@@ -19,12 +19,14 @@ public static class Ps2ScenarioWriter
             Write(output, o + 0x10, e.RotationX, e.RotationY, e.RotationZ);
             Write(output, o + 0x20, e.ScaleX, e.ScaleY, e.ScaleZ);
             output[o + 0x30] = e.BinId;
+            output[o + 0x33] = e.SmxId;
         }
         File.WriteAllBytes(path, output);
         foreach(var group in scene.PendingVertexEdits.GroupBy(x=>x.Key.BinId))SmdEmbeddedBinService.SetBinVertexPositions(path,group.Key,scene.BinCount,group.ToDictionary(x=>x.Key.VertexOffset,x=>x.Value));
         foreach(var group in scene.PendingFaceDeletes.GroupBy(x=>x.BinId))SmdEmbeddedBinService.DeleteBinFaces(path,group.Key,scene.BinCount,group.Select(x=>x.StripFlagOffset).ToArray());
         scene.PendingVertexEdits.Clear();
         scene.PendingFaceDeletes.Clear();
+        if(scene.Smx?.IsModified==true)scene.Smx.Save();
         scene.IsModified = false;
     }
     private static void Validate(ScenarioEntry e)

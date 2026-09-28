@@ -57,6 +57,8 @@ public partial class Form1
 
     private bool syncingVisualDat;
     private bool loadingVisualEditor;
+    private TextureDatItem? pendingVisualDat;
+    private bool processingVisualDatSelection;
     private bool visualAevModified;
     private bool syncingVisualAevFilter;
     private bool syncingVisualEnemyFilter;
@@ -223,19 +225,33 @@ public partial class Form1
 
     private async void cmbVisualDat_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        if (syncingVisualDat || loadingVisualEditor || cmbVisualDat.SelectedItem is not TextureDatItem item) return;
+        if (syncingVisualDat || cmbVisualDat.SelectedItem is not TextureDatItem item) return;
+        pendingVisualDat = item;
+        await ProcessPendingVisualDatSelectionAsync();
+    }
 
-        if (!await ConfirmSavePendingChangesAsync("trocar de cenário/DAT", includeOtherEditors: false)) { RefreshVisualDatList(); return; }
-
-        // Preserve a câmera do cenário que está saindo antes de alterar o DAT ativo.
-        SaveVisualCameraStateForActiveDat();
-
-        if (!item.DatName.Equals(project.ActiveDatName, StringComparison.OrdinalIgnoreCase))
+    private async Task ProcessPendingVisualDatSelectionAsync()
+    {
+        if (processingVisualDatSelection || loadingVisualEditor) return;
+        processingVisualDatSelection = true;
+        try
         {
-            ActivateTextureDat(item);
-        }
+            while (pendingVisualDat != null)
+            {
+                TextureDatItem item = pendingVisualDat;
+                pendingVisualDat = null;
 
-        await LoadVisualDatAsync(item);
+                if (!await ConfirmSavePendingChangesAsync("trocar de cenário/DAT", includeOtherEditors: false)) { pendingVisualDat=null;RefreshVisualDatList();return; }
+
+                // Preserve a câmera do cenário que está saindo antes de alterar o DAT ativo.
+                SaveVisualCameraStateForActiveDat();
+
+                if (!item.DatName.Equals(project.ActiveDatName, StringComparison.OrdinalIgnoreCase)) ActivateTextureDat(item);
+
+                await LoadVisualDatAsync(item);
+            }
+        }
+        finally { processingVisualDatSelection = false; }
     }
 
     public async Task RefreshAndLoadVisualEditorAsync()
@@ -356,6 +372,7 @@ public partial class Form1
     {
         List<EslEnemyEntry> entries = GetVisualSelectedEnemies();
         if (entries.Count == 0) { pgVisualProperties.SelectedObject = null; lblVisualPropertiesTitle.Text = "PROPERTIES • SELECTION"; visualViewport?.SelectEnemyEntry(null); return; }
+        ClearVisualItaSelectionForOtherEntity();
         if (entries.Count == 1) pgVisualProperties.SelectedObject = entries[0]; else pgVisualProperties.SelectedObjects = entries.Cast<object>().ToArray();
         lblVisualPropertiesTitle.Text = entries.Count == 1 ? $"PROPERTIES • ENEMY #{entries[0].Index:D3}" : $"PROPERTIES • {entries.Count} ENEMIES";
         visualViewport?.SelectEnemyEntry(entries[0]);
@@ -378,7 +395,7 @@ public partial class Form1
     private void SetEnemyGizmoMode(EnemyGizmoMode mode)
     {
         if (visualViewport == null) return;
-        visualViewport.EnemyTransformMode = mode;
+        visualViewport.SetEnemyTransformMode(mode);
         if (btnVisualEnemyGizmoMove != null) btnVisualEnemyGizmoMove.BackColor = mode == EnemyGizmoMode.Move ? Accent : Surface2;
         if (btnVisualEnemyGizmoRotate != null) btnVisualEnemyGizmoRotate.BackColor = mode == EnemyGizmoMode.Rotate ? Accent : Surface2;
         visualViewport.Invalidate();
@@ -809,6 +826,8 @@ public partial class Form1
             UseWaitCursor = false;
             btnVisualFit.Enabled = true;
             loadingVisualEditor = false;
+            if (pendingVisualDat != null && !processingVisualDatSelection && IsHandleCreated)
+                BeginInvoke(new Action(() => _ = ProcessPendingVisualDatSelectionAsync()));
         }
     }
 
@@ -1014,6 +1033,20 @@ public partial class Form1
     }
 
     private void btnVisualSaveLit_Click(object? sender,EventArgs e)=>SaveVisualLit();
+    private void OpenVisualLitGlobalAdjustment()
+    {
+        if(visualLitScene==null){MessageBox.Show(this,"Carregue um arquivo LIT antes de abrir o ajuste global.","Ajuste global",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+        try
+        {
+            int slot=(cmbVisualLitGroup.SelectedItem as LitGroup)?.SlotIndex??visualLitScene.Groups.FirstOrDefault()?.SlotIndex??-1;
+            void Preview(){visualViewport?.RefreshLitGeometry();pgVisualProperties.Refresh();lstVisualLitEntries.Refresh();}
+            using var dialog=new LitGlobalAdjustmentDialog(visualLitScene,slot,Preview);
+            if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+            visualLitScene.IsModified=true;btnVisualSaveLit.Enabled=true;btnVisualSaveLit.Text="SAVE LIT *";RefreshVisualLitGroups();visualViewport?.RefreshLitGeometry();UpdateVisualStatus();
+            ExtractLog($"Visual Editor: ajuste global aplicado a {Path.GetFileName(visualLitPath)}.");
+        }
+        catch(Exception ex){MessageBox.Show(this,"Não foi possível abrir o ajuste global:\n\n"+ex.Message,"Ajuste global",MessageBoxButtons.OK,MessageBoxIcon.Error);ExtractLog("Visual Editor: erro no ajuste global: "+ex);}
+    }
     private bool SaveVisualLit()
     {
         if(visualLitScene==null||string.IsNullOrWhiteSpace(visualLitPath))return false;
@@ -1251,6 +1284,7 @@ public partial class Form1
         bool smdTab = visualOpen && tabVisualEntities?.SelectedIndex == 4;
         bool camTab = visualOpen && tabVisualEntities?.SelectedIndex == 8;
         bool collisionTab = visualOpen && tabVisualEntities?.SelectedIndex == 3;
+        bool itaTab = visualOpen && tabVisualEntities?.SelectedIndex == 9;
         if(collisionTab&&!e.Control&&e.KeyCode==Keys.F&&visualCollisionMarkedEdges.Count>=2){btnVisualCollisionEdgeFill_Click(null,EventArgs.Empty);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(collisionTab&&!e.Control&&e.KeyCode==Keys.Delete){btnVisualCollisionRemove_Click(null,EventArgs.Empty);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(camTab&&!e.Control&&e.KeyCode==Keys.F){visualViewport?.FocusCam(lstVisualCamEntries.SelectedItem as CamEntry);e.Handled=true;e.SuppressKeyPress=true;return;}
@@ -1258,6 +1292,7 @@ public partial class Form1
         if(smdTab&&e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3){SmdGizmoMode mode=e.KeyCode is Keys.D1 or Keys.NumPad1?SmdGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?SmdGizmoMode.Rotate:SmdGizmoMode.Scale;if(chkVisualSmdEditMode.Checked)mode=SmdGizmoMode.Move;SetSmdGizmoMode(mode);e.Handled=true;e.SuppressKeyPress=true;return;}
         if(smdTab&&e.Control&&e.KeyCode==Keys.K&&chkVisualSmdEditMode.Checked){SeparateSelectedSmdFaces();e.Handled=true;e.SuppressKeyPress=true;return;}
         if(objectTab && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;visualViewport?.FocusEts(lstVisualObjectEntries.SelectedItem as EtsEntry);return;}
+        if(itaTab && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;FocusSelectedIta();return;}
         if(objectTab && e.Control && e.KeyCode is Keys.D1 or Keys.NumPad1){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Move);return;}
         if(objectTab && e.Control && e.KeyCode is Keys.D2 or Keys.NumPad2){e.Handled=true;e.SuppressKeyPress=true;SetEtsGizmoMode(EtsGizmoMode.Rotate);return;}
         if(visualOpen && !e.Control && e.KeyCode==Keys.F){e.Handled=true;e.SuppressKeyPress=true;FocusSelectedEnemy();return;}
@@ -1298,6 +1333,7 @@ public partial class Form1
         }
         if ((visualOpen || enemiesOpen) && e.KeyCode == Keys.Z)
         {
+            if(itaTab&&UndoItaTransform()){e.Handled=true;e.SuppressKeyPress=true;return;}
             if(camTab&&e.Shift&&visualViewport?.RedoCamEdit()==true){RefreshVisualCamEntries(Math.Max(0,(lstVisualCamEntries.SelectedItem as CamEntry)?.FileOrder??0));pgVisualProperties.Refresh();e.Handled=true;e.SuppressKeyPress=true;return;}
             if(camTab&&visualViewport?.UndoCamEdit()==true){RefreshVisualCamEntries(Math.Max(0,(lstVisualCamEntries.SelectedItem as CamEntry)?.FileOrder??0));pgVisualProperties.Refresh();e.Handled=true;e.SuppressKeyPress=true;return;}
             if(visualOpen && tabVisualEntities?.SelectedIndex==4 && visualViewport?.UndoSmdEdit()==true){pgVisualProperties.Refresh();lstVisualSmdEntries.Refresh();btnVisualSaveSmd.Text="SAVE SMD *";e.Handled=true;e.SuppressKeyPress=true;return;}
@@ -1608,6 +1644,7 @@ public partial class Form1
                 ReloadVisualSmd(smdEntry.FileOrder);return;
             }
             visualViewport.Scene!.IsModified = true;
+            if(e.ChangedItem.PropertyDescriptor?.ComponentType==typeof(SmxRecord)&&visualViewport.Scene.Smx!=null)visualViewport.Scene.Smx.IsModified=true;
             visualViewport.RefreshSmdGeometry(smdEntry);
             lstVisualSmdEntries.Refresh(); btnVisualSaveSmd.Text = "SAVE SMD *";
             UpdateTopVisualSaveState();
@@ -1649,12 +1686,14 @@ public partial class Form1
         if (descriptor == null) return;
         object? oldValue = e.OldValue;
         string propertyName = descriptor.Name;
+        byte[]? oldDoorTeleport=propertyName==nameof(AevPropertyView.DoorTeleportLocation)?view.ConsumeDoorTeleportUndoData():null;
 
         visualViewport.RegisterAevUndo(() =>
         {
             try
             {
-                descriptor.SetValue(view, oldValue);
+                if(oldDoorTeleport!=null)Buffer.BlockCopy(oldDoorTeleport,0,entry.ParameterBuffer,4,oldDoorTeleport.Length);
+                else descriptor.SetValue(view, oldValue);
                 visualViewport.RefreshAevSceneGeometry(entry);
                 SetAevPropertiesObject(entry);
                 RefreshVisualAevEntryList(entry.FileOrder);
@@ -1723,6 +1762,7 @@ public partial class Form1
     private void lstVisualAevEntries_SelectedIndexChanged(object? sender, EventArgs e)
     {
         AevEntry? entry = lstVisualAevEntries.SelectedItem as AevEntry;
+        if(entry!=null)ClearVisualItaSelectionForOtherEntity();
         SetAevPropertiesObject(entry);
         visualViewport.SelectAevEntry(entry);
     }
@@ -1767,7 +1807,7 @@ public partial class Form1
         else if (scene != null) lblVisualStatus.Text = $"{scene.Triangles.Count:N0} tris • {visualViewport.LoadedTextureCount:N0} tex";
         else if (aev != null) lblVisualStatus.Text = $"{aev.Count:N0} AEV{modified}";
         else if(esl != null) lblVisualStatus.Text = $"{esl.ActiveCount:N0} enemies{modified}";
-        else lblVisualStatus.Text = "v0.8.0 • Visual Editor";
+        else lblVisualStatus.Text = "v0.8.1 • Visual Editor";
         UpdateTopVisualSaveState();
     }
 
@@ -2192,6 +2232,13 @@ public partial class Form1
     private void tabVisualEntities_SelectedIndexChanged(object? sender, EventArgs e)
     {
         if (tabVisualEntities.SelectedIndex < 0) return;
+        if(lastVisualEntityTabIndex==3&&tabVisualEntities.SelectedIndex!=3)
+        {
+            visualCollisionMarkedEdges.Clear();
+            visualViewport?.ClearCollisionSelection();
+            if(pgVisualProperties.SelectedObject is EsatFaceInspection)pgVisualProperties.SelectedObject=null;
+            lblVisualCollisionInfo.Text="Nenhuma face selecionada.";
+        }
         if(lastVisualEntityTabIndex>=0&&lastVisualEntityTabIndex!=tabVisualEntities.SelectedIndex)ClearVisualEnemySelection();
         lastVisualEntityTabIndex=tabVisualEntities.SelectedIndex;
         UpdateVisualContextActions();
@@ -2232,6 +2279,7 @@ public partial class Form1
     {
         EtsEntry[] selected=lstVisualObjectEntries.SelectedItems.Cast<EtsEntry>().ToArray();
         EtsEntry? entry = lstVisualObjectEntries.SelectedItem as EtsEntry;
+        if(entry!=null)ClearVisualItaSelectionForOtherEntity();
         pgVisualProperties.SelectedObject = entry;
         lblVisualPropertiesTitle.Text = selected.Length>1?$"PROPERTIES • {selected.Length} OBJECTS":entry == null ? "PROPERTIES • SELECTION" : GetEtmObjectTitle(entry);
         visualViewport.SelectEtsEntries(selected,entry);
@@ -2333,7 +2381,7 @@ public partial class Form1
     }
     private void lstVisualSmdEntries_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;if(selected.Length>1)pgVisualProperties.SelectedObjects=selected.Cast<object>().ToArray();else pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=selected.Length>1?$"PROPERTIES • {selected.Length} SMD ENTRIES":entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • SMD ENTRY {entry.FileOrder:D3} • BIN {entry.BinId:D3}";visualViewport.SelectSmdEntries(selected,entry);btnVisualSmdImport.Enabled=entry!=null;btnVisualSmdDuplicate.Enabled=entry!=null;UpdateSmdTexturePreview(entry);
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;if(entry!=null)ClearVisualItaSelectionForOtherEntity();if(selected.Length>1)pgVisualProperties.SelectedObjects=selected.Cast<object>().ToArray();else pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=selected.Length>1?$"PROPERTIES • {selected.Length} SMD ENTRIES":entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • SMD ENTRY {entry.FileOrder:D3} • BIN {entry.BinId:D3}";visualViewport.SelectSmdEntries(selected,entry);btnVisualSmdImport.Enabled=entry!=null;btnVisualSmdDuplicate.Enabled=entry!=null;UpdateSmdTexturePreview(entry);
     }
     private void UpdateSmdTexturePreview(ScenarioEntry? entry)
     {
@@ -2381,12 +2429,31 @@ public partial class Form1
     { if(visualViewport==null)return;visualViewport.SmdTransformMode=mode;visualViewport.RefreshSmdGeometry(lstVisualSmdEntries.SelectedItem as ScenarioEntry);btnVisualSmdMove.BackColor=mode==SmdGizmoMode.Move?Accent:Surface2;btnVisualSmdRotate.BackColor=mode==SmdGizmoMode.Rotate?Accent:Surface2;btnVisualSmdScale.BackColor=mode==SmdGizmoMode.Scale?Accent:Surface2; }
     private void SetSmdSelectionMode(SmdMeshSelectionMode mode)
     {if(visualViewport==null)return;visualViewport.SetSmdSelectionMode(mode);btnVisualSmdVertex.BackColor=mode==SmdMeshSelectionMode.Vertex?Accent:Surface2;btnVisualSmdEdge.BackColor=mode==SmdMeshSelectionMode.Edge?Accent:Surface2;btnVisualSmdFace.BackColor=mode==SmdMeshSelectionMode.Face?Accent:Surface2;}
+    private void CreateSelectedSmdSmx()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry==null||scene?.Smx==null||entry.Smx!=null)return;
+        byte id=entry.SmxId;
+        if(id==0xFF){MessageBox.Show(this,"Esta entry está marcada como não utilizada (SMX ID 0xFF).","Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
+        if(id==0xFE)
+        {
+            HashSet<byte> used=scene.Entries.Select(x=>x.SmxId).Concat(scene.Smx.Records.Select(x=>x.Id)).ToHashSet();int free=Enumerable.Range(0,250).FirstOrDefault(x=>!used.Contains((byte)x),-1);if(free<0){MessageBox.Show(this,"Não há IDs SMX livres entre 0x00 e 0xF9.","Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}id=(byte)free;entry.SetSmxId(id);
+        }
+        try{entry.Smx=scene.Smx.AddDefault(id);scene.IsModified=true;pgVisualProperties.Refresh();lstVisualSmdEntries.Refresh();btnVisualSaveSmd.Text="SAVE SMD *";UpdateTopVisualSaveState();ExtractLog($"Visual Editor: registro SMX padrão criado para a entry {entry.FileOrder:D3}, ID 0x{id:X2}.");}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+    private void RemoveSelectedSmdSmx()
+    {
+        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry?.Smx==null||scene?.Smx==null)return;byte id=entry.SmxId;int linked=scene.Entries.Count(x=>x.SmxId==id);
+        if(MessageBox.Show(this,$"Remover o registro SMX 0x{id:X2}?\n\n{linked} entry(s) SMD usam esse ID. Elas continuarão registradas, mas voltarão aos parâmetros visuais padrão.","Remover SMX",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
+        if(!scene.Smx.Remove(id))return;foreach(ScenarioEntry item in scene.Entries.Where(x=>x.SmxId==id))item.Smx=null;scene.IsModified=true;pgVisualProperties.Refresh();lstVisualSmdEntries.Refresh();btnVisualSaveSmd.Text="SAVE SMD *";UpdateTopVisualSaveState();ExtractLog($"Visual Editor: registro SMX 0x{id:X2} removido.");
+    }
     private bool SaveVisualSmd()
     {
         if(visualViewport?.Scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return false;
         try
         {
             string backup=GetVisualAevBackupPath(visualSmdPath);Directory.CreateDirectory(Path.GetDirectoryName(backup)!);if(!File.Exists(backup))File.Copy(visualSmdPath,backup);
+            if(visualViewport.Scene.Smx is { IsModified:true } smx){string smxBackup=GetVisualAevBackupPath(smx.SourcePath);if(!File.Exists(smxBackup))File.Copy(smx.SourcePath,smxBackup);}
             Ps2ScenarioWriter.WriteTransforms(visualViewport.Scene,visualSmdPath);btnVisualSaveSmd.Text="SAVE SMD";ExtractLog($"Visual Editor: transformações SMD salvas em {Path.GetFileName(visualSmdPath)}.");return true;
         }
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Salvar SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);ExtractLog("Visual Editor: erro ao salvar SMD: "+ex.Message);return false;}
@@ -2492,6 +2559,32 @@ public partial class Form1
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar BIN",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }
 
+    private void ExportSelectedSmdBinsSeparately()
+    {
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().OrderBy(x=>x.FileOrder).ToArray();ScenarioScene? scene=visualViewport?.Scene;if(selected.Length==0||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(scene.IsModified&&!SaveVisualSmd())return;
+        using var dialog=new FolderBrowserDialog{Description="Escolha a pasta para os BINs selecionados",UseDescriptionForTitle=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+        try{SmdModelExporter.ExportSeparateBins(visualSmdPath,selected,scene.BinCount,dialog.SelectedPath);lblVisualStatus.Text=$"{selected.Length} BIN(s) exportado(s) separadamente";ExtractLog($"Visual Editor: {selected.Length} BIN(s) SMD exportado(s) para {dialog.SelectedPath}.");}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar BINs",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private async Task JoinSelectedSmdEntriesAsync()
+    {
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().OrderBy(x=>x.FileOrder).ToArray();ScenarioScene? scene=visualViewport?.Scene;if(selected.Length<2||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;
+        string? converter=ResolveSmdExternalConverterPath();if(converter==null)return;if(scene.IsModified&&!SaveVisualSmd())return;
+        int faces=selected.Sum(x=>x.LocalTriangles.Count);if(MessageBox.Show(this,$"Juntar {selected.Length} entries ({faces:N0} faces) em uma única entry/BIN?\n\nAs transformações visíveis serão aplicadas à geometria. As entries originais serão substituídas pelo modelo unido.","Join de entries SMD",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
+        string recovery=visualSmdPath+".join_recovery";File.Copy(visualSmdPath,recovery,true);
+        try
+        {
+            UseWaitCursor=true;lblVisualStatus.Text="Juntando entries e convertendo o novo BIN...";byte[] joined=await SmdModelExporter.JoinAsBinAsync(converter,visualSmdPath,selected,scene.BinCount);
+            EnsureVisualSmdBackup();ScenarioEntry template=CloneSmdEntry(selected[0]);template.PositionX=template.PositionY=template.PositionZ=0f;template.RotationX=template.RotationY=template.RotationZ=0f;template.ScaleX=template.ScaleY=template.ScaleZ=1f;
+            SmdEmbeddedBinService.AppendEntry(visualSmdPath,template,scene.EntryCount,scene.BinCount,joined);SmdEmbeddedBinService.RemoveEntries(visualSmdPath,selected.Select(x=>x.FileOrder).ToArray(),scene.EntryCount+1,scene.BinCount+1);
+            int joinedIndex=scene.EntryCount-selected.Length;ScenarioScene check=Ps2ScenarioReader.Read(visualSmdPath);ScenarioEntry result=check.Entries.First(x=>x.FileOrder==joinedIndex);if(result.LocalTriangles.Count==0)throw new InvalidDataException("O BIN unido não contém geometria; o SMD original foi restaurado.");
+            ReloadVisualSmd(joinedIndex);lblVisualStatus.Text=$"{selected.Length} entries unidas na entry {joinedIndex:D3} • {result.LocalTriangles.Count:N0} faces";ExtractLog($"Visual Editor: join de {selected.Length} entries concluído na entry {joinedIndex:D3}, BIN {result.BinId:D3}.");
+        }
+        catch(Exception ex){File.Copy(recovery,visualSmdPath,true);try{ReloadVisualSmd(selected[0].FileOrder);}catch{}MessageBox.Show(this,ex.Message,"Join de entries SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        finally{UseWaitCursor=false;try{File.Delete(recovery);}catch{}}
+    }
+
     private void SeparateSelectedSmdFaces()
     {
         ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;
@@ -2576,6 +2669,22 @@ public partial class Form1
         using var dialog=new SaveFileDialog{Title="Exportar modelo OBJ com UVs e texturas",Filter="Wavefront OBJ (*.obj)|*.obj",FileName=$"smd_bin_{entry.BinId:D3}.obj"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
         try{string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);SmdModelExporter.ExportObj(entry,tpl,dialog.FileName);lblVisualStatus.Text=$"BIN {entry.BinId:D3} exportado como OBJ • UVs, MTL e texturas incluídos";ExtractLog($"Visual Editor: BIN SMD {entry.BinId:D3} exportado como OBJ para {dialog.FileName}.");}
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar OBJ",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private void ExportSelectedSmdObjsSeparately()
+    {
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().OrderBy(x=>x.FileOrder).ToArray();ScenarioScene? scene=visualViewport?.Scene;if(selected.Length==0||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(scene.IsModified&&!SaveVisualSmd())return;
+        using var dialog=new FolderBrowserDialog{Description="Escolha a pasta para os OBJs e texturas selecionados",UseDescriptionForTitle=true};if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+        try{string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);SmdModelExporter.ExportSeparateObjs(selected,tpl,dialog.SelectedPath);lblVisualStatus.Text=$"{selected.Length} OBJ(s) exportado(s) separadamente • texturas incluídas";ExtractLog($"Visual Editor: {selected.Length} OBJ(s) SMD exportado(s) para {dialog.SelectedPath}.");}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar OBJs separados",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private void ExportSelectedSmdCombinedObj()
+    {
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().OrderBy(x=>x.FileOrder).ToArray();ScenarioScene? scene=visualViewport?.Scene;if(selected.Length==0||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(scene.IsModified&&!SaveVisualSmd())return;
+        using var dialog=new SaveFileDialog{Title="Exportar seleção em um único OBJ com texturas",Filter="Wavefront OBJ (*.obj)|*.obj",FileName=$"smd_entries_{selected.First().FileOrder:D3}_{selected.Last().FileOrder:D3}.obj"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
+        try{string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);SmdModelExporter.ExportCombinedObj(selected,tpl,dialog.FileName);lblVisualStatus.Text=$"{selected.Length} entries exportadas em um OBJ • transformações, UVs e texturas incluídas";ExtractLog($"Visual Editor: {selected.Length} entries SMD exportadas em OBJ único para {dialog.FileName}.");}
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Exportar OBJ único",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }
 
     private void btnVisualSmdCatalog_Click(object? sender,EventArgs e)

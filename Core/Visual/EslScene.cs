@@ -61,7 +61,15 @@ public sealed class EslEnemyEntry
         set => Unknown4=(byte)value;
     }
     [Browsable(false)] public float IndividualScaleMultiplier => Unknown4 == 0 ? 1f : Unknown4 / 16f;
-    [Category("Unknown"), DisplayName("Unknown 5")] public byte Unknown5 { get; set; }
+    [Browsable(false)] public byte Unknown5 { get; set; }
+    [Category("Enemy"), DisplayName("Velocidade individual (teste)"), Description("Teste inicial do patch de velocidade. Nesta versão, o jogo aplica o valor somente ao em12 da entry #095 de r103. Automático preserva a velocidade original."), TypeConverter(typeof(EslIndividualSpeedConverter))]
+    public EslIndividualSpeedValue IndividualSpeed
+    {
+        get => IsIndividualSpeedTestTarget&&Enum.IsDefined(typeof(EslIndividualSpeedValue),Unknown5) ? (EslIndividualSpeedValue)Unknown5 : EslIndividualSpeedValue.Automatico;
+        set => Unknown5=IsIndividualSpeedTestTarget?(byte)value:(byte)0;
+    }
+    [Browsable(false)] public bool IsIndividualSpeedTestTarget => Index==95&&StageID==0x01&&RoomID==0x03&&EnemyType==0x12&&Subtype==0x03;
+    [Browsable(false)] public float IndividualSpeedMultiplier => !IsIndividualSpeedTestTarget||Unknown5==0 ? 1f : Unknown5/16f;
     [Category("Unknown"), DisplayName("Unknown 6")] public byte Unknown6 { get; set; }
     [Category("Unknown"), DisplayName("Unknown 7")] public byte Unknown7 { get; set; }
     [Browsable(false)] public Vector3 Position => new(PosX, PosY, PosZ);
@@ -98,6 +106,39 @@ public sealed class EslIndividualScaleConverter : EnumConverter
             EslIndividualScaleValue.Scale125=>"1,25×", EslIndividualScaleValue.Scale150=>"1,50×",
             EslIndividualScaleValue.Scale200=>"2,00×", EslIndividualScaleValue.Scale250=>"2,50×",
             EslIndividualScaleValue.Scale300=>"3,00×", _=>scale.ToString()
+        };
+}
+
+public enum EslIndividualSpeedValue : byte
+{
+    Automatico=0, Speed050=8, Speed075=12, Speed100=16, Speed125=20,
+    Speed150=24, Speed200=32, Speed250=40, Speed300=48
+}
+
+public sealed class EslIndividualSpeedConverter : EnumConverter
+{
+    public EslIndividualSpeedConverter():base(typeof(EslIndividualSpeedValue)){}
+    public override bool CanConvertFrom(ITypeDescriptorContext? context,Type sourceType)
+        => sourceType==typeof(string)||base.CanConvertFrom(context,sourceType);
+    public override object? ConvertFrom(ITypeDescriptorContext? context,CultureInfo? culture,object value)
+    {
+        if(value is string text)
+        {
+            text=text.Trim();
+            foreach(EslIndividualSpeedValue speed in Enum.GetValues<EslIndividualSpeedValue>())
+                if(string.Equals(Label(speed),text,StringComparison.CurrentCultureIgnoreCase))return speed;
+        }
+        return base.ConvertFrom(context,culture,value);
+    }
+    public override object? ConvertTo(ITypeDescriptorContext? context,CultureInfo? culture,object? value,Type destinationType)
+        => destinationType==typeof(string)&&value is EslIndividualSpeedValue speed ? Label(speed) : base.ConvertTo(context,culture,value,destinationType);
+    private static string Label(EslIndividualSpeedValue speed)=>speed switch
+        {
+            EslIndividualSpeedValue.Automatico=>"Automático (original)", EslIndividualSpeedValue.Speed050=>"0,50×",
+            EslIndividualSpeedValue.Speed075=>"0,75×", EslIndividualSpeedValue.Speed100=>"1,00×",
+            EslIndividualSpeedValue.Speed125=>"1,25×", EslIndividualSpeedValue.Speed150=>"1,50×",
+            EslIndividualSpeedValue.Speed200=>"2,00×", EslIndividualSpeedValue.Speed250=>"2,50×",
+            EslIndividualSpeedValue.Speed300=>"3,00×", _=>speed.ToString()
         };
 }
 

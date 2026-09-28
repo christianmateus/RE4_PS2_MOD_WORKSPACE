@@ -72,6 +72,14 @@ public sealed partial class ScenarioViewport
         Invalidate();
     }
 
+    public void ClearCollisionSelection()
+    {
+        selectedCollision=null;selectedCollisionVertexSlot=-1;
+        selectedCollisionRegionVertices=Array.Empty<int>();selectedCollisionRegionFaces.Clear();selectedCollisionManualFaces.Clear();markedCollisionEdges.Clear();
+        draggingCollisionVertex=false;collisionGpuPreviewActive=false;collisionGpuPreviewModel=Matrix4.Identity;
+        collisionGpuDirty=true;CollisionFaceClicked?.Invoke(null);CollisionEdgeClicked?.Invoke(null,-1,false);Invalidate();
+    }
+
     private void UploadCollision()
     {
         collisionGpuDirty = false;
@@ -236,7 +244,7 @@ public sealed partial class ScenarioViewport
             int index=SelectedVertexIndex();NVector3 old=mesh.Positions[index];NVector3 raw=worldPosition*100f;if(old==raw)return;
             if(registerUndo)collisionUndo.Push(()=>mesh.Positions[index]=old);mesh.Positions[index]=raw;
         }
-        if(!draggingCollisionVertex)collisionGpuDirty=true;else if(!collisionGpuPreviewActive)UploadCollisionTransformPreview(); CollisionVertexEdited?.Invoke(selectedCollision); Invalidate();
+        if(!draggingCollisionVertex){collisionGpuDirty=true;CollisionVertexEdited?.Invoke(selectedCollision);}else if(!collisionGpuPreviewActive)UploadCollisionTransformPreview();Invalidate();
     }
 
     private int SelectedVertexIndex() => selectedCollisionVertexSlot switch { 0 => selectedCollision!.Face.Vertex0, 1 => selectedCollision!.Face.Vertex1, _ => selectedCollision!.Face.Vertex2 };
@@ -401,13 +409,13 @@ public sealed partial class ScenarioViewport
     }
     private void UpdateCollisionVertexDrag(Point screen)
     {
-        if(!draggingCollisionVertex||selectedCollision==null)return;NVector3 axis=collisionDragWorldAxis;if(CollisionTransformMode==CollisionGizmoMode.Rotate){float pixels=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),collisionDragScreenAxis);float angle=pixels*MathF.PI/360f;var rotation=System.Numerics.Matrix4x4.CreateFromAxisAngle(axis,angle);foreach(var item in collisionDragStartVertices)selectedCollision.Mesh.Positions[item.Key]=(collisionDragStartPosition+NVector3.Transform(item.Value/100f-collisionDragStartPosition,rotation))*100f;foreach(var item in collisionDragStartNormals)selectedCollision.Mesh.Normals[item.Key]=NVector3.Normalize(NVector3.TransformNormal(item.Value,rotation));var pivot=new OpenTK.Mathematics.Vector3(collisionDragStartPosition.X,collisionDragStartPosition.Y,collisionDragStartPosition.Z);collisionGpuPreviewModel=Matrix4.CreateTranslation(-pivot)*Matrix4.CreateFromAxisAngle(new OpenTK.Mathematics.Vector3(axis.X,axis.Y,axis.Z),angle)*Matrix4.CreateTranslation(pivot);CollisionVertexEdited?.Invoke(selectedCollision);Invalidate();return;}NVector3 next=collisionDragStartPosition;float length=CamScreenSize(collisionDragStartPosition,72f);if(!TryProjectWorldToScreen(collisionDragStartPosition,out PointF a)||!TryProjectWorldToScreen(collisionDragStartPosition+axis*length,out PointF b))return;var projected=new System.Numerics.Vector2(b.X-a.X,b.Y-a.Y);float axisPixels=projected.Length();if(axisPixels<.1f)return;projected/=axisPixels;float delta=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),projected)*length/axisPixels;next+=axis*delta;SetSelectedCollisionVertexPosition(next,false);collisionGpuPreviewModel=Matrix4.CreateTranslation(new OpenTK.Mathematics.Vector3(next.X-collisionDragStartPosition.X,next.Y-collisionDragStartPosition.Y,next.Z-collisionDragStartPosition.Z));
+        if(!draggingCollisionVertex||selectedCollision==null)return;NVector3 axis=collisionDragWorldAxis;if(CollisionTransformMode==CollisionGizmoMode.Rotate){float pixels=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),collisionDragScreenAxis);float angle=pixels*MathF.PI/360f;var rotation=System.Numerics.Matrix4x4.CreateFromAxisAngle(axis,angle);foreach(var item in collisionDragStartVertices)selectedCollision.Mesh.Positions[item.Key]=(collisionDragStartPosition+NVector3.Transform(item.Value/100f-collisionDragStartPosition,rotation))*100f;foreach(var item in collisionDragStartNormals)selectedCollision.Mesh.Normals[item.Key]=NVector3.Normalize(NVector3.TransformNormal(item.Value,rotation));var pivot=new OpenTK.Mathematics.Vector3(collisionDragStartPosition.X,collisionDragStartPosition.Y,collisionDragStartPosition.Z);collisionGpuPreviewModel=Matrix4.CreateTranslation(-pivot)*Matrix4.CreateFromAxisAngle(new OpenTK.Mathematics.Vector3(axis.X,axis.Y,axis.Z),angle)*Matrix4.CreateTranslation(pivot);Invalidate();return;}NVector3 next=collisionDragStartPosition;float length=CamScreenSize(collisionDragStartPosition,72f);if(!TryProjectWorldToScreen(collisionDragStartPosition,out PointF a)||!TryProjectWorldToScreen(collisionDragStartPosition+axis*length,out PointF b))return;var projected=new System.Numerics.Vector2(b.X-a.X,b.Y-a.Y);float axisPixels=projected.Length();if(axisPixels<.1f)return;projected/=axisPixels;float delta=System.Numerics.Vector2.Dot(new(screen.X-collisionDragStartMouse.X,screen.Y-collisionDragStartMouse.Y),projected)*length/axisPixels;next+=axis*delta;SetSelectedCollisionVertexPosition(next,false);collisionGpuPreviewModel=Matrix4.CreateTranslation(new OpenTK.Mathematics.Vector3(next.X-collisionDragStartPosition.X,next.Y-collisionDragStartPosition.Y,next.Z-collisionDragStartPosition.Z));
     }
     private void EndCollisionVertexDrag()
     {
         if(!draggingCollisionVertex||selectedCollision==null)return;draggingCollisionVertex=false;collisionDragAxis=0;collisionGpuPreviewActive=false;collisionGpuPreviewModel=Matrix4.Identity;collisionGpuDirty=true;EsatMesh mesh=selectedCollision.Mesh;
         var before=new Dictionary<int,NVector3>(collisionDragStartVertices);var beforeNormals=new Dictionary<int,NVector3>(collisionDragStartNormals);bool changed=before.Any(x=>mesh.Positions[x.Key]!=x.Value);
-        if(changed)collisionUndo.Push(()=>{foreach(var item in before)mesh.Positions[item.Key]=item.Value;foreach(var item in beforeNormals)mesh.Normals[item.Key]=item.Value;});collisionDragStartVertices.Clear();collisionDragStartNormals.Clear();
+        if(changed){collisionUndo.Push(()=>{foreach(var item in before)mesh.Positions[item.Key]=item.Value;foreach(var item in beforeNormals)mesh.Normals[item.Key]=item.Value;});CollisionVertexEdited?.Invoke(selectedCollision);}collisionDragStartVertices.Clear();collisionDragStartNormals.Clear();
     }
 
     private void PickCollisionFile(EsatFile? file, bool visible, NVector3 origin, NVector3 direction, ref EsatFaceInspection? best, ref float bestDistance)

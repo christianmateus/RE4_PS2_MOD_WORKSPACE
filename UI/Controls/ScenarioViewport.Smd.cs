@@ -345,7 +345,7 @@ public sealed partial class ScenarioViewport
     private static NVector3 RotateZ(NVector3 v,float a){float c=MathF.Cos(a),s=MathF.Sin(a);return new(v.X*c-v.Y*s,v.X*s+v.Y*c,v.Z);}
     private static float FindSmdFactor(ScenarioEntry e,int offset)=>e.LocalTriangles.FirstOrDefault(t=>t.SourceOffsetA==offset||t.SourceOffsetB==offset||t.SourceOffsetC==offset).SourceFactor;
     private static void ApplySmdVertexPositions(ScenarioEntry e,IReadOnlyDictionary<int,NVector3> positions)
-    {e.LocalTriangles=e.LocalTriangles.Select(t=>new ScenarioTriangle(positions.TryGetValue(t.SourceOffsetA,out var a)?a:t.A,positions.TryGetValue(t.SourceOffsetB,out var b)?b:t.B,positions.TryGetValue(t.SourceOffsetC,out var c)?c:t.C,t.UvA,t.UvB,t.UvC,t.TextureIndex,t.SourceOffsetA,t.SourceOffsetB,t.SourceOffsetC,t.SourceFactor,t.SourceStripFlagOffset)).ToArray();}
+    {e.LocalTriangles=e.LocalTriangles.Select(t=>new ScenarioTriangle(positions.TryGetValue(t.SourceOffsetA,out var a)?a:t.A,positions.TryGetValue(t.SourceOffsetB,out var b)?b:t.B,positions.TryGetValue(t.SourceOffsetC,out var c)?c:t.C,t.UvA,t.UvB,t.UvC,t.TextureIndex,t.SourceOffsetA,t.SourceOffsetB,t.SourceOffsetC,t.SourceFactor,t.SourceStripFlagOffset,t.AlphaA,t.AlphaB,t.AlphaC,t.ColorA,t.ColorB,t.ColorC)).ToArray();}
     private readonly record struct SmdTransformState(float Px,float Py,float Pz,float Rx,float Ry,float Rz,float Sx,float Sy,float Sz)
     {public static SmdTransformState From(ScenarioEntry e)=>new(e.PositionX,e.PositionY,e.PositionZ,e.RotationX,e.RotationY,e.RotationZ,e.ScaleX,e.ScaleY,e.ScaleZ);public void Apply(ScenarioEntry e){e.PositionX=Px;e.PositionY=Py;e.PositionZ=Pz;e.RotationX=Rx;e.RotationY=Ry;e.RotationZ=Rz;e.ScaleX=Sx;e.ScaleY=Sy;e.ScaleZ=Sz;}}
     private void RefreshSmdWorldTriangles(ScenarioEntry entry,bool geometryChanged=false)
@@ -357,7 +357,7 @@ public sealed partial class ScenarioViewport
         {
             ScenarioTriangle t=entry.LocalTriangles[i];NVector3 a=TransformSmd(t.A,entry),b=TransformSmd(t.B,entry),c=TransformSmd(t.C,entry);var uvB=t.UvB;var uvC=t.UvC;
             if(entry.ScaleX*entry.ScaleY*entry.ScaleZ<0f){(b,c)=(c,b);(uvB,uvC)=(uvC,uvB);}
-            scene.Triangles[start+i]=new ScenarioTriangle(a,b,c,t.UvA,uvB,uvC,t.TextureIndex);
+            bool mirrored=entry.ScaleX*entry.ScaleY*entry.ScaleZ<0f;scene.Triangles[start+i]=new ScenarioTriangle(a,b,c,t.UvA,uvB,uvC,t.TextureIndex,alphaA:t.AlphaA,alphaB:mirrored?t.AlphaC:t.AlphaB,alphaC:mirrored?t.AlphaB:t.AlphaC,colorA:t.ColorA,colorB:mirrored?t.ColorC:t.ColorB,colorC:mirrored?t.ColorB:t.ColorC);
         }
         smdGpuDirtyEntries.Add(entry.FileOrder);
     }
@@ -394,20 +394,20 @@ public sealed partial class ScenarioViewport
     {
         if(!smdEntryGpu.TryGetValue(entry.FileOrder,out SmdEntryGpu? gpu))
         {gpu=new SmdEntryGpu{Entry=entry,Vao=GL.GenVertexArray(),Vbo=GL.GenBuffer()};smdEntryGpu.Add(entry.FileOrder,gpu);}gpu.Entry=entry;
-        ScenarioTriangle[] ordered=entry.LocalTriangles.OrderBy(t=>t.TextureIndex).ToArray();
-        float[] data=new float[ordered.Length*24];var normalSums=new Dictionary<NVector3,NVector3>(ordered.Length*2);
+        ScenarioTriangle[] ordered=entry.LocalTriangles.OrderBy(t=>t.TextureIndex).ThenBy(UsesVertexAlpha).ToArray();
+        float[] data=new float[ordered.Length*36];var normalSums=new Dictionary<NVector3,NVector3>(ordered.Length*2);
         foreach(ScenarioTriangle t in ordered)
         {NVector3 a=t.A,b=t.B,c=t.C;NVector3 n=NVector3.Cross(b-a,c-a);float length=n.LengthSquared();if(length>0.000001f&&float.IsFinite(length)){AddNormal(normalSums,a,n);AddNormal(normalSums,b,n);AddNormal(normalSums,c,n);}}
-        gpu.Batches.Clear();int offset=0,currentTexture=int.MinValue,first=0,count=0;
+        gpu.Batches.Clear();int offset=0,currentTexture=int.MinValue,first=0,count=0;bool currentVertexAlpha=false;
         foreach(ScenarioTriangle t in ordered)
         {
-            if(t.TextureIndex!=currentTexture){if(count>0)gpu.Batches.Add(new ScenarioDrawBatch(currentTexture,first,count));currentTexture=t.TextureIndex;first=offset/8;count=0;}
+            bool usesVertexAlpha=UsesVertexAlpha(t);if(t.TextureIndex!=currentTexture||usesVertexAlpha!=currentVertexAlpha){if(count>0)gpu.Batches.Add(new ScenarioDrawBatch(currentTexture,first,count,currentVertexAlpha));currentTexture=t.TextureIndex;currentVertexAlpha=usesVertexAlpha;first=offset/12;count=0;}
             NVector3 a=t.A,b=t.B,c=t.C;var uvB=t.UvB;var uvC=t.UvC;
-            WriteTexturedVertex(data,ref offset,a,GetSmoothNormal(normalSums,a),t.UvA);WriteTexturedVertex(data,ref offset,b,GetSmoothNormal(normalSums,b),uvB);WriteTexturedVertex(data,ref offset,c,GetSmoothNormal(normalSums,c),uvC);count+=3;
+            WriteTexturedVertex(data,ref offset,a,GetSmoothNormal(normalSums,a),t.UvA,t.AlphaA,t.ColorA);WriteTexturedVertex(data,ref offset,b,GetSmoothNormal(normalSums,b),uvB,t.AlphaB,t.ColorB);WriteTexturedVertex(data,ref offset,c,GetSmoothNormal(normalSums,c),uvC,t.AlphaC,t.ColorC);count+=3;
         }
-        if(count>0)gpu.Batches.Add(new ScenarioDrawBatch(currentTexture,first,count));gpu.VertexCount=offset/8;
+        if(count>0)gpu.Batches.Add(new ScenarioDrawBatch(currentTexture,first,count,currentVertexAlpha));gpu.VertexCount=offset/12;
         GL.BindVertexArray(gpu.Vao);GL.BindBuffer(BufferTarget.ArrayBuffer,gpu.Vbo);GL.BufferData(BufferTarget.ArrayBuffer,offset*sizeof(float),data,BufferUsageHint.DynamicDraw);
-        GL.VertexAttribPointer(0,3,VertexAttribPointerType.Float,false,8*sizeof(float),0);GL.EnableVertexAttribArray(0);GL.VertexAttribPointer(1,3,VertexAttribPointerType.Float,false,8*sizeof(float),3*sizeof(float));GL.EnableVertexAttribArray(1);GL.VertexAttribPointer(2,2,VertexAttribPointerType.Float,false,8*sizeof(float),6*sizeof(float));GL.EnableVertexAttribArray(2);GL.BindVertexArray(0);
+        GL.VertexAttribPointer(0,3,VertexAttribPointerType.Float,false,12*sizeof(float),0);GL.EnableVertexAttribArray(0);GL.VertexAttribPointer(1,3,VertexAttribPointerType.Float,false,12*sizeof(float),3*sizeof(float));GL.EnableVertexAttribArray(1);GL.VertexAttribPointer(2,2,VertexAttribPointerType.Float,false,12*sizeof(float),6*sizeof(float));GL.EnableVertexAttribArray(2);GL.VertexAttribPointer(3,1,VertexAttribPointerType.Float,false,12*sizeof(float),8*sizeof(float));GL.EnableVertexAttribArray(3);GL.VertexAttribPointer(4,3,VertexAttribPointerType.Float,false,12*sizeof(float),9*sizeof(float));GL.EnableVertexAttribArray(4);GL.BindVertexArray(0);
     }
 
     private void ReleaseSmdEntryGpu()
@@ -421,8 +421,9 @@ public sealed partial class ScenarioViewport
         GL.BindVertexArray(0);GL.Uniform1(uUnlit,0);GL.Uniform3(uColor,185f/255f,190f/255f,198f/255f);GL.ActiveTexture(TextureUnit.Texture0);GL.Uniform1(uTexture,0);
         foreach(bool transparentPass in new[]{false,true})
         {
-            GL.Enable(EnableCap.Blend);if(!transparentPass)GL.Disable(EnableCap.Blend);GL.DepthMask(!transparentPass);if(transparentPass){GL.BlendEquation(BlendEquationMode.FuncAdd);GL.BlendFunc(BlendingFactor.SrcAlpha,BlendingFactor.OneMinusSrcAlpha);}
-            foreach(SmdEntryGpu gpu in smdEntryGpu.Values){ApplySmdEntryModel(gpu);GL.BindVertexArray(gpu.Vao);foreach(ScenarioDrawBatch batch in gpu.Batches){bool transparent=glTextureHasTransparency.TryGetValue(batch.TextureIndex,out bool has)&&has;if(transparent!=transparentPass)continue;DrawScenarioBatch(batch);}}
+            GL.Enable(EnableCap.Blend);if(!transparentPass)GL.Disable(EnableCap.Blend);GL.DepthMask(!transparentPass);if(transparentPass){GL.BlendEquation(BlendEquationMode.FuncAdd);GL.BlendFunc(BlendingFactor.SrcAlpha,BlendingFactor.OneMinusSrcAlpha);GL.Disable(EnableCap.CullFace);}
+            foreach(SmdEntryGpu gpu in smdEntryGpu.Values){ApplySmdEntryModel(gpu);GL.BindVertexArray(gpu.Vao);foreach(ScenarioDrawBatch batch in gpu.Batches){bool transparent=batch.HasVertexAlpha||glTextureHasTransparency.TryGetValue(batch.TextureIndex,out bool has)&&has;if(transparent!=transparentPass)continue;DrawScenarioBatch(batch);}}
+            if(transparentPass)GL.Enable(EnableCap.CullFace);
         }
         GL.DepthMask(true);GL.Disable(EnableCap.Blend);GL.BindTexture(TextureTarget.Texture2D,0);
         if(RenderMode==ScenarioRenderMode.SolidWireframe){GL.Uniform1(uUseTexture,0);GL.Uniform1(uUnlit,1);GL.Uniform3(uColor,25f/255f,30f/255f,36f/255f);GL.PolygonMode(MaterialFace.FrontAndBack,PolygonMode.Line);foreach(SmdEntryGpu gpu in smdEntryGpu.Values){ApplySmdEntryModel(gpu);GL.BindVertexArray(gpu.Vao);GL.DrawArrays(PrimitiveType.Triangles,0,gpu.VertexCount);}GL.PolygonMode(MaterialFace.FrontAndBack,PolygonMode.Fill);}

@@ -17,6 +17,9 @@ public sealed partial class ScenarioViewport
     private System.Numerics.Vector3 etsDragWorld;
     private int etsDragAxis;
     private readonly Dictionary<EtsEntry,EtsTransformState> etsGroupDragStart=new();
+    private readonly Dictionary<ItaEntry,ItaState> etsContainedItaStart=new();
+    private bool etsGpuPreviewActive;
+    private OpenTK.Mathematics.Matrix4 etsGpuPreviewModel=OpenTK.Mathematics.Matrix4.Identity;
     private bool etsTexturesDirty = true;
     private readonly Dictionary<EtsTextureKey,int> glEtsTextures = new();
     private readonly Dictionary<EtsTextureKey,bool> glEtsTextureTransparency = new();
@@ -64,9 +67,8 @@ public sealed partial class ScenarioViewport
                 {
                     foreach(var material in part.Triangles.GroupBy(t=>t.TextureIndex))
                     {
-                        var key=new EtsTextureKey(entry.ObjectId,part.Effect?.FileOrder??-1,material.Key);
-                        if(!glEtsTextures.ContainsKey(key)&&part.TextureFallback!=null)
-                            key=new EtsTextureKey(entry.ObjectId,part.TextureFallback.FileOrder,material.Key);
+                        EtmResource? textureSource=part.TextureFallback??part.Effect;
+                        var key=new EtsTextureKey(entry.ObjectId,textureSource?.FileOrder??-1,material.Key);
                         var buckets=isSelected?selectedBuckets:modelBuckets;if(!buckets.TryGetValue(key,out var values)){values=new();buckets[key]=values;}
                         AddEtsModel(values,entry,material);
                     }
@@ -126,19 +128,27 @@ public sealed partial class ScenarioViewport
         }
     }
 
+    private void UploadEtsGizmoOnly()
+    {
+        if(!glReady||draggingEts!=null)return;EtsEntry? entry=SelectedEts();if(entry==null)return;EnsureEtsBuffers();var axes=new[]{new List<float>(),new List<float>(),new List<float>()};AddEtsGizmo(axes,entry);for(int axis=0;axis<3;axis++)UploadLineBuffer(etsGizmoVaos[axis],etsGizmoVbos[axis],axes[axis],out etsGizmoVertexCounts[axis]);
+    }
+
     private void DrawEtsGpu()
     {
+        OpenTK.Mathematics.Matrix4 identity=OpenTK.Mathematics.Matrix4.Identity;
+        GL.UniformMatrix4(uModel,true,ref identity);GL.UniformMatrix4(uNormalMatrix,true,ref identity);
         GL.Enable(EnableCap.DepthTest); GL.Disable(EnableCap.CullFace); GL.Uniform1(uUseTexture,0); GL.Uniform1(uUnlit,0); GL.Uniform1(uOpacity,1f);
         if (etsModelVertexCount > 0) { GL.Uniform3(uColor,0.68f,0.72f,0.76f); GL.BindVertexArray(etsModelVao); DrawEtsBatches(etsDrawBatches); }
         if (selectedEtsModelVertexCount > 0)
         {
+            OpenTK.Mathematics.Matrix4 preview=etsGpuPreviewActive?etsGpuPreviewModel:identity;GL.UniformMatrix4(uModel,true,ref preview);GL.UniformMatrix4(uNormalMatrix,true,ref preview);
             GL.Uniform3(uColor,0.82f,0.84f,0.88f); GL.BindVertexArray(selectedEtsModelVao); DrawEtsBatches(selectedEtsDrawBatches);
-            if(assetMeshSelection==null){GL.Uniform1(uUnlit,1); GL.Uniform3(uColor,1f,0.82f,0.12f); GL.PolygonMode(MaterialFace.FrontAndBack,PolygonMode.Line); GL.DrawArrays(PrimitiveType.Triangles,0,selectedEtsModelVertexCount); GL.PolygonMode(MaterialFace.FrontAndBack,PolygonMode.Fill);}
+            if(assetMeshSelection==null){GL.Uniform1(uUseTexture,0);GL.Uniform1(uUnlit,1);GL.Uniform3(uColor,1f,.72f,.08f);GL.Uniform1(uOpacity,.28f);GL.Enable(EnableCap.Blend);GL.BlendFunc(BlendingFactor.SrcAlpha,BlendingFactor.OneMinusSrcAlpha);GL.DepthMask(false);GL.Enable(EnableCap.PolygonOffsetFill);GL.PolygonOffset(-1f,-1f);GL.BindVertexArray(selectedEtsModelVao);GL.DrawArrays(PrimitiveType.Triangles,0,selectedEtsModelVertexCount);GL.Disable(EnableCap.PolygonOffsetFill);GL.DepthMask(true);GL.Disable(EnableCap.Blend);GL.Uniform1(uOpacity,1f);}
+            GL.UniformMatrix4(uModel,true,ref identity);GL.UniformMatrix4(uNormalMatrix,true,ref identity);
         }
         GL.Uniform1(uUseTexture,0); GL.Uniform1(uUnlit,1); GL.Disable(EnableCap.CullFace); GL.Disable(EnableCap.DepthTest);
         GL.Uniform3(uColor,0.15f,0.78f,0.95f); GL.BindVertexArray(etsVao); GL.LineWidth(3f); GL.DrawArrays(PrimitiveType.Lines,0,etsVertexCount);
-        if(assetMeshSelection==null&&selectedEtsVertexCount>0) { GL.Uniform3(uColor,1f,0.82f,0.12f); GL.BindVertexArray(selectedEtsVao); GL.LineWidth(5f); GL.DrawArrays(PrimitiveType.Lines,0,selectedEtsVertexCount); }
-        if(assetMeshSelection==null){var colors=new[]{(1f,.16f,.12f),(.2f,.9f,.25f),(.15f,.48f,1f)};for(int i=0;i<3;i++)if(etsGizmoVertexCounts[i]>0){GL.Uniform3(uColor,colors[i].Item1,colors[i].Item2,colors[i].Item3);GL.BindVertexArray(etsGizmoVaos[i]);GL.LineWidth(5f);GL.DrawArrays(PrimitiveType.Lines,0,etsGizmoVertexCounts[i]);}}
+        if(assetMeshSelection==null&&etsGizmoVertexCounts.Any(x=>x>0)){OpenTK.Mathematics.Matrix4 preview=etsGpuPreviewActive?etsGpuPreviewModel:identity;GL.UniformMatrix4(uModel,true,ref preview);var colors=new[]{(1f,.16f,.12f),(.2f,.9f,.25f),(.15f,.48f,1f)};for(int i=0;i<3;i++)if(etsGizmoVertexCounts[i]>0){GL.Uniform3(uColor,colors[i].Item1,colors[i].Item2,colors[i].Item3);GL.BindVertexArray(etsGizmoVaos[i]);GL.LineWidth(5f);GL.DrawArrays(PrimitiveType.Lines,0,etsGizmoVertexCounts[i]);}GL.UniformMatrix4(uModel,true,ref identity);}
         GL.LineWidth(1f); GL.Enable(EnableCap.DepthTest); GL.Enable(EnableCap.CullFace); GL.Uniform1(uUnlit,0); GL.Uniform1(uUseTexture,0); GL.Uniform1(uOpacity,1f);
     }
 
@@ -187,13 +197,13 @@ public sealed partial class ScenarioViewport
         foreach(var objectPair in etmCatalog.ModelParts)
             foreach(EtmModelPart part in objectPair.Value)
             {
-                EtmResource? package=part.Effect??part.TextureFallback;if(package==null)continue;
+                EtmResource? package=part.TextureFallback??part.Effect;if(package==null)continue;
                 int maxTexture=part.Triangles.Max(t=>t.TextureIndex);if(maxTexture<0)continue;
                 IReadOnlyList<RE4_PS2_MOD_WORKSPACE.Core.Textures.TPLDefinition.TPL>? effTextures=null;
                 if(part.Effect!=null)try{effTextures=effReader.ReadTextures(part.Effect.Data);}catch{ }
                 for(int i=0;i<=maxTexture;i++)try
                 {
-                    bool useEffect=effTextures!=null&&i<effTextures.Count;
+                    bool useEffect=part.TextureFallback==null&&effTextures!=null&&i<effTextures.Count;
                     EtmResource source=useEffect?part.Effect!:part.TextureFallback!;
                     if(source==null)continue;
                     using var stream=new MemoryStream(source.Data,false);using var br=new BinaryReader(stream);
@@ -266,8 +276,9 @@ public sealed partial class ScenarioViewport
         EtsEntry? e=SelectedEts(); if(e==null)return false;
         int axis=PickEtsAxis(mouse,e); EtsEntry? nearby=PickEtsEntry(mouse);
         if(axis==0&&(AssetSelectionMode!=AssetMeshSelectionMode.Object||!ReferenceEquals(nearby,e)))return false;
-        draggingEts=e;etsDragStart=EtsTransformState.From(e);etsGroupDragStart.Clear();if(etsScene!=null)foreach(var selected in etsScene.Entries.Where(x=>selectedEtsFileOrders.Contains(x.FileOrder)))etsGroupDragStart[selected]=EtsTransformState.From(selected);etsDragMouse=mouse;etsDragWorld=EtsWorld(e);etsDragAxis=axis;
+        draggingEts=e;etsDragStart=EtsTransformState.From(e);etsGroupDragStart.Clear();if(etsScene!=null)foreach(var selected in etsScene.Entries.Where(x=>selectedEtsFileOrders.Contains(x.FileOrder)))etsGroupDragStart[selected]=EtsTransformState.From(selected);CaptureItemsInsideDraggedObjects();etsDragMouse=mouse;etsDragWorld=EtsWorld(e);etsDragAxis=axis;
         if(etsDragAxis==0)etsDragAxis=EtsTransformMode==EtsGizmoMode.Move?7:2;
+        etsGpuPreviewActive=EtsTransformMode==EtsGizmoMode.Move||etsGroupDragStart.Count==1;etsGpuPreviewModel=OpenTK.Mathematics.Matrix4.Identity;
         return true;
     }
     private void UpdateEtsDrag(Point mouse)
@@ -278,16 +289,24 @@ public sealed partial class ScenarioViewport
             if(etsDragAxis is 1 or 3 or 7 && TryScreenPointOnHorizontalPlane(etsDragMouse,etsDragWorld.Y,out var a)&&TryScreenPointOnHorizontalPlane(mouse,etsDragWorld.Y,out var b))
             {var d=(b-a)/EtsWorldScale;foreach(var pair in etsGroupDragStart){if(etsDragAxis is 1 or 7)pair.Key.PositionX=SnapEts(pair.Value.Px+d.X,10f);if(etsDragAxis is 3 or 7)pair.Key.PositionZ=SnapEts(pair.Value.Pz+d.Z,10f);}}
             else if(etsDragAxis==2)foreach(var pair in etsGroupDragStart)pair.Key.PositionY=SnapEts(pair.Value.Py-dy*25f,10f);
+            foreach(var pair in etsContainedItaStart){EtsEntry? owner=etsGroupDragStart.Keys.FirstOrDefault(x=>pair.Key.AppearanceType==2&&pair.Key.LinkedInstanceId==x.InstanceIndex)??draggingEts;EtsTransformState start=etsGroupDragStart.TryGetValue(owner!,out var state)?state:etsDragStart;pair.Key.PositionX=pair.Value.Px+(owner!.PositionX-start.Px);pair.Key.PositionY=pair.Value.Py+(owner.PositionY-start.Py);pair.Key.PositionZ=pair.Value.Pz+(owner.PositionZ-start.Pz);}
         }
         else
         {float d=dx*(MathF.PI/360f);foreach(var pair in etsGroupDragStart){if(etsDragAxis==1)pair.Key.RotationX=SnapAngle(pair.Value.Rx+d);else if(etsDragAxis==3)pair.Key.RotationZ=SnapAngle(pair.Value.Rz+d);else pair.Key.RotationY=SnapAngle(pair.Value.Ry+d);}}
-        etsGpuDirty=true;foreach(var selected in etsGroupDragStart.Keys)EtsEntryEdited?.Invoke(selected);Invalidate();
+        if(etsGpuPreviewActive)UpdateEtsDragPreviewModel(e);else{etsGpuDirty=true;foreach(var selected in etsGroupDragStart.Keys)EtsEntryEdited?.Invoke(selected);}Invalidate();
+    }
+    private void UpdateEtsDragPreviewModel(EtsEntry entry)
+    {
+        if(!etsGpuPreviewActive){etsGpuPreviewModel=OpenTK.Mathematics.Matrix4.Identity;return;}
+        if(EtsTransformMode==EtsGizmoMode.Move){var start=etsDragStart;etsGpuPreviewModel=OpenTK.Mathematics.Matrix4.CreateTranslation((entry.PositionX-start.Px)*EtsWorldScale,(entry.PositionY-start.Py)*EtsWorldScale,(entry.PositionZ-start.Pz)*EtsWorldScale);return;}
+        float angle=etsDragAxis==1?entry.RotationX-etsDragStart.Rx:etsDragAxis==3?entry.RotationZ-etsDragStart.Rz:entry.RotationY-etsDragStart.Ry;var pivot=new OpenTK.Mathematics.Vector3(etsDragWorld.X,etsDragWorld.Y,etsDragWorld.Z);var axis=etsDragAxis==1?OpenTK.Mathematics.Vector3.UnitX:etsDragAxis==3?OpenTK.Mathematics.Vector3.UnitZ:OpenTK.Mathematics.Vector3.UnitY;etsGpuPreviewModel=OpenTK.Mathematics.Matrix4.CreateTranslation(-pivot)*OpenTK.Mathematics.Matrix4.CreateFromAxisAngle(axis,angle)*OpenTK.Mathematics.Matrix4.CreateTranslation(pivot);
     }
     private void EndEtsDrag()
     {
-        EtsEntry e=draggingEts!;var before=etsGroupDragStart.ToArray();bool changed=before.Any(x=>!x.Value.Equals(EtsTransformState.From(x.Key)));draggingEts=null;etsDragAxis=0;etsGroupDragStart.Clear();
-        if(changed){etsUndo.Push(()=>{foreach(var pair in before)pair.Value.Apply(pair.Key);selectedEtsFileOrders.Clear();foreach(var pair in before)selectedEtsFileOrders.Add(pair.Key.FileOrder);selectedEtsFileOrder=e.FileOrder;etsGpuDirty=true;foreach(var pair in before)EtsEntryEdited?.Invoke(pair.Key);EtsEntryClicked?.Invoke(e);EtsSelectionChanged?.Invoke(before.Select(x=>x.Key).ToArray());Invalidate();});while(etsUndo.Count>100){var keep=etsUndo.Reverse().Take(100).Reverse().ToArray();etsUndo.Clear();foreach(var x in keep)etsUndo.Push(x);}}
+        EtsEntry e=draggingEts!;var before=etsGroupDragStart.ToArray();var itemBefore=etsContainedItaStart.ToArray();bool changed=before.Any(x=>!x.Value.Equals(EtsTransformState.From(x.Key)));draggingEts=null;etsDragAxis=0;etsGroupDragStart.Clear();etsContainedItaStart.Clear();etsGpuPreviewActive=false;etsGpuPreviewModel=OpenTK.Mathematics.Matrix4.Identity;etsGpuDirty=true;itaGpuDirty=true;
+        if(changed){foreach(var pair in before)EtsEntryEdited?.Invoke(pair.Key);foreach(var pair in itemBefore)ItaEntryEdited?.Invoke(pair.Key);etsUndo.Push(()=>{foreach(var pair in before)pair.Value.Apply(pair.Key);foreach(var pair in itemBefore){pair.Key.PositionX=pair.Value.Px;pair.Key.PositionY=pair.Value.Py;pair.Key.PositionZ=pair.Value.Pz;ItaEntryEdited?.Invoke(pair.Key);}selectedEtsFileOrders.Clear();foreach(var pair in before)selectedEtsFileOrders.Add(pair.Key.FileOrder);selectedEtsFileOrder=e.FileOrder;etsGpuDirty=itaGpuDirty=true;foreach(var pair in before)EtsEntryEdited?.Invoke(pair.Key);EtsEntryClicked?.Invoke(e);EtsSelectionChanged?.Invoke(before.Select(x=>x.Key).ToArray());Invalidate();});while(etsUndo.Count>100){var keep=etsUndo.Reverse().Take(100).Reverse().ToArray();etsUndo.Clear();foreach(var x in keep)etsUndo.Push(x);}}
     }
+    private void CaptureItemsInsideDraggedObjects(){etsContainedItaStart.Clear();if(itaScene==null)return;foreach(EtsEntry obj in etsGroupDragStart.Keys){System.Numerics.Vector3 min,max;if(etmCatalog?.ModelParts.TryGetValue(obj.ObjectId,out var parts)==true){var points=parts.SelectMany(p=>p.Triangles).SelectMany(t=>new[]{TransformEtsVertex(t.A,obj),TransformEtsVertex(t.B,obj),TransformEtsVertex(t.C,obj)}).ToArray();if(points.Length==0)continue;min=points.Aggregate(new System.Numerics.Vector3(float.PositiveInfinity),System.Numerics.Vector3.Min);max=points.Aggregate(new System.Numerics.Vector3(float.NegativeInfinity),System.Numerics.Vector3.Max);}else{var p=EtsWorld(obj);min=p-new System.Numerics.Vector3(1);max=p+new System.Numerics.Vector3(1);}foreach(ItaEntry item in itaScene.Entries){if(item.AppearanceType!=0)continue;var p=ItaWorld(item);bool inside=p.X>=min.X&&p.X<=max.X&&p.Y>=min.Y&&p.Y<=max.Y&&p.Z>=min.Z&&p.Z<=max.Z;if(inside&&!etsContainedItaStart.ContainsKey(item))etsContainedItaStart[item]=ItaState.From(item);}}}
     private float SnapEts(float v,float step)=>EtsSnapEnabled?MathF.Round(v/step)*step:v;
     private float SnapAngle(float v)=>EtsSnapEnabled?MathF.Round(v/(MathF.PI/36f))*(MathF.PI/36f):v;
     private readonly record struct EtsTransformState(float Px,float Py,float Pz,float Rx,float Ry,float Rz)

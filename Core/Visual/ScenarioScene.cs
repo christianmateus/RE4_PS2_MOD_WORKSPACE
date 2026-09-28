@@ -16,14 +16,18 @@ public readonly struct ScenarioTriangle
     public readonly int SourceOffsetA, SourceOffsetB, SourceOffsetC;
     public readonly int SourceStripFlagOffset;
     public readonly float SourceFactor;
+    public readonly float AlphaA, AlphaB, AlphaC;
+    public readonly Vector3 ColorA, ColorB, ColorC;
 
-    public ScenarioTriangle(Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, int textureIndex, int sourceOffsetA=-1, int sourceOffsetB=-1, int sourceOffsetC=-1, float sourceFactor=1f, int sourceStripFlagOffset=-1)
+    public ScenarioTriangle(Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, int textureIndex, int sourceOffsetA=-1, int sourceOffsetB=-1, int sourceOffsetC=-1, float sourceFactor=1f, int sourceStripFlagOffset=-1, float alphaA=1f, float alphaB=1f, float alphaC=1f, Vector3? colorA=null, Vector3? colorB=null, Vector3? colorC=null)
     {
         A = a; B = b; C = c;
         UvA = uvA; UvB = uvB; UvC = uvC;
         TextureIndex = textureIndex;
         SourceOffsetA=sourceOffsetA;SourceOffsetB=sourceOffsetB;SourceOffsetC=sourceOffsetC;SourceFactor=sourceFactor;
         SourceStripFlagOffset=sourceStripFlagOffset;
+        AlphaA=alphaA;AlphaB=alphaB;AlphaC=alphaC;
+        ColorA=colorA??Vector3.One;ColorB=colorB??Vector3.One;ColorC=colorC??Vector3.One;
     }
 }
 
@@ -37,6 +41,7 @@ public sealed class ScenarioScene
     public List<string> Warnings { get; init; } = new();
     public List<ScenarioTriangle> Triangles { get; init; } = new();
     public List<ScenarioEntry> Entries { get; init; } = new();
+    public Ps2SmxFile? Smx { get; internal set; }
     public bool IsModified { get; set; }
     public Dictionary<(byte BinId,int VertexOffset),(Vector3 Position,float Factor)> PendingVertexEdits { get; } = new();
     public HashSet<(byte BinId,int StripFlagOffset)> PendingFaceDeletes { get; } = new();
@@ -56,6 +61,13 @@ public sealed class ScenarioEntry
     [Browsable(false)] public IReadOnlyList<ScenarioTriangle> LocalTriangles { get; set; } = Array.Empty<ScenarioTriangle>();
     [Category("Object"), DisplayName("Entry")] public int Index => FileOrder;
     [Category("Object"), DisplayName("BIN ID")] public byte BinId { get; set; }
+    [Category("Object"), DisplayName("SMX ID"), ReadOnly(true), Description("ID usado para localizar as propriedades complementares no arquivo SMX.")]
+    public byte SmxId => RawData.Length > 0x33 ? RawData[0x33] : (byte)0xFF;
+    internal void SetSmxId(byte value) { if (RawData.Length > 0x33) RawData[0x33] = value; }
+    [Category("SMX"), DisplayName("Propriedades SMX"), Description("Parâmetros visuais e comportamentais associados pelo SMX ID.")]
+    public SmxRecord? Smx { get; internal set; }
+    [Category("SMX"), DisplayName("Status"), ReadOnly(true)]
+    public string SmxStatus => Smx != null ? $"Associado ao ID 0x{SmxId:X2}" : SmxId switch { 0xFE => "Objeto independente (0xFE)", 0xFF => "Entrada não utilizada (0xFF)", _ => $"Sem registro para ID 0x{SmxId:X2}" };
     [Category("Position")] public float PositionX { get; set; }
     [Category("Position")] public float PositionY { get; set; }
     [Category("Position")] public float PositionZ { get; set; }

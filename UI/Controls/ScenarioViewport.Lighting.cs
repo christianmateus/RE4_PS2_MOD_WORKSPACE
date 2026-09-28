@@ -14,7 +14,7 @@ public sealed partial class ScenarioViewport
     private bool litGpuDirty;
     private int litVao,litVbo,litVertexCount,litShader,litMvp;
     private int uLitEnabled,uLitCount,uLitAmbient,uLitTime;
-    private int uFogEnabled,uFogType,uFogColor,uFogRange,uCameraPosition;
+    private int uFogEnabled,uFogType,uFogColor,uFogRange,uCameraPosition,uCameraForward;
     private readonly int[] uLitPosRange=new int[MaxPreviewLights],uLitColorIntensity=new int[MaxPreviewLights],uLitDirectionType=new int[MaxPreviewLights];
     private readonly int[] uLitAttnA=new int[MaxPreviewLights],uLitAttnK=new int[MaxPreviewLights],uLitBehavior0=new int[MaxPreviewLights],uLitBehavior1=new int[MaxPreviewLights],uLitMeta=new int[MaxPreviewLights];
     public bool LightingVisible { get; set; }=true;
@@ -33,7 +33,7 @@ public sealed partial class ScenarioViewport
     private void InitializeLitShaderBindings()
     {
         uLitEnabled=GL.GetUniformLocation(shaderProgram,"uLitEnabled");uLitCount=GL.GetUniformLocation(shaderProgram,"uLitCount");uLitAmbient=GL.GetUniformLocation(shaderProgram,"uLitAmbient");uLitTime=GL.GetUniformLocation(shaderProgram,"uLitTime");
-        uFogEnabled=GL.GetUniformLocation(shaderProgram,"uFogEnabled");uFogType=GL.GetUniformLocation(shaderProgram,"uFogType");uFogColor=GL.GetUniformLocation(shaderProgram,"uFogColor");uFogRange=GL.GetUniformLocation(shaderProgram,"uFogRange");uCameraPosition=GL.GetUniformLocation(shaderProgram,"uCameraPosition");
+        uFogEnabled=GL.GetUniformLocation(shaderProgram,"uFogEnabled");uFogType=GL.GetUniformLocation(shaderProgram,"uFogType");uFogColor=GL.GetUniformLocation(shaderProgram,"uFogColor");uFogRange=GL.GetUniformLocation(shaderProgram,"uFogRange");uCameraPosition=GL.GetUniformLocation(shaderProgram,"uCameraPosition");uCameraForward=GL.GetUniformLocation(shaderProgram,"uCameraForward");
         for(int i=0;i<MaxPreviewLights;i++)
         {
             uLitPosRange[i]=GL.GetUniformLocation(shaderProgram,$"uLitPosRange[{i}]");uLitColorIntensity[i]=GL.GetUniformLocation(shaderProgram,$"uLitColorIntensity[{i}]");uLitDirectionType[i]=GL.GetUniformLocation(shaderProgram,$"uLitDirectionType[{i}]");
@@ -46,7 +46,8 @@ public sealed partial class ScenarioViewport
         LitGroup? group=litScene?.Groups.FirstOrDefault(x=>x.SlotIndex==selectedLitGroup)??litScene?.Groups.FirstOrDefault();
         if(!LightingVisible||group==null){GL.Uniform1(uLitEnabled,0);GL.Uniform1(uLitCount,0);GL.Uniform1(uFogEnabled,0);return;}
         float fogStart=group.FogStart/100f,fogEnd=group.FogEnd/100f;bool fogValid=group.FogType!=0&&float.IsFinite(fogStart)&&float.IsFinite(fogEnd)&&fogEnd>fogStart;
-        GL.Uniform1(uFogEnabled,fogValid?1:0);GL.Uniform1(uFogType,(int)group.FogType);GL.Uniform3(uFogColor,group.FogR/255f,group.FogG/255f,group.FogB/255f);GL.Uniform2(uFogRange,fogStart,fogEnd);GL.Uniform3(uCameraPosition,cameraPosition.X,cameraPosition.Y,cameraPosition.Z);
+        NVector3 cameraForward=GetForward();
+        GL.Uniform1(uFogEnabled,fogValid?1:0);GL.Uniform1(uFogType,(int)group.FogType);GL.Uniform3(uFogColor,group.FogR/255f,group.FogG/255f,group.FogB/255f);GL.Uniform2(uFogRange,fogStart,fogEnd);GL.Uniform3(uCameraPosition,cameraPosition.X,cameraPosition.Y,cameraPosition.Z);GL.Uniform3(uCameraForward,cameraForward.X,cameraForward.Y,cameraForward.Z);
         LitLight[] lights=group.Lights.Where(x=>x.IsActive).Take(MaxPreviewLights).ToArray();GL.Uniform1(uLitEnabled,1);GL.Uniform1(uLitCount,lights.Length);GL.Uniform1(uLitTime,(float)((Stopwatch.GetTimestamp()-litAnimationEpoch)/(double)Stopwatch.Frequency));
         GL.Uniform4(uLitAmbient,group.BaseR/255f,group.BaseG/255f,group.BaseB/255f,group.BaseA/255f);
         for(int i=0;i<lights.Length;i++)

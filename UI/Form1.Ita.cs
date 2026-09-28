@@ -45,9 +45,10 @@ public partial class Form1
 
     private void lstVisualItaEntries_KeyDown(object? sender,KeyEventArgs e)
     {
-        if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedIta();e.Handled=true;e.SuppressKeyPress=true;}
+        if(e.Control&&e.KeyCode==Keys.Z){UndoItaTransform();e.Handled=true;e.SuppressKeyPress=true;}
+        else if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedIta();e.Handled=true;e.SuppressKeyPress=true;}
         else if(e.KeyCode==Keys.Delete){DeleteSelectedIta();e.Handled=true;e.SuppressKeyPress=true;}
-        else if(e.KeyCode==Keys.F&&lstVisualItaEntries.SelectedItem is ItaEntry item){visualViewport?.FocusIta(item);e.Handled=true;e.SuppressKeyPress=true;}
+        else if(e.KeyCode==Keys.F){FocusSelectedIta();e.Handled=true;e.SuppressKeyPress=true;}
         else if(e.KeyCode==Keys.G){visualViewport.ItaTransformMode=EtsGizmoMode.Move;visualViewport.RefreshItaGeometry();e.Handled=true;e.SuppressKeyPress=true;}
         else if(e.KeyCode==Keys.R){visualViewport.ItaTransformMode=EtsGizmoMode.Rotate;visualViewport.RefreshItaGeometry();e.Handled=true;e.SuppressKeyPress=true;}
     }
@@ -59,6 +60,16 @@ public partial class Form1
         clone.DataBlockIndex=NextFreeItaByte(visualItaScene.Entries.Select(x=>x.DataBlockIndex));
         clone.ScriptLink=NextFreeItaUShort(visualItaScene.Entries.Select(x=>x.ScriptLink));clone.PositionX+=100f;
         visualItaScene.Entries.Add(clone);MarkItaModified();RefreshVisualItaEntries(clone);visualViewport?.RefreshItaGeometry(clone);
+    }
+
+    private void FocusSelectedIta(){if(lstVisualItaEntries.SelectedItem is ItaEntry entry)visualViewport?.FocusIta(entry);}
+    private bool UndoItaTransform(){if(visualViewport?.UndoItaEdit()!=true)return false;MarkItaModified();lstVisualItaEntries.Refresh();pgVisualProperties.Refresh();return true;}
+
+    private void ClearVisualItaSelectionForOtherEntity()
+    {
+        if(lstVisualItaEntries?.SelectedItem==null)return;
+        lstVisualItaEntries.ClearSelected();
+        visualViewport?.SelectItaEntry(null);
     }
 
     private void DeleteSelectedIta()
@@ -77,15 +88,16 @@ public partial class Form1
         if(visualItaScene==null||string.IsNullOrWhiteSpace(visualItaPath))return false;
         try
         {
+            byte? selectedBlock=(lstVisualItaEntries.SelectedItem as ItaEntry)?.DataBlockIndex;
             bool backup=Ps2ItaWriter.Save(visualItaScene,GetVisualAevBackupPath(visualItaPath));
             ItaScene verified=Ps2ItaReader.Read(visualItaPath);
-            visualItaScene=verified;visualViewport.SetItaScene(verified,visualItmCatalog);WireVisualItaEvents();RefreshVisualItaEntries();
+            visualItaScene=verified;visualViewport.SetItaScene(verified,visualItmCatalog);WireVisualItaEvents();RefreshVisualItaEntries(selectedBlock.HasValue?verified.Entries.FirstOrDefault(x=>x.DataBlockIndex==selectedBlock.Value):null);
             ExtractLog($"Visual Editor: ITA saved and verified: {Path.GetFileName(visualItaPath)}."+(backup?" • original backup preserved.":""));UpdateVisualStatus();return true;
         }
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Save ITA",MessageBoxButtons.OK,MessageBoxIcon.Error);ExtractLog("Visual Editor: error saving ITA: "+ex.Message);return false;}
     }
 
     private void WireVisualItaEvents(){visualViewport.ItaEntryClicked-=visualViewport_ItaClicked;visualViewport.ItaEntryClicked+=visualViewport_ItaClicked;visualViewport.ItaEntryEdited-=visualViewport_ItaEdited;visualViewport.ItaEntryEdited+=visualViewport_ItaEdited;}
-    private void visualViewport_ItaClicked(ItaEntry? entry){if(entry!=null&&tabVisualEntities!=null)tabVisualEntities.SelectedIndex=9;lstVisualItaEntries.SelectedItem=entry;}
+    private void visualViewport_ItaClicked(ItaEntry? entry){if(entry!=null&&tabVisualEntities!=null)tabVisualEntities.SelectedIndex=9;if(entry==null)lstVisualItaEntries.ClearSelected();else lstVisualItaEntries.SelectedItem=entry;}
     private void visualViewport_ItaEdited(ItaEntry entry){MarkItaModified();lstVisualItaEntries.Refresh();pgVisualProperties.Refresh();}
 }

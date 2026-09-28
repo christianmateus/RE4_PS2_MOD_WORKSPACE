@@ -105,7 +105,6 @@ public partial class Form1
             // synchronized with the Build ISO independently of the DAT fast-build state.
             await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso);
             await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
-            await ApplyGanadoScalePatchAsync(buildIso);
 
             var builtSnapshot = await Task.Run(() => ChangeDetectionService.Capture(contentDir));
             ChangeDetectionService.Save(GetChangeStatePath(project.ActiveDatName), builtSnapshot);

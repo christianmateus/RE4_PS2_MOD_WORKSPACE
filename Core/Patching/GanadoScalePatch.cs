@@ -8,6 +8,47 @@ public sealed record GanadoScalePatchResult(int EntryCount, int ChangedCount, fl
 
 public static class GanadoScalePatch
 {
+    // Mantém a implementação disponível, mas fora da injeção enquanto o teste de velocidade estiver suspenso.
+    public static readonly bool IndividualSpeedPatchEnabled = false;
+
+    public static bool IsApplied(string isoPath)
+    {
+        if (!File.Exists(isoPath)) return false;
+        try
+        {
+            IsoFileEntry? exe=Iso9660Reader.ReadAllFiles(isoPath).FirstOrDefault(x=>!x.IsDirectory&&x.Name.StartsWith("SLES_",StringComparison.OrdinalIgnoreCase));
+            if (exe==null) return false;
+            using var s=File.OpenRead(isoPath);
+            byte[] current=Read(s,exe.DataOffset+MainHook,8);
+            return current.AsSpan().SequenceEqual(Words(JumpVirtual(0x2F2680u),0)) || current.AsSpan().SequenceEqual(Words(JumpVirtual(0x2F4A00u),0));
+        }
+        catch { return false; }
+    }
+    public static bool IsSpeedApplied(string isoPath)
+    {
+        if (!File.Exists(isoPath)) return false;
+        try
+        {
+            IsoFileEntry? exe=Iso9660Reader.ReadAllFiles(isoPath).FirstOrDefault(x=>!x.IsDirectory&&x.Name.StartsWith("SLES_",StringComparison.OrdinalIgnoreCase));
+            if(exe==null)return false;
+            using var s=File.OpenRead(isoPath);
+            byte[] hook=Read(s,exe.DataOffset+MotionSpeedHook,12);
+            byte[] routine=Read(s,exe.DataOffset+MotionSpeedRoutine,EmptyMotionSpeedRoutine.Length);
+            if(!IndividualSpeedPatchEnabled)
+                return hook.AsSpan().SequenceEqual(NativeMotionSpeedHook)&&routine.All(x=>x==0);
+            byte[] spawnHook=Read(s,exe.DataOffset+MainHook,8);
+            int spawnRoutine=spawnHook.AsSpan().SequenceEqual(Words(JumpVirtual(0x2F4A00u),0))?PreviousMainRoutine:MainRoutine;
+            byte[] transport=Read(s,exe.DataOffset+spawnRoutine+0x1C,12);
+            byte[] tableWrite=Read(s,exe.DataOffset+spawnRoutine+0x30,4)
+                .Concat(Read(s,exe.DataOffset+spawnRoutine+0x6C,4))
+                .Concat(Read(s,exe.DataOffset+spawnRoutine+0x74,4)).ToArray();
+            return hook.AsSpan().SequenceEqual(Words(JumpVirtual(0x2F27A0u),0,0))
+                &&routine.AsSpan().SequenceEqual(BuildMotionSpeedRoutine())
+                &&transport.AsSpan().SequenceEqual(Words(0x9203001D,0x2442FFF7,0x14400017))
+                &&tableWrite.AsSpan().SequenceEqual(Words(0x3C02002F,0x00511021,0xA0432830));
+        }
+        catch{return false;}
+    }
     private static readonly HashSet<string> SharedEm10Modules = new(StringComparer.OrdinalIgnoreCase)
     {
         "em10.rel", "em11.rel", "em12.rel", "em13.rel", "em14.rel", "em15.rel", "em16.rel", "em17.rel",
@@ -56,7 +97,12 @@ public static class GanadoScalePatch
     private const int RelRoutineSearchStart = 0x51000, RelRoutineSearchEnd = 0x53000, ResetRoutineDelta = 0x68, RelRoutineSpace = 0xF4;
     private const int MainHook = 0xBE560, MainRoutine = 0x1F3680;
     private const int MainList2Hook = 0xBE83C, MainList2Routine = 0x1F3710;
+    // Older builds of this patch used the later virtual destinations below.
+    // Keep accepting them so a FAST BUILD can migrate an already patched ISO.
+    private const int PreviousMainRoutine = 0x1F4A00;
+    private const int PreviousMainList2Routine = 0x1F4AE0;
     private const int MainEventHook = 0xBEA60, MainEventRoutine = 0x1F3600;
+    private const int MotionSpeedHook = 0x131424, MotionSpeedRoutine = 0x1F37A0, MotionSpeedTable = 0x1F3830;
     private static readonly byte[] NativeInitHook = Words(0xE60100E4u,0xE60100E8u);
     private static readonly byte[] NativeResetHook = Words(0xE60100E4u,0xE60100E8u,0x6A0200E7u,0x6E0200E0u,0x6A0300EFu,0x6E0300E8u,0xB22200C7u);
     private static readonly byte[] NativeResetBlock = Convert.FromHexString("0D006228050040100B00622805004054E00001E6803F013C00088144");
@@ -67,6 +113,9 @@ public static class GanadoScalePatch
     private static readonly byte[] EmptyMainList2Routine = new byte[0x90];
     private static readonly byte[] NativeMainEventHook = Words(0xA20604C0u,0xA2250000u);
     private static readonly byte[] EmptyMainEventRoutine = new byte[0x80];
+    private static readonly byte[] NativeMotionSpeedHook = Words(0x8E820310u,0x10400003u,0x0000B02Du);
+    private static readonly byte[] EmptyMotionSpeedRoutine = new byte[0xB0];
+    private static readonly byte[] EmptyMotionSpeedTable = new byte[0x100];
     private sealed record LegacySite(int Offset, uint First, uint Second);
     private static readonly LegacySite[] LegacySites =
     {
@@ -98,6 +147,67 @@ public static class GanadoScalePatch
         return new(modules.Length,changed,multiplier,false);
     }
 
+    public static GanadoScalePatchResult Remove(string isoPath)
+    {
+        AfsImage afs=AfsService.OpenDefaultAfsFromIso(isoPath);
+        AfsEntry[] modules=afs.Entries.Where(x=>!x.IsDummy&&(SharedEm10Modules.Contains(x.FileName)||DirectSpawnModules.Contains(x.FileName))).OrderBy(x=>x.Index).ToArray();
+        IsoFileEntry exe=Iso9660Reader.ReadAllFiles(isoPath).FirstOrDefault(x=>!x.IsDirectory&&x.Name.StartsWith("SLES_",StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidDataException("O executável SLES não foi encontrado na raiz da ISO.");
+        var writes=new List<(long Pos,byte[] Old,byte[] New)>();
+        using var stream=new FileStream(isoPath,FileMode.Open,FileAccess.ReadWrite,FileShare.None);
+        PrepareMainRemoval(stream,exe,writes);
+        foreach(AfsEntry module in modules)
+        {
+            if(SharedEm10Modules.Contains(module.FileName))PrepareRelRemoval(stream,afs,module,writes);
+            else if(IndependentRelPatches.TryGetValue(module.FileName,out IndependentRelPatch? patch))PrepareIndependentRelRemoval(stream,afs,module,patch,writes);
+            else if(LargeEm10Caves.TryGetValue(module.FileName,out int cave))PrepareLargeEm10RelRemoval(stream,afs,module,cave,writes);
+        }
+        int changed=0;
+        foreach(var w in writes){if(w.Old.AsSpan().SequenceEqual(w.New))continue;stream.Position=w.Pos;stream.Write(w.New);changed++;}
+        stream.Flush(true);
+        return new(modules.Length,changed,1f,true);
+    }
+
+    private static void PrepareMainRemoval(Stream s,IsoFileEntry exe,List<(long,byte[],byte[])> writes)
+    {
+        long b=exe.DataOffset;
+        byte[] current=Read(s,b+MainHook,8);
+        byte[] currentHook=Words(JumpVirtual(0x2F2680u),0),previousHook=Words(JumpVirtual(0x2F4A00u),0);
+        if(!current.AsSpan().SequenceEqual(currentHook)&&!current.AsSpan().SequenceEqual(previousHook))throw new InvalidDataException("O patch de tamanho individual não foi reconhecido no SLES.");
+        int routine=current.AsSpan().SequenceEqual(previousHook)?PreviousMainRoutine:MainRoutine;
+        writes.Add((b+MainHook,current,NativeMainHook));writes.Add((b+routine,Read(s,b+routine,EmptyMainRoutine.Length),EmptyMainRoutine));
+        byte[] list2=Read(s,b+MainList2Hook,8),previousList2=Words(JumpVirtual(0x2F4AE0u),0);
+        int routine2=list2.AsSpan().SequenceEqual(previousList2)?PreviousMainList2Routine:MainList2Routine;
+        writes.Add((b+MainList2Hook,list2,NativeMainList2Hook));writes.Add((b+routine2,Read(s,b+routine2,EmptyMainList2Routine.Length),EmptyMainList2Routine));
+        writes.Add((b+MainEventHook,Read(s,b+MainEventHook,8),NativeMainEventHook));writes.Add((b+MainEventRoutine,Read(s,b+MainEventRoutine,EmptyMainEventRoutine.Length),EmptyMainEventRoutine));
+        writes.Add((b+MotionSpeedHook,Read(s,b+MotionSpeedHook,NativeMotionSpeedHook.Length),NativeMotionSpeedHook));writes.Add((b+MotionSpeedRoutine,Read(s,b+MotionSpeedRoutine,EmptyMotionSpeedRoutine.Length),EmptyMotionSpeedRoutine));
+        writes.Add((b+MotionSpeedTable,Read(s,b+MotionSpeedTable,EmptyMotionSpeedTable.Length),EmptyMotionSpeedTable));
+    }
+
+    private static void PrepareRelRemoval(Stream s,AfsImage afs,AfsEntry e,List<(long,byte[],byte[])> writes)
+    {
+        long b=afs.IsoAfsEntry.DataOffset+e.Offset;int routine=FindRelRoutineArea(s,b,e);
+        writes.Add((b+InitHook,Read(s,b+InitHook,NativeInitHook.Length),NativeInitHook));
+        writes.Add((b+ResetHook,Read(s,b+ResetHook,NativeResetHook.Length),NativeResetHook));
+        writes.Add((b+routine,Read(s,b+routine,RelRoutineSpace),new byte[RelRoutineSpace]));
+        writes.Add((b+0x6160,Read(s,b+0x6160,NativeResetBlock.Length),NativeResetBlock));
+        writes.Add((b+0x45DC8,Read(s,b+0x45DC8,NativeInitBlock.Length),NativeInitBlock));
+        foreach(LegacySite x in LegacySites)writes.Add((b+x.Offset,Read(s,b+x.Offset,8),Words(x.First,x.Second)));
+    }
+
+    private static void PrepareIndependentRelRemoval(Stream s,AfsImage afs,AfsEntry e,IndependentRelPatch patch,List<(long,byte[],byte[])> writes)
+    {
+        long b=afs.IsoAfsEntry.DataOffset+e.Offset;
+        for(int i=0;i<patch.Hooks.Length;i++){IndependentHook h=patch.Hooks[i];int routine=patch.Cave+i*0x90;int length=BuildIndependentScaleRoutine(1f,h.BaseRegister,new[]{h.Native1,h.Native2},routine,h.Offset+8).Length;writes.Add((b+h.Offset,Read(s,b+h.Offset,8),Words(h.Native1,h.Native2)));writes.Add((b+routine,Read(s,b+routine,length),new byte[length]));}
+    }
+
+    private static void PrepareLargeEm10RelRemoval(Stream s,AfsImage afs,AfsEntry e,int cave,List<(long,byte[],byte[])> writes)
+    {
+        long b=afs.IsoAfsEntry.DataOffset+e.Offset;
+        uint[][] native={new uint[]{0x8FC40010,0x0C01EF8A,0,0x8FC20014,0x8C4300E0,0x3C040040,0x00641024},new uint[]{0x8FC30004,0x246200C0,0x8FC40000,0x248300E0,0x68640007,0x6C640000,0x6865000F}};
+        for(int i=0;i<LargeEm10Hooks.Length;i++){IndependentHook h=LargeEm10Hooks[i];int routine=cave+i*0xB0;byte[] nativeHook=Words(native[i]);int length=BuildIndependentScaleRoutine(1f,h.BaseRegister,native[i],routine,h.Offset+nativeHook.Length).Length;writes.Add((b+h.Offset,Read(s,b+h.Offset,nativeHook.Length),nativeHook));writes.Add((b+routine,Read(s,b+routine,length),new byte[length]));}
+    }
+
     private static byte ReadR100SpecialScale(Stream s,AfsImage afs)
     {
         AfsEntry? esl=afs.Entries.FirstOrDefault(x=>!x.IsDummy&&x.FileName.Equals("emleon00.esl",StringComparison.OrdinalIgnoreCase));
@@ -107,37 +217,54 @@ public static class GanadoScalePatch
 
     private static void PrepareMain(Stream s,IsoFileEntry exe,byte r100Scale,float multiplier,List<(long,byte[],byte[])> writes)
     {
-        if(exe.Size<MainList2Routine+EmptyMainList2Routine.Length)throw new InvalidDataException("O SLES é menor que a área esperada do patch individual.");
-        long b=exe.DataOffset;byte[] wh=Words(JumpVirtual(0x2F2680u),0),oldWh=Words(JumpVirtual(0x29C958u),0),wr=BuildMainRoutine(multiplier);
-        byte[] h=Read(s,b+MainHook,wh.Length),r=Read(s,b+MainRoutine,EmptyMainRoutine.Length);
-        if(!h.AsSpan().SequenceEqual(NativeMainHook)&&!h.AsSpan().SequenceEqual(oldWh)&&!h.AsSpan().SequenceEqual(wh))throw new InvalidDataException("SLES_537.02 não possui a assinatura esperada em EmSetFromList. A ISO não foi alterada.");
+        if(exe.Size<MotionSpeedRoutine+EmptyMotionSpeedRoutine.Length)throw new InvalidDataException("O SLES é menor que a área esperada do patch individual.");
+        long b=exe.DataOffset;byte[] wh=Words(JumpVirtual(0x2F2680u),0),previousWh=Words(JumpVirtual(0x2F4A00u),0),oldWh=Words(JumpVirtual(0x29C958u),0),wr=BuildMainRoutine(multiplier);
+        byte[] h=Read(s,b+MainHook,wh.Length);
+        int routineOffset=h.AsSpan().SequenceEqual(previousWh)?PreviousMainRoutine:MainRoutine;
+        byte[] r=Read(s,b+routineOffset,EmptyMainRoutine.Length);
+        if(!h.AsSpan().SequenceEqual(NativeMainHook)&&!h.AsSpan().SequenceEqual(oldWh)&&!h.AsSpan().SequenceEqual(previousWh)&&!h.AsSpan().SequenceEqual(wh))throw new InvalidDataException("SLES_537.02 não possui a assinatura esperada em EmSetFromList. A ISO não foi alterada.");
         if(!r.All(x=>x==0)&&!r.AsSpan().SequenceEqual(wr)&&U32(r,0)!=0xA0B104C0)throw new InvalidDataException("A região ampliada do patch individual no SLES está ocupada. A ISO não foi alterada.");
-        writes.Add((b+MainHook,h,wh));writes.Add((b+MainRoutine,r,wr));
-        byte[] wh2=Words(JumpVirtual(0x2F2710u),0),oldWh2=Words(JumpVirtual(0x2A4854u),0),wr2=BuildMainList2Routine(multiplier);
-        byte[] h2=Read(s,b+MainList2Hook,wh2.Length),r2=Read(s,b+MainList2Routine,EmptyMainList2Routine.Length);
-        if(!h2.AsSpan().SequenceEqual(NativeMainList2Hook)&&!h2.AsSpan().SequenceEqual(oldWh2)&&!h2.AsSpan().SequenceEqual(wh2))throw new InvalidDataException("SLES_537.02 não possui a assinatura esperada em EmSetFromList2_sub. A ISO não foi alterada.");
+        writes.Add((b+MainHook,h,wh));writes.Add((b+routineOffset,r,wr));
+        byte[] wh2=Words(JumpVirtual(0x2F2710u),0),previousWh2=Words(JumpVirtual(0x2F4AE0u),0),oldWh2=Words(JumpVirtual(0x2A4854u),0),wr2=BuildMainList2Routine(multiplier);
+        byte[] h2=Read(s,b+MainList2Hook,wh2.Length);
+        int routineOffset2=h2.AsSpan().SequenceEqual(previousWh2)?PreviousMainList2Routine:MainList2Routine;
+        byte[] r2=Read(s,b+routineOffset2,EmptyMainList2Routine.Length);
+        if(!h2.AsSpan().SequenceEqual(NativeMainList2Hook)&&!h2.AsSpan().SequenceEqual(oldWh2)&&!h2.AsSpan().SequenceEqual(previousWh2)&&!h2.AsSpan().SequenceEqual(wh2))throw new InvalidDataException("SLES_537.02 não possui a assinatura esperada em EmSetFromList2_sub. A ISO não foi alterada.");
         if(!r2.All(x=>x==0)&&!r2.AsSpan().SequenceEqual(wr2)&&U32(r2,0)!=0xA21204C0)throw new InvalidDataException("A segunda região ampliada do patch individual no SLES está ocupada. A ISO não foi alterada.");
-        writes.Add((b+MainList2Hook,h2,wh2));writes.Add((b+MainList2Routine,r2,wr2));
+        writes.Add((b+MainList2Hook,h2,wh2));writes.Add((b+routineOffset2,r2,wr2));
         byte[] wh3=Words(JumpVirtual(0x2F2600u),0),wr3=BuildMainEventRoutine(r100Scale);
         byte[] h3=Read(s,b+MainEventHook,wh3.Length),r3=Read(s,b+MainEventRoutine,EmptyMainEventRoutine.Length);
         if(!h3.AsSpan().SequenceEqual(NativeMainEventHook)&&!h3.AsSpan().SequenceEqual(wh3))throw new InvalidDataException("SLES_537.02 não possui a assinatura esperada em EmSetEvent. A ISO não foi alterada.");
         bool knownEventRoutine=r3.All(x=>x==0)||U32(r3,0)==0xA20604C0;
         if(!knownEventRoutine)throw new InvalidDataException("A terceira região reservada do patch individual no SLES está ocupada. A ISO não foi alterada.");
         writes.Add((b+MainEventHook,h3,wh3));writes.Add((b+MainEventRoutine,r3,wr3));
+
+        byte[] speedHook=Words(JumpVirtual(0x2F27A0u),0,0),speedRoutine=BuildMotionSpeedRoutine();
+        byte[] currentSpeedHook=Read(s,b+MotionSpeedHook,speedHook.Length),currentSpeedRoutine=Read(s,b+MotionSpeedRoutine,EmptyMotionSpeedRoutine.Length);
+        byte[] currentSpeedTable=Read(s,b+MotionSpeedTable,EmptyMotionSpeedTable.Length);
+        if(!currentSpeedHook.AsSpan().SequenceEqual(NativeMotionSpeedHook)&&!currentSpeedHook.AsSpan().SequenceEqual(speedHook))throw new InvalidDataException("SLES_537.02 não possui a assinatura esperada em MotionMove. A ISO não foi alterada.");
+        if(!currentSpeedRoutine.All(x=>x==0)&&!currentSpeedRoutine.AsSpan().SequenceEqual(speedRoutine)&&U32(currentSpeedRoutine,0)!=0x9283011C&&U32(currentSpeedRoutine,0)!=0x9282011C&&U32(currentSpeedRoutine,0)!=0x928204C0)throw new InvalidDataException("A região da velocidade individual no SLES está ocupada. A ISO não foi alterada.");
+        if(!currentSpeedTable.All(x=>x==0))throw new InvalidDataException("A tabela reservada da velocidade individual no SLES está ocupada. A ISO não foi alterada.");
+        byte[] wantedSpeedHook=IndividualSpeedPatchEnabled?speedHook:NativeMotionSpeedHook;
+        byte[] wantedSpeedRoutine=IndividualSpeedPatchEnabled?speedRoutine:EmptyMotionSpeedRoutine;
+        writes.Add((b+MotionSpeedHook,currentSpeedHook,wantedSpeedHook));writes.Add((b+MotionSpeedRoutine,currentSpeedRoutine,wantedSpeedRoutine));writes.Add((b+MotionSpeedTable,currentSpeedTable,EmptyMotionSpeedTable));
     }
 
     private static void PrepareRel(Stream s,AfsImage afs,AfsEntry e,float multiplier,List<(long,byte[],byte[])> writes)
     {
         long b=afs.IsoAfsEntry.DataOffset+e.Offset;
         int initRoutine=FindRelRoutineArea(s,b,e);
+        bool migrateOldSpeedCapture=e.FileName.Equals("em12.rel",StringComparison.OrdinalIgnoreCase);
         int resetRoutine=initRoutine+ResetRoutineDelta;
         RestoreScaleBlock(s,b,e.Index,0x6160,NativeResetBlock,writes);
         RestoreScaleBlock(s,b,e.Index,0x45DC8,NativeInitBlock,writes);
         foreach(LegacySite x in LegacySites){byte[] c=Read(s,b+x.Offset,8);uint a=U32(c,0),d=U32(c,4);if(!((a==0&&d==0)||((a&0xFFFF0000)==0x3C010000&&d==x.Second)))throw RelSignatureError(e,x.Offset);writes.Add((b+x.Offset,c,Words(x.First,x.Second)));}
         AddHook(s,b,e.Index,InitHook,NativeInitHook,Words(Branch(InitHook,initRoutine),0),writes);
         AddHook(s,b,e.Index,ResetHook,NativeResetHook,BuildPositionIndependentJump(ResetHook,resetRoutine),writes);
+        if(migrateOldSpeedCapture)
+            writes.Add((b+initRoutine,Read(s,b+initRoutine,RelRoutineSpace),new byte[RelRoutineSpace]));
         AddRoutine(s,b,e.Index,initRoutine,BuildScaleRoutine(multiplier,initRoutine,InitHook+8,false),writes);
-        AddRoutine(s,b,e.Index,resetRoutine,BuildScaleRoutine(multiplier,resetRoutine,ResetHook+NativeResetHook.Length,true),writes);
+        AddRoutine(s,b,e.Index,resetRoutine,BuildScaleRoutine(multiplier,resetRoutine,ResetHook+NativeResetHook.Length,true),writes,migrateOldSpeedCapture);
     }
 
     private static int FindRelRoutineArea(Stream s,long b,AfsEntry e)
@@ -208,9 +335,9 @@ public static class GanadoScalePatch
     }
 
     private static void AddHook(Stream s,long b,int index,int offset,byte[] native,byte[] wanted,List<(long,byte[],byte[])> writes)
-    {byte[] c=Read(s,b+offset,wanted.Length);bool legacy=(U32(c,0)>>26)==2&&U32(c,4)==0;if(!c.AsSpan().SequenceEqual(native)&&!c.AsSpan().SequenceEqual(wanted)&&!legacy)throw new InvalidDataException($"REL compatível (entrada {index}, hook +0x{offset:X}) não possui a assinatura esperada. A ISO não foi alterada.");writes.Add((b+offset,c,wanted));}
-    private static void AddRoutine(Stream s,long b,int index,int offset,byte[] wanted,List<(long,byte[],byte[])> writes)
-    {byte[] c=Read(s,b+offset,wanted.Length);if(!c.All(x=>x==0)&&U32(c,0)!=0x920204C8)throw new InvalidDataException($"REL compatível (entrada {index}, rotina +0x{offset:X}) não possui espaço livre. A ISO não foi alterada.");writes.Add((b+offset,c,wanted));}
+    {byte[] c=Read(s,b+offset,wanted.Length);bool legacy=((U32(c,0)>>26)==2&&U32(c,4)==0)||U32(c,0)==0x04110001;if(!c.AsSpan().SequenceEqual(native)&&!c.AsSpan().SequenceEqual(wanted)&&!legacy)throw new InvalidDataException($"REL compatível (entrada {index}, hook +0x{offset:X}) não possui a assinatura esperada. A ISO não foi alterada.");writes.Add((b+offset,c,wanted));}
+    private static void AddRoutine(Stream s,long b,int index,int offset,byte[] wanted,List<(long,byte[],byte[])> writes,bool allowLegacyOverlap=false)
+    {byte[] c=Read(s,b+offset,wanted.Length);if(!c.All(x=>x==0)&&U32(c,0)!=0x920204C8&&!allowLegacyOverlap)throw new InvalidDataException($"REL compatível (entrada {index}, rotina +0x{offset:X}) não possui espaço livre. A ISO não foi alterada.");writes.Add((b+offset,c,wanted));}
 
     private static InvalidDataException RelSignatureError(AfsEntry e,int offset)=>new($"{e.FileName} (entrada {e.Index}, +0x{offset:X}) não possui a assinatura esperada. A ISO não foi alterada.");
 
@@ -222,6 +349,8 @@ public static class GanadoScalePatch
         uint storeC0=list2?0xA21204C0u:0xA0B104C0u;
         uint readScale=list2?0x9222001Cu:0x9202001Cu;
         uint storeScale=list2?0xA20204C8u:0xA0A204C8u;
+        uint readSpeed=list2?0x9223001Du:0x9203001Du;
+        uint addTableIndex=list2?0x00521021u:0x00511021u;
         uint readId=list2?0x92220001u:0x92020001u;
         uint storeX=list2?0xE60000E0u:0xE4A000E0u;
         uint storeY=list2?0xE60000E4u:0xE4A000E4u;
@@ -230,11 +359,11 @@ public static class GanadoScalePatch
         uint returnAddress=list2?0x1BD844u:0x1BD568u;
         return Pad(Words(
             storeC0,readScale,storeScale,readId,
-            0x2443FFF0,0x2C630040,0x14600003,0x2443FFF7, // 0x10..0x4F, ou 0x09
-            0x14600018,0,
-            readScale,0x14400005,0,0x3C013F80,0x44810000,0x10000008,0,
+            0x2443FFF0,0x2C630040,0x14600003,readSpeed,   // 0x10..0x4F: leitura no delay slot comum
+            0x2442FFF7,0x14400017,                       // ou 0x09
+            readScale,0x14400005,0x3C02002F,0x3C013F80,0x44810000,0x10000008,0,
             0x44820000,0,0x46800020,0,0x3C014180,0x44811000,0x46020003,
-            0x3C010000|(f>>16),0x34210000|(f&0xFFFF),0x44811000,0,0x46020002,0,
+            0x3C010000|(f>>16),0x34210000|(f&0xFFFF),0x44811000,addTableIndex,0x46020002,0xA0432830,
             storeX,storeY,storeZ,originalRead,JumpVirtual(returnAddress),0),EmptyMainRoutine.Length);
     }
     private static uint ScaleReadWord(int baseRegister)=>0x90000000u|((uint)baseRegister<<21)|(baseRegister==2?3u:2u)<<16|0x04C8u;
@@ -272,7 +401,20 @@ public static class GanadoScalePatch
         0x86220010,0x2403F1BE,0x14430004,0,// z == -3650
         0x24020000u|scale,0x10000002,0,     // tamanho da entry 0
         0x0000102D,                         // demais EmSetEvent: automático
-        0xA20204C8,JumpVirtual(0x1BDA68),0),EmptyMainEventRoutine.Length);
+        0xA20204C8,
+        JumpVirtual(0x1BDA68),0),EmptyMainEventRoutine.Length);
+
+    private static byte[] BuildMotionSpeedRoutine()=>Pad(Words(
+        0x9282011C,                         // id do cModel
+        0x2442FFEE,0x14400012,0,           // primeiro teste: somente em12
+        0x928204C0,0x2442FFA1,             // número da entry == 95
+        0x1440000E,0x3C03002F,
+        0x90632830,0x1060000B,0,           // automático: preserva Seq_speed
+        0x2462FFF8,0x2C420029,0x10400007,0,// aceita 0,50x..3,00x (byte/16)
+        0x44830000,0x46800020,0x3C014180,0x44810800,0x46010003,0xE68002F8,
+        0x8E820310,0x14400003,0x0000B02D,   // instruções substituídas de MotionMove
+        JumpVirtual(ElfVirtual(MotionSpeedHook+0x14)),0,
+        JumpVirtual(ElfVirtual(MotionSpeedHook+0x0C)),0),EmptyMotionSpeedRoutine.Length);
     private static byte[] BuildScaleRoutine(float global,int routineOffset,int ret,bool restoreResetInstructions)
     {
         uint f=unchecked((uint)BitConverter.SingleToInt32Bits(global));
@@ -288,6 +430,7 @@ public static class GanadoScalePatch
     {int ra=from+8,delta=target-ra;uint d=unchecked((uint)delta);return Words(0x04110001,0,0x3C010000|(d>>16),0x34210000|(d&0xFFFF),0x003F0821,0x00200008,0);}
     private static uint Branch(int from,int target){int words=(target-(from+4))/4;if(words<short.MinValue||words>short.MaxValue)throw new InvalidOperationException("Desvio REL fora do alcance.");return 0x10000000u|unchecked((ushort)(short)words);}
     private static uint Jump(int offset)=>0x08000000u|((uint)offset>>2);
+    private static uint ElfVirtual(int fileOffset)=>checked((uint)(fileOffset+0xFF000));
     private static uint JumpVirtual(uint address)=>0x08000000u|((address>>2)&0x03FFFFFF);
     private static uint U32(byte[] b,int o)=>BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(o,4));
     private static byte[] Pad(byte[] b,int n){byte[] r=new byte[n];b.CopyTo(r,0);return r;}

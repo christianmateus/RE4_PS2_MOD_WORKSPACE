@@ -13,7 +13,7 @@ public static class Ps2ScenarioReader
         List<LocalTriangle> local = ReadBinTriangles(reader, 0, data.Length, 0, useRegularUvLayout);
         return local.Select(t => new ScenarioTriangle(t.A, t.B, t.C, t.UvA, t.UvB, t.UvC,
             t.TextureIndex < 0 ? -1 : t.TextureIndex + textureIndexBase,
-            t.OffsetA,t.OffsetB,t.OffsetC,t.Factor,t.StripFlagOffset)).ToArray();
+            t.OffsetA,t.OffsetB,t.OffsetC,t.Factor,t.StripFlagOffset,t.AlphaA,t.AlphaB,t.AlphaC,t.ColorA,t.ColorB,t.ColorC)).ToArray();
     }
 
     private sealed class SmdEntry
@@ -31,14 +31,16 @@ public static class Ps2ScenarioReader
         public readonly Vector3 A, B, C;
         public readonly Vector2 UvA, UvB, UvC;
         public readonly int TextureIndex;
-        public readonly int OffsetA,OffsetB,OffsetC,StripFlagOffset;public readonly float Factor;
+        public readonly int OffsetA,OffsetB,OffsetC,StripFlagOffset;public readonly float Factor,AlphaA,AlphaB,AlphaC;public readonly Vector3 ColorA,ColorB,ColorC;
 
-        public LocalTriangle(Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, int textureIndex,int offsetA=-1,int offsetB=-1,int offsetC=-1,float factor=1f,int stripFlagOffset=-1)
+        public LocalTriangle(Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, int textureIndex,int offsetA=-1,int offsetB=-1,int offsetC=-1,float factor=1f,int stripFlagOffset=-1,float alphaA=1f,float alphaB=1f,float alphaC=1f,Vector3? colorA=null,Vector3? colorB=null,Vector3? colorC=null)
         {
             A = a; B = b; C = c;
             UvA = uvA; UvB = uvB; UvC = uvC;
             TextureIndex = textureIndex;
             OffsetA=offsetA;OffsetB=offsetB;OffsetC=offsetC;Factor=factor;StripFlagOffset=stripFlagOffset;
+            AlphaA=alphaA;AlphaB=alphaB;AlphaC=alphaC;
+            ColorA=colorA??Vector3.One;ColorB=colorB??Vector3.One;ColorC=colorC??Vector3.One;
         }
     }
 
@@ -49,6 +51,8 @@ public static class Ps2ScenarioReader
         public ushort IndexComplement;
         public int SourceOffset;
         public float Factor;
+        public float Alpha=1f;
+        public Vector3 Color=Vector3.One;
     }
 
     private readonly struct MaterialInfo
@@ -136,6 +140,14 @@ public static class Ps2ScenarioReader
             }
         }
 
+        Ps2SmxFile? smx = null;
+        string? smxPath = FindCompanionSmx(path);
+        if (smxPath != null)
+        {
+            try { smx = Ps2SmxFile.Read(smxPath); }
+            catch (Exception ex) { warnings.Add($"SMX {Path.GetFileName(smxPath)}: {ex.Message}"); }
+        }
+
         var worldTriangles = new List<ScenarioTriangle>();
         var sceneEntries = new List<ScenarioEntry>(entries.Count);
         Vector3 min = new(float.PositiveInfinity);
@@ -144,15 +156,17 @@ public static class Ps2ScenarioReader
         foreach (var e in entries)
         {
             cache.TryGetValue(e.BinId, out var local);
-            sceneEntries.Add(new ScenarioEntry
+            var sceneEntry = new ScenarioEntry
             {
                 FileOrder = e.FileOrder, RawData = e.RawData, BinId = (byte)e.BinId,
                 PositionX = e.Position.X, PositionY = e.Position.Y, PositionZ = e.Position.Z,
                 RotationX = e.Angle.X, RotationY = e.Angle.Y, RotationZ = e.Angle.Z,
                 ScaleX = e.Scale.X, ScaleY = e.Scale.Y, ScaleZ = e.Scale.Z,
-                LocalTriangles = local == null ? Array.Empty<ScenarioTriangle>() : local.Select(t => new ScenarioTriangle(t.A, t.B, t.C, t.UvA, t.UvB, t.UvC, t.TextureIndex,t.OffsetA,t.OffsetB,t.OffsetC,t.Factor,t.StripFlagOffset)).ToArray(),
-                TextureIndex = local?.Select(t=>t.TextureIndex).Where(x=>x>=0).DefaultIfEmpty(-1).First() ?? -1
-            });
+                LocalTriangles = local == null ? Array.Empty<ScenarioTriangle>() : local.Select(t => new ScenarioTriangle(t.A, t.B, t.C, t.UvA, t.UvB, t.UvC, t.TextureIndex,t.OffsetA,t.OffsetB,t.OffsetC,t.Factor,t.StripFlagOffset,t.AlphaA,t.AlphaB,t.AlphaC,t.ColorA,t.ColorB,t.ColorC)).ToArray(),
+                TextureIndex = local?.Select(t=>t.TextureIndex).Where(x=>x>=0).DefaultIfEmpty(-1).First() ?? -1,
+                Smx = smx?.Find(e.RawData[0x33])
+            };
+            sceneEntries.Add(sceneEntry);
             if (local == null) continue;
 
             Vector3 scale = new(
@@ -182,7 +196,9 @@ public static class Ps2ScenarioReader
                 float area2 = cross.LengthSquared();
                 if (!float.IsFinite(area2) || area2 < 0.000001f) continue;
 
-                worldTriangles.Add(new ScenarioTriangle(a, b, c, uvA, uvB, uvC, t.TextureIndex));
+                float alphaB=mirrored?t.AlphaC:t.AlphaB,alphaC=mirrored?t.AlphaB:t.AlphaC;
+                Vector3 colorB=mirrored?t.ColorC:t.ColorB,colorC=mirrored?t.ColorB:t.ColorC;
+                worldTriangles.Add(new ScenarioTriangle(a, b, c, uvA, uvB, uvC, t.TextureIndex,alphaA:t.AlphaA,alphaB:alphaB,alphaC:alphaC,colorA:t.ColorA,colorB:colorB,colorC:colorC));
                 min = Vector3.Min(min, Vector3.Min(a, Vector3.Min(b, c)));
                 max = Vector3.Max(max, Vector3.Max(a, Vector3.Max(b, c)));
             }
@@ -201,10 +217,22 @@ public static class Ps2ScenarioReader
             SkippedBinCount = usedBins.Length - loadedBins,
             Warnings = warnings,
             Triangles = worldTriangles,
-            Entries = sceneEntries,
+            Entries = sceneEntries, Smx = smx,
             BoundsMin = min,
             BoundsMax = max
         };
+    }
+
+    private static string? FindCompanionSmx(string smdPath)
+    {
+        string? directory = Path.GetDirectoryName(smdPath);
+        if (directory == null || !Directory.Exists(directory)) return null;
+        string stem = Path.GetFileNameWithoutExtension(smdPath);
+        int separator = stem.LastIndexOf('_');
+        string prefix = separator > 0 ? stem[..separator] : stem;
+        string[] files = Directory.GetFiles(directory, "*.SMX", SearchOption.TopDirectoryOnly);
+        return files.FirstOrDefault(x => Path.GetFileNameWithoutExtension(x).StartsWith(prefix + "_", StringComparison.OrdinalIgnoreCase))
+            ?? (files.Length == 1 ? files[0] : null);
     }
 
     private static long FindBinEnd(int binId, uint[] offsets, uint binTableOffset, uint tplTableOffset, long fileLength)
@@ -311,9 +339,10 @@ public static class Ps2ScenarioReader
                     int uvOffset = useRegularUvLayout || !scenarioWithColors ? 16 : 8;
                     short textureU = BitConverter.ToInt16(vertexData, o + uvOffset);
                     short textureV = BitConverter.ToInt16(vertexData, o + uvOffset + 2);
-                    float normalizedU = useRegularUvLayout
-                        ? (textureU & 0xFF) / 255f
-                        : textureU / 255f;
+                    // PS2 BIN UVs are signed 16-bit fixed-point values. Values outside
+                    // 0..255 intentionally address repeated texture tiles; masking U to
+                    // one byte folds those coordinates and visibly stretches ETM models.
+                    float normalizedU = textureU / 255f;
                     vertices.Add(new SegmentVertex
                     {
                         Position = new Vector3(
@@ -323,6 +352,11 @@ public static class Ps2ScenarioReader
                         IndexComplement = BitConverter.ToUInt16(vertexData, o + 14),
                         SourceOffset=vertexDataOffset+o,
                         Factor=factor,
+                        Alpha=scenarioWithColors&&!useRegularUvLayout?Math.Clamp(BitConverter.ToUInt16(vertexData,o+22)/128f,0f,1f):1f,
+                        Color=scenarioWithColors&&!useRegularUvLayout?new Vector3(
+                            Math.Clamp(BitConverter.ToUInt16(vertexData,o+16)/128f,0f,2f),
+                            Math.Clamp(BitConverter.ToUInt16(vertexData,o+18)/128f,0f,2f),
+                            Math.Clamp(BitConverter.ToUInt16(vertexData,o+20)/128f,0f,2f)):Vector3.One,
                         // ScenarioWithColors is used heavily by foliage/decal-style
                         // scenario meshes on PS2. Its V orientation is opposite to the
                         // regular BIN path in our OpenGL preview.
@@ -357,16 +391,17 @@ public static class Ps2ScenarioReader
                 Vector3 a = va.Position, b = vb.Position, c = vc.Position;
                 Vector2 uvA = va.Uv, uvB = vb.Uv, uvC = vc.Uv;
                 int offsetA=va.SourceOffset,offsetB=vb.SourceOffset,offsetC=vc.SourceOffset;
+                float alphaA=va.Alpha,alphaB=vb.Alpha,alphaC=vc.Alpha;
+                Vector3 colorA=va.Color,colorB=vb.Color,colorC=vc.Color;
 
                 if (invertFace)
                 {
                     (a, c) = (c, a);
                     (uvA, uvC) = (uvC, uvA);
                     (offsetA,offsetC)=(offsetC,offsetA);
+                    (alphaA,alphaC)=(alphaC,alphaA);
+                    (colorA,colorC)=(colorC,colorA);
                 }
-
-                if (orientEtmUvs)
-                    OrientVerticalFaceUvs(a, b, c, ref uvA, ref uvB, ref uvC);
 
                 invertFace = !invertFace;
 
@@ -379,38 +414,9 @@ public static class Ps2ScenarioReader
                 if (!float.IsFinite(cross.LengthSquared()) || cross.LengthSquared() < 0.0000000001f)
                     continue;
 
-                output.Add(new LocalTriangle(a, b, c, uvA, uvB, uvC, textureIndex,offsetA,offsetB,offsetC,va.Factor,vertices[i].SourceOffset+14));
+                output.Add(new LocalTriangle(a, b, c, uvA, uvB, uvC, textureIndex,offsetA,offsetB,offsetC,va.Factor,vertices[i].SourceOffset+14,alphaA,alphaB,alphaC,colorA,colorB,colorC));
             }
             else invertFace = false;
-        }
-    }
-
-    private static void OrientVerticalFaceUvs(
-        Vector3 a, Vector3 b, Vector3 c,
-        ref Vector2 uvA, ref Vector2 uvB, ref Vector2 uvC)
-    {
-        Vector3 normal = Vector3.Cross(b - a, c - a);
-        if (normal.LengthSquared() < 0.0000000001f ||
-            MathF.Abs(normal.Y) >= MathF.Max(MathF.Abs(normal.X), MathF.Abs(normal.Z)))
-            return;
-
-        float meanY = (a.Y + b.Y + c.Y) / 3f;
-        float meanU = (uvA.X + uvB.X + uvC.X) / 3f;
-        float meanV = (uvA.Y + uvB.Y + uvC.Y) / 3f;
-        float covarianceU = MathF.Abs(
-            (a.Y - meanY) * (uvA.X - meanU) +
-            (b.Y - meanY) * (uvB.X - meanU) +
-            (c.Y - meanY) * (uvC.X - meanU));
-        float covarianceV = MathF.Abs(
-            (a.Y - meanY) * (uvA.Y - meanV) +
-            (b.Y - meanY) * (uvB.Y - meanV) +
-            (c.Y - meanY) * (uvC.Y - meanV));
-
-        if (covarianceU > covarianceV * 1.25f)
-        {
-            uvA = new Vector2(uvA.Y, uvA.X);
-            uvB = new Vector2(uvB.Y, uvB.X);
-            uvC = new Vector2(uvC.Y, uvC.X);
         }
     }
 

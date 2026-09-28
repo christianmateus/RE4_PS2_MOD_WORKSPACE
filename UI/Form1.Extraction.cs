@@ -304,6 +304,9 @@ public partial class Form1
     private void ExtractLog(string text)
     {
         if (rtbExtractLog == null || rtbExtractLog.IsDisposed) return;
-        rtbExtractLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}"); rtbExtractLog.ScrollToCaret();
+        rtbExtractLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}");
+        rtbExtractLog.SelectionStart = rtbExtractLog.TextLength;
+        rtbExtractLog.SelectionLength = 0;
+        rtbExtractLog.ScrollToCaret();
     }
 }

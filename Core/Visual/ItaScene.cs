@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Drawing.Design;
 using System.Globalization;
 using System.Numerics;
+using System.Windows.Forms.Design;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
@@ -26,7 +28,7 @@ public sealed class ItaEntry
     [Category("Identity"), DisplayName("Data Block Type (raw)")]
     public byte DataBlockType { get; set; }
 
-    [Category("Item"), DisplayName("Item"), TypeConverter(typeof(ItaItemConverter)), Description("Item spawned by this entry.")]
+    [Category("Item"), DisplayName("Item"), TypeConverter(typeof(ItaItemConverter)), Editor(typeof(ItaItemEditor),typeof(UITypeEditor)), Description("Item spawned by this entry.")]
     public byte ItemId { get; set; }
     [Browsable(false)]
     public string ItemName => ItaItemCatalog.GetName(ItemId);
@@ -143,6 +145,25 @@ public sealed class ItaItemConverter : TypeConverter
         }
         return base.ConvertFrom(context,culture,value)!;
     }
+}
+
+public sealed class ItaItemEditor : UITypeEditor
+{
+    public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext? context)=>UITypeEditorEditStyle.DropDown;
+    public override object? EditValue(ITypeDescriptorContext? context,IServiceProvider provider,object? value)
+    {
+        if(provider.GetService(typeof(IWindowsFormsEditorService)) is not IWindowsFormsEditorService service)return value;
+        byte[] ids=ItaItemCatalog.ItemIds.ToArray();
+        using var list=new ListBox{BorderStyle=BorderStyle.FixedSingle,BackColor=Color.FromArgb(28,31,37),ForeColor=Color.Gainsboro,Font=new Font("Segoe UI",9F),IntegralHeight=false};
+        foreach(byte id in ids)list.Items.Add(new ItaItemChoice(id,ItaItemCatalog.GetName(id)));
+        int selected=Array.IndexOf(ids,value is byte idValue?idValue:(byte)0);if(selected>=0){list.SelectedIndex=selected;list.TopIndex=Math.Max(0,selected-5);}
+        int widest=list.Items.Count==0?320:list.Items.Cast<object>().Max(x=>TextRenderer.MeasureText(x.ToString(),list.Font).Width);
+        list.Width=Math.Clamp(widest+SystemInformation.VerticalScrollBarWidth+24,400,720);list.Height=Math.Min(440,Math.Max(140,list.Items.Count*list.ItemHeight+4));
+        object? result=value;void Accept(){if(list.SelectedItem is ItaItemChoice choice){result=choice.Id;service.CloseDropDown();}}
+        list.MouseClick+=(_,e)=>{if(list.IndexFromPoint(e.Location)>=0)Accept();};list.KeyDown+=(_,e)=>{if(e.KeyCode==Keys.Enter)Accept();else if(e.KeyCode==Keys.Escape)service.CloseDropDown();};
+        service.DropDownControl(list);return result;
+    }
+    private sealed record ItaItemChoice(byte Id,string Label){public override string ToString()=>Label;}
 }
 
 public sealed class ItaRandomConverter : TypeConverter

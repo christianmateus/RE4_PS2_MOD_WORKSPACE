@@ -1,3 +1,5 @@
+using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+
 namespace RE4_PS2_MOD_WORKSPACE
 {
     partial class Form1
@@ -56,7 +58,7 @@ namespace RE4_PS2_MOD_WORKSPACE
         private Label lblDatCurrentSize = null!, lblDatReservedSize = null!, lblDatFreeSpace = null!, lblAfsName = null!, lblContentSummary = null!;
         private TextBox txtAssetSearch = null!;
         private DataGridView gridAssets = null!;
-        private RichTextBox rtbExtractLog = null!, rtbBuildLog = null!;
+        private TextBox rtbExtractLog = null!, rtbBuildLog = null!;
         private Button btnTextureLoad = null!, btnTextureReload = null!, btnTextureReplace = null!, btnTextureReplaceAll = null!, btnTextureExport = null!, btnTextureExportAll = null!, btnTextureOpenExternal = null!, btnTextureRotate = null!, btnTextureResize = null!, btnTextureFlipX = null!, btnTextureFlipY = null!, btnTextureIncreaseAll = null!, btnTextureDecreaseAll = null!;
         private Label lblTplStatus = null!, lblTextureTitle = null!, lblTextureMeta = null!, lblTextureCount = null!, lblTextureLoading = null!, lblTextureThumbSize = null!;
         private ListView lvTextures = null!, lvTrackedDats = null!;
@@ -173,7 +175,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             btnSidebarToggle.Text = "RETRAIR  ‹"; btnSidebarToggle.Dock = DockStyle.Top; btnSidebarToggle.Height = 34; btnSidebarToggle.FlatStyle = FlatStyle.Flat; btnSidebarToggle.FlatAppearance.BorderSize = 0; btnSidebarToggle.BackColor = Sidebar; btnSidebarToggle.ForeColor = TextMuted; btnSidebarToggle.Font = new Font("Segoe UI Semibold", 8F); btnSidebarToggle.TextAlign = ContentAlignment.MiddleRight; btnSidebarToggle.Cursor = Cursors.Hand; btnSidebarToggle.Click += btnSidebarToggle_Click;
             lblSidebarModules.Text = "Módulos"; lblSidebarModules.Dock = DockStyle.Top; lblSidebarModules.Height = 34; lblSidebarModules.Padding = new Padding(8, 4, 0, 8); lblSidebarModules.TextAlign = ContentAlignment.MiddleLeft; lblSidebarModules.ForeColor = Color.FromArgb(180, 187, 199); lblSidebarModules.Font = new Font("Bahnschrift SemiBold", 9F);
             lblSidebarModules.Paint += (_, e) => { using var pen = new Pen(Color.FromArgb(68, 74, 86)); e.Graphics.DrawLine(pen, 8, lblSidebarModules.Height - 4, Math.Max(8, lblSidebarModules.Width - 8), lblSidebarModules.Height - 4); };
-            lblVersion.Text = "v0.8.0"; lblVersion.Dock = DockStyle.Bottom; lblVersion.Height = 26; lblVersion.ForeColor = TextMuted; lblVersion.TextAlign = ContentAlignment.MiddleLeft;
+            lblVersion.Text = "v0.8.1"; lblVersion.Dock = DockStyle.Bottom; lblVersion.Height = 26; lblVersion.ForeColor = TextMuted; lblVersion.TextAlign = ContentAlignment.MiddleLeft;
             pnlSidebar.Controls.Add(btnNavLogs); pnlSidebar.Controls.Add(btnNavSettings); pnlSidebar.Controls.Add(btnNavTools); pnlSidebar.Controls.Add(btnNavBuild); pnlSidebar.Controls.Add(btnNavVideos); pnlSidebar.Controls.Add(btnNavSounds); pnlSidebar.Controls.Add(btnNavAnimations); pnlSidebar.Controls.Add(btnNavEnemies); pnlSidebar.Controls.Add(btnNavCharacters); pnlSidebar.Controls.Add(btnNavVisualEditor); pnlSidebar.Controls.Add(btnNavMessages); pnlSidebar.Controls.Add(btnNavTextures); pnlSidebar.Controls.Add(btnNavAssets); pnlSidebar.Controls.Add(btnNavWorkspace); pnlSidebar.Controls.Add(btnNavDashboard); pnlSidebar.Controls.Add(lblSidebarModules); pnlSidebar.Controls.Add(btnSidebarToggle); pnlSidebar.Controls.Add(lblLogoSub); pnlSidebar.Controls.Add(lblLogo); pnlSidebar.Controls.Add(lblVersion);
 
             pnlTop.BackColor = Bg;
@@ -285,6 +287,11 @@ namespace RE4_PS2_MOD_WORKSPACE
                 gridHost.SetBounds(0, gridHost.Top, availableWidth, availableHeight);
             }
             pnlAssets.Resize += (_, _) => ResizeAssetsGrid();
+            pnlAssets.VisibleChanged += (_, _) =>
+            {
+                if (pnlAssets.Visible && pnlAssets.IsHandleCreated)
+                    pnlAssets.BeginInvoke((Action)ResizeAssetsGrid);
+            };
             pnlAssets.Controls.Add(gridHost);
             ResizeAssetsGrid();
             gridAssets = new DataGridView { Dock = DockStyle.Fill, BackgroundColor = Surface, BorderStyle = BorderStyle.None, RowHeadersVisible = false, AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToResizeRows = false, ReadOnly = true, MultiSelect = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoGenerateColumns = false, EnableHeadersVisualStyles = false, ColumnHeadersHeight = 36, RowTemplate = { Height = 30 }, GridColor = Border, ScrollBars = ScrollBars.Both, AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None };
@@ -727,7 +734,7 @@ namespace RE4_PS2_MOD_WORKSPACE
 
             lblVisualStage = new Label { Text = "Nenhum DAT ativo", Left = 496, Top = 13, Width = 126, Height = 20, ForeColor = TextMuted, AutoEllipsis = true };
             toolbar.Controls.Add(lblVisualStage);
-            lblVisualStatus = new Label { UseMnemonic = false, Text = "v0.8.0 • Visual Editor", Left = 628, Top = 10, Width = 242, Height = 27, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right, AutoEllipsis = false };
+            lblVisualStatus = new Label { UseMnemonic = false, Text = "v0.8.1 • Visual Editor", Left = 628, Top = 10, Width = 242, Height = 27, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right, AutoEllipsis = false };
             toolbar.Controls.Add(lblVisualStatus);
 
             lblVisualMoveSpeed = new Label(); trkVisualMoveSpeed = new TrackBar { Minimum=10, Maximum=300, Value=100 };
@@ -804,6 +811,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             var itaHint=new Label{Text="ITA • F foca • G move • R gira • Ctrl+D duplica • Del exclui",Dock=DockStyle.Top,Height=42,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
             lstVisualItaEntries=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false};
             lstVisualItaEntries.SelectedIndexChanged+=lstVisualItaEntries_SelectedIndexChanged;lstVisualItaEntries.KeyDown+=lstVisualItaEntries_KeyDown;
+            var itaMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var itaDuplicate=new ToolStripMenuItem("Duplicar   Ctrl+D");itaDuplicate.Click+=(_,_)=>DuplicateSelectedIta();var itaDelete=new ToolStripMenuItem("Excluir   Del");itaDelete.Click+=(_,_)=>DeleteSelectedIta();var itaFocus=new ToolStripMenuItem("Focar   F");itaFocus.Click+=(_,_)=>FocusSelectedIta();itaMenu.Items.Add(itaFocus);itaMenu.Items.Add(new ToolStripSeparator());itaMenu.Items.Add(itaDuplicate);itaMenu.Items.Add(itaDelete);itaMenu.Opening+=(_,_)=>{bool selected=lstVisualItaEntries.SelectedItem!=null;itaFocus.Enabled=selected;itaDuplicate.Enabled=selected;itaDelete.Enabled=selected;};lstVisualItaEntries.ContextMenuStrip=itaMenu;
             tabIta.Controls.Add(lstVisualItaEntries);tabIta.Controls.Add(itaHint);
             var itaBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
             var btnItaMove=new Button();SetupButton(btnItaMove,"MOVE (G)",Accent,78);btnItaMove.Click+=(_,_)=>{visualViewport.ItaTransformMode=EtsGizmoMode.Move;visualViewport.RefreshItaGeometry();};
@@ -935,7 +943,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             btnVisualSmdCatalog=new Button();SetupButton(btnVisualSmdCatalog,"CATÁLOGO",Color.FromArgb(77,67,122),86);btnVisualSmdCatalog.Height=27;btnVisualSmdCatalog.Click+=btnVisualSmdCatalog_Click;
             smdBar.Controls.Add(btnVisualSmdMove);smdBar.Controls.Add(btnVisualSmdRotate);smdBar.Controls.Add(btnVisualSmdScale);smdBar.Controls.Add(chkVisualSmdSnap);smdBar.Controls.Add(chkVisualSmdEditMode);smdBar.Controls.Add(btnVisualSmdVertex);smdBar.Controls.Add(btnVisualSmdEdge);smdBar.Controls.Add(btnVisualSmdFace);smdBar.Controls.Add(chkVisualSmdMagnet);smdBar.Controls.Add(cmbVisualSmdTransformSpace);smdBar.Controls.Add(cmbVisualSmdTransformSpeed);smdBar.Controls.Add(btnVisualSmdDuplicate);smdBar.Controls.Add(btnVisualSmdImport);smdBar.Controls.Add(btnVisualSmdCatalog);
             tabSmd.Controls.Add(lstVisualSmdEntries);tabSmd.Controls.Add(smdHint);
-            var smdMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var smdDuplicate=new ToolStripMenuItem("Duplicar   Ctrl+D");smdDuplicate.Click+=(_,_)=>DuplicateSelectedSmdEntries();var smdDelete=new ToolStripMenuItem("Excluir   Del");smdDelete.Click+=(_,_)=>DeleteSelectedSmdEntries();var smdTextures=new ToolStripMenuItem("Editar texturas deste modelo...");smdTextures.Click+=(_,_)=>EditSelectedSmdTextures();var smdPivot=new ToolStripMenuItem("Recalcular pivô para o centro do modelo");smdPivot.Click+=(_,_)=>RecalculateSelectedSmdPivot();var smdSeparateFaces=new ToolStripMenuItem("Separar faces selecionadas em uma entry   Ctrl+K");smdSeparateFaces.Click+=(_,_)=>SeparateSelectedSmdFaces();var smdToCatalog=new ToolStripMenuItem("Adicionar seleção ao catálogo...");smdToCatalog.Click+=(_,_)=>AddSelectedSmdToCatalog();var smdExportBin=new ToolStripMenuItem("Exportar modelo BIN...");smdExportBin.Click+=(_,_)=>ExportSelectedSmdBin();var smdExportObj=new ToolStripMenuItem("Exportar modelo OBJ + texturas...");smdExportObj.Click+=(_,_)=>ExportSelectedSmdObj();smdMenu.Items.Add(smdSeparateFaces);smdMenu.Items.Add(smdPivot);smdMenu.Items.Add(smdTextures);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdToCatalog);smdMenu.Items.Add(smdExportBin);smdMenu.Items.Add(smdExportObj);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdDuplicate);smdMenu.Items.Add(smdDelete);smdMenu.Opening+=(_,_)=>{bool any=lstVisualSmdEntries.SelectedItems.Count>0;bool one=lstVisualSmdEntries.SelectedItems.Count==1;smdSeparateFaces.Enabled=one&&chkVisualSmdEditMode.Checked&&(visualViewport?.SelectedSmdFaceCount??0)>0;smdPivot.Enabled=one;smdTextures.Enabled=one;smdToCatalog.Enabled=any;smdExportBin.Enabled=one;smdExportObj.Enabled=one;smdDuplicate.Enabled=any;smdDelete.Enabled=any;};lstVisualSmdEntries.ContextMenuStrip=smdMenu;
+            var smdMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var smdDuplicate=new ToolStripMenuItem("Duplicar   Ctrl+D");smdDuplicate.Click+=(_,_)=>DuplicateSelectedSmdEntries();var smdDelete=new ToolStripMenuItem("Excluir   Del");smdDelete.Click+=(_,_)=>DeleteSelectedSmdEntries();var smdTextures=new ToolStripMenuItem("Editar texturas deste modelo...");smdTextures.Click+=(_,_)=>EditSelectedSmdTextures();var smdPivot=new ToolStripMenuItem("Recalcular pivô para o centro do modelo");smdPivot.Click+=(_,_)=>RecalculateSelectedSmdPivot();var smdAddSmx=new ToolStripMenuItem("SMX: criar propriedades para esta entry");smdAddSmx.Click+=(_,_)=>CreateSelectedSmdSmx();var smdRemoveSmx=new ToolStripMenuItem("SMX: remover propriedades desta entry...");smdRemoveSmx.Click+=(_,_)=>RemoveSelectedSmdSmx();var smdSeparateFaces=new ToolStripMenuItem("Separar faces selecionadas em uma entry   Ctrl+K");smdSeparateFaces.Click+=(_,_)=>SeparateSelectedSmdFaces();var smdJoin=new ToolStripMenuItem("Join: juntar seleção em um único BIN...");smdJoin.Click+=async (_,_)=>await JoinSelectedSmdEntriesAsync();var smdToCatalog=new ToolStripMenuItem("Adicionar seleção ao catálogo...");smdToCatalog.Click+=(_,_)=>AddSelectedSmdToCatalog();var smdExportBin=new ToolStripMenuItem("Exportar modelo BIN...");smdExportBin.Click+=(_,_)=>ExportSelectedSmdBin();var smdExportBins=new ToolStripMenuItem("Exportar BINs selecionados separadamente...");smdExportBins.Click+=(_,_)=>ExportSelectedSmdBinsSeparately();var smdExportObj=new ToolStripMenuItem("Exportar modelo OBJ + texturas...");smdExportObj.Click+=(_,_)=>ExportSelectedSmdObj();var smdExportObjs=new ToolStripMenuItem("Exportar selecionados em OBJs separados + texturas...");smdExportObjs.Click+=(_,_)=>ExportSelectedSmdObjsSeparately();var smdExportCombinedObj=new ToolStripMenuItem("Exportar selecionados em um único OBJ + texturas...");smdExportCombinedObj.Click+=(_,_)=>ExportSelectedSmdCombinedObj();smdMenu.Items.Add(smdSeparateFaces);smdMenu.Items.Add(smdPivot);smdMenu.Items.Add(smdTextures);smdMenu.Items.Add(smdJoin);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdAddSmx);smdMenu.Items.Add(smdRemoveSmx);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdToCatalog);smdMenu.Items.Add(smdExportBin);smdMenu.Items.Add(smdExportBins);smdMenu.Items.Add(smdExportObj);smdMenu.Items.Add(smdExportObjs);smdMenu.Items.Add(smdExportCombinedObj);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdDuplicate);smdMenu.Items.Add(smdDelete);smdMenu.Opening+=(_,_)=>{bool any=lstVisualSmdEntries.SelectedItems.Count>0;bool one=lstVisualSmdEntries.SelectedItems.Count==1;bool many=lstVisualSmdEntries.SelectedItems.Count>1;ScenarioEntry? selectedSmd=lstVisualSmdEntries.SelectedItem as ScenarioEntry;smdAddSmx.Enabled=one&&selectedSmd?.Smx==null&&selectedSmd.SmxId!=0xFF&&visualViewport?.Scene?.Smx!=null;smdRemoveSmx.Enabled=one&&selectedSmd?.Smx!=null;smdSeparateFaces.Enabled=one&&chkVisualSmdEditMode.Checked&&(visualViewport?.SelectedSmdFaceCount??0)>0;smdPivot.Enabled=one;smdTextures.Enabled=one;smdJoin.Enabled=many;smdToCatalog.Enabled=any;smdExportBin.Enabled=one;smdExportBins.Enabled=any;smdExportObj.Enabled=one;smdExportObjs.Enabled=any;smdExportCombinedObj.Enabled=any;smdDuplicate.Enabled=any;smdDelete.Enabled=any;};lstVisualSmdEntries.ContextMenuStrip=smdMenu;
 
             var litHint=new Label{Text="LIT • selecione um grupo e uma luz",Dock=DockStyle.Top,Height=27,Padding=new Padding(8,7,0,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
             cmbVisualLitFile=new ComboBox{Dock=DockStyle.Top,Height=30,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat};
@@ -947,6 +955,8 @@ namespace RE4_PS2_MOD_WORKSPACE
             var litBar=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=40,BackColor=Surface,Padding=new Padding(5,5,2,2),WrapContents=false};
             btnVisualSaveLit=new Button();SetupButton(btnVisualSaveLit,"SAVE LIT",Accent,92);btnVisualSaveLit.Height=28;btnVisualSaveLit.Enabled=false;btnVisualSaveLit.Click+=btnVisualSaveLit_Click;
             litBar.Controls.Add(btnVisualSaveLit);
+            var litContextBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(8,5,4,3),WrapContents=false};
+            var btnLitGlobal=new Button();SetupButton(btnLitGlobal,"✦  AJUSTE GLOBAL",Accent,154);btnLitGlobal.Height=32;btnLitGlobal.Click+=(_,_)=>OpenVisualLitGlobalAdjustment();litContextBar.Controls.Add(btnLitGlobal);
             tabLit.Controls.Add(lstVisualLitEntries);tabLit.Controls.Add(cmbVisualLitGroup);tabLit.Controls.Add(cmbVisualLitFile);tabLit.Controls.Add(litHint);
             var effHint=new Label{Text="EFF • grupos Effect 0 / Effect 1",Dock=DockStyle.Top,Height=27,Padding=new Padding(8,7,0,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
             lstVisualEffEntries=new ListBox{Dock=DockStyle.Fill,BackColor=Surface,ForeColor=TextPrimary,BorderStyle=BorderStyle.None,IntegralHeight=false,Font=new Font("Consolas",8.5F)};
@@ -1010,7 +1020,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             visualViewport.FpsUpdated += fps => { if (!lblVisualFps.IsDisposed) lblVisualFps.Text = $"{fps} FPS"; };
             viewportHost.Controls.Add(lblVisualFps);
             lblVisualFps.BringToFront();
-            visualContextActionBars.Clear();visualContextActionBars[0]=aevBar;visualContextActionBars[1]=enemyGizmoBar;visualContextActionBars[2]=objectBar;visualContextActionBars[3]=collisionMoveBar;visualContextActionBars[4]=smdBar;visualContextActionBars[6]=effBar;visualContextActionBars[7]=rtpBar;visualContextActionBars[8]=camBar;visualContextActionBars[9]=itaBar;visualContextActionBars[10]=soundBar;
+            visualContextActionBars.Clear();visualContextActionBars[0]=aevBar;visualContextActionBars[1]=enemyGizmoBar;visualContextActionBars[2]=objectBar;visualContextActionBars[3]=collisionMoveBar;visualContextActionBars[4]=smdBar;visualContextActionBars[5]=litContextBar;visualContextActionBars[6]=effBar;visualContextActionBars[7]=rtpBar;visualContextActionBars[8]=camBar;visualContextActionBars[9]=itaBar;visualContextActionBars[10]=soundBar;
             UpdateVisualContextActions();
             tblVisualWorkspaceRight.Controls.Add(viewportHost, 0, 0);
 
@@ -1054,7 +1064,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             var openExecutableEditor = new Button { Left = 690, Top = 43 }; SetupButton(openExecutableEditor, "ABRIR EDITOR", Accent, 160); openExecutableEditor.Click += (_, _) => OpenExecutableEditor(); executableCard.Controls.Add(openExecutableEditor);
             var relPatchCard = Card(0, 572, 882, 126); pnlTools.Controls.Add(relPatchCard);
             relPatchCard.Controls.Add(new Label { Text = "PATCHES PARA REL", Left = 16, Top = 14, Width = 420, Height = 22, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 10F) });
-            relPatchCard.Controls.Add(new Label { Text = "Injete patches independentes nos módulos REL da ISO de Build. Configure na mesma janela o tamanho global e o tamanho individual de Ganados via ESL.", Left = 16, Top = 42, Width = 650, Height = 58, ForeColor = TextMuted });
+            relPatchCard.Controls.Add(new Label { Text = "Injete patches independentes nos módulos REL da ISO de Build. Configure o tamanho global e individual dos inimigos via ESL.", Left = 16, Top = 42, Width = 650, Height = 58, ForeColor = TextMuted });
             var openRelPatches = new Button { Left = 690, Top = 43 }; SetupButton(openRelPatches, "ABRIR", Accent, 160); openRelPatches.Click += (_, _) => OpenRelPatchManager(); relPatchCard.Controls.Add(openRelPatches);
         }
 
@@ -1131,13 +1141,15 @@ namespace RE4_PS2_MOD_WORKSPACE
         private void BuildLogsDesigner()
         {
             AddPageHeader(pnlLogs, "Console", "Logs de extração e build separados do restante da interface.");
-            var split = new SplitContainer { Left = 0, Top = 70, Width = 882, Height = 632, Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, Orientation = Orientation.Horizontal, SplitterDistance = 300, BackColor = Border, BorderStyle = BorderStyle.None };
-            split.Panel1.BackColor = Surface; split.Panel2.BackColor = Surface;
-            rtbExtractLog = new RichTextBox { Dock = DockStyle.Fill, BackColor = Color.FromArgb(10, 11, 14), ForeColor = Color.FromArgb(183, 190, 200), BorderStyle = BorderStyle.None, ReadOnly = true, Font = new Font("Consolas", 9F), Text = "[Workspace] Pronto.\n" }; split.Panel1.Controls.Add(rtbExtractLog);
-            var lblExtractLog = new Label { Text = "EXTRAÇÃO / WORKSPACE", Dock = DockStyle.Top, Height = 28, Padding = new Padding(10, 7, 0, 0), ForeColor = TextMuted, BackColor = Surface, Font = new Font("Segoe UI Semibold", 8F) }; split.Panel1.Controls.Add(lblExtractLog); lblExtractLog.BringToFront();
-            rtbBuildLog = new RichTextBox { Dock = DockStyle.Fill, BackColor = Color.FromArgb(10, 11, 14), ForeColor = Color.FromArgb(183, 190, 200), BorderStyle = BorderStyle.None, ReadOnly = true, Font = new Font("Consolas", 9F), Text = "[Workspace] Build pronto.\n" }; split.Panel2.Controls.Add(rtbBuildLog);
-            var lblBuildLog = new Label { Text = "BUILD", Dock = DockStyle.Top, Height = 28, Padding = new Padding(10, 7, 0, 0), ForeColor = TextMuted, BackColor = Surface, Font = new Font("Segoe UI Semibold", 8F) }; split.Panel2.Controls.Add(lblBuildLog); lblBuildLog.BringToFront();
-            pnlLogs.Controls.Add(split);
+            var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(0,70,0,0), BackColor = Bg };
+            var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterWidth = 5, BackColor = Border, BorderStyle = BorderStyle.None };
+            bool adjustingSplit=false;
+            void KeepBothConsolesVisible(){if(adjustingSplit||!split.IsHandleCreated)return;int available=split.ClientSize.Height-split.SplitterWidth;if(available<=1)return;int minimum=Math.Min(120,available/2);int wanted=Math.Clamp(split.SplitterDistance,minimum,available-minimum);if(split.SplitterDistance==wanted)return;adjustingSplit=true;try{split.SplitterDistance=wanted;}finally{adjustingSplit=false;}}
+            split.SizeChanged+=(_,_)=>KeepBothConsolesVisible();split.SplitterMoved+=(_,_)=>KeepBothConsolesVisible();
+            Panel ConsolePanel(string title,TextBox box){var panel=new Panel{Dock=DockStyle.Fill,BackColor=Surface,Margin=Padding.Empty};var label=new Label{Text=title,Dock=DockStyle.Top,Height=28,Padding=new Padding(10,7,0,0),ForeColor=TextMuted,BackColor=Surface,Font=new Font("Segoe UI Semibold",8F)};box.Dock=DockStyle.Fill;panel.Controls.Add(box);panel.Controls.Add(label);label.BringToFront();return panel;}
+            rtbExtractLog = new TextBox { Multiline = true, BackColor = Color.FromArgb(10, 11, 14), ForeColor = Color.FromArgb(183, 190, 200), BorderStyle = BorderStyle.None, ReadOnly = true, WordWrap = false, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 9F), Text = "[Workspace] Pronto." + Environment.NewLine };
+            rtbBuildLog = new TextBox { Multiline = true, BackColor = Color.FromArgb(10, 11, 14), ForeColor = Color.FromArgb(183, 190, 200), BorderStyle = BorderStyle.None, ReadOnly = true, WordWrap = false, ScrollBars = ScrollBars.Both, Font = new Font("Consolas", 9F), Text = "[Workspace] Build pronto." + Environment.NewLine };
+            split.Panel1.Controls.Add(ConsolePanel("EXTRAÇÃO / WORKSPACE",rtbExtractLog));split.Panel2.Controls.Add(ConsolePanel("BUILD",rtbBuildLog));host.Controls.Add(split);pnlLogs.Controls.Add(host);host.SendToBack();
         }
     }
 }

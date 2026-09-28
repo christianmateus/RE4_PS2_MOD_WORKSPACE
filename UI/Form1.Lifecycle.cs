@@ -323,7 +323,7 @@ public partial class Form1
             lblLogo.Text = collapsed ? "RE4" : "RE4 PS2";
             lblLogo.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             lblLogoSub.Visible = !collapsed;
-            lblVersion.Text = "v0.8.0";
+            lblVersion.Text = "v0.8.1";
             lblVersion.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             btnSidebarToggle.Text = collapsed ? "›" : "RETRAIR  ‹";
             btnSidebarToggle.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleRight;

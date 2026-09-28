@@ -25,7 +25,7 @@ public static class SmdEmbeddedBinService
         int newTable=checked(table+0x40);int oldFirst=offsets.Where(x=>x!=0).Select(x=>(int)x).DefaultIfEmpty(binCount*4).Min();int oldGap=Math.Max(0,oldFirst-binCount*4);int cursor=Align16(newBinCount*4+oldGap);
         var newOffsets=new uint[newBinCount];for(int i=0;i<bins.Count;i++){if(bins[i].Length==0)continue;newOffsets[i]=(uint)cursor;cursor=checked(cursor+bins[i].Length);}
         int newTplOffset=checked(newTable+cursor);byte[] tail=data.AsSpan(tplOffset).ToArray();byte[] output=Enumerable.Repeat((byte)0xCD,checked(newTplOffset+tail.Length)).ToArray();
-        Buffer.BlockCopy(data,0,output,0,oldEntriesEnd);byte[] raw=template.RawData.Length==0x40?(byte[])template.RawData.Clone():new byte[0x40];WriteEntry(raw,template,(byte)newBinId);Buffer.BlockCopy(raw,0,output,oldEntriesEnd,0x40);
+        Buffer.BlockCopy(data,0,output,0,oldEntriesEnd);byte[] raw=template.RawData.Length==0x40?(byte[])template.RawData.Clone():new byte[0x40];WriteEntry(raw,template,(byte)newBinId);PrepareIndependentEntry(raw);Buffer.BlockCopy(raw,0,output,oldEntriesEnd,0x40);
         if(table>oldEntriesEnd)Buffer.BlockCopy(data,oldEntriesEnd,output,oldEntriesEnd+0x40,table-oldEntriesEnd);
         BitConverter.GetBytes((ushort)newEntryCount).CopyTo(output,2);BitConverter.GetBytes((uint)newTable).CopyTo(output,4);BitConverter.GetBytes((uint)newTplOffset).CopyTo(output,8);
         for(int i=0;i<newOffsets.Length;i++)BitConverter.GetBytes(newOffsets[i]).CopyTo(output,newTable+i*4);
@@ -151,6 +151,15 @@ public static class SmdEmbeddedBinService
     private static int Align16(int value)=>(value+15)&~15;
     private static void WriteEntry(byte[] raw,ScenarioEntry e,byte binId)
     {Write(raw,0,e.PositionX*100f,e.PositionY*100f,e.PositionZ*100f);Write(raw,0x10,e.RotationX,e.RotationY,e.RotationZ);Write(raw,0x20,e.ScaleX,e.ScaleY,e.ScaleZ);raw[0x30]=binId;}
+    private static void PrepareIndependentEntry(byte[] raw)
+    {
+        // A copied registered id makes the new object inherit the source SMX SelectMask and
+        // also redeclares the same scroll id without the group flag. 0xFE is the engine's
+        // explicit "not registered" id for independent scenery. Attribute bit 0 excludes
+        // lights carrying runtime attribute 4, so keep it clear on newly appended scenery.
+        raw[0x33]=0xFE;
+        raw[0x38]&=0xFE;
+    }
     private static void Write(byte[] b,int o,float x,float y,float z){BitConverter.GetBytes(x).CopyTo(b,o);BitConverter.GetBytes(y).CopyTo(b,o+4);BitConverter.GetBytes(z).CopyTo(b,o+8);}
     private static void AtomicWrite(string path,byte[] data){string temp=path+".smd_rebuild_tmp";try{File.WriteAllBytes(temp,data);File.Move(temp,path,true);}finally{if(File.Exists(temp))File.Delete(temp);}}
 }

@@ -33,7 +33,6 @@ public partial class Form1
                 {
                     WriteLog(launchEmulator ? "Nenhum arquivo selecionado precisa de build. Abrindo a ISO de Build existente." : "Nenhum arquivo selecionado precisa de build; a ISO já está atualizada.");
                     if (!File.Exists(buildIso)) throw new FileNotFoundException("Nenhum arquivo precisa de build, mas a ISO de Build ainda não existe.");
-                    await ApplyGanadoScalePatchAsync(buildIso);
                     if (launchEmulator) LaunchPcsx2WithIso(buildIso);
                     return;
                 }
@@ -88,7 +87,6 @@ public partial class Form1
             }
             await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso, selectedKeys);
             if (selectedKeys == null) await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);
-            await ApplyGanadoScalePatchAsync(buildIso);
             project.ActiveBuildIsoPath = buildIso; project.BuildIsoSourcePath = project.IsoPath;
             var activeState = !string.IsNullOrWhiteSpace(project.ActiveDatName) ? GetDatState(project.ActiveDatName, false) : null;
             if (activeState != null) { project.ActiveBuildDatPath = activeState.BuildDatPath; project.LastBuildUtc = activeState.LastBuildUtc; }

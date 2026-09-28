@@ -25,6 +25,9 @@ public partial class Form1
     {
         if (rtbBuildLog == null || rtbBuildLog.IsDisposed) return;
         rtbBuildLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}");
+        rtbBuildLog.SelectionStart = rtbBuildLog.TextLength;
+        rtbBuildLog.SelectionLength = 0;
+        rtbBuildLog.ScrollToCaret();
     }
 
     private static string? Clean(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
