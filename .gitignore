@@ -376,6 +376,7 @@ FodyWeavers.xsd
 /Build/
 /Temp/
 /tmp/
+/tools/
 
 # Game disc images and generated releases
 *.iso
@@ -391,3 +392,4 @@ FodyWeavers.xsd
 *.dmp
 .aider*
 /_research/r100_ps2_gc_map.md
+/Images/screenshot.png
