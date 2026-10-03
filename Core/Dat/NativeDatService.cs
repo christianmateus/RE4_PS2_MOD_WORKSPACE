@@ -92,6 +92,12 @@ public static partial class NativeDatService
 
     public static DatArchive Read(string datPath) => Parse(File.ReadAllBytes(datPath), datPath);
 
+    public static IReadOnlyList<(int Index, string Path, string Type)> ListExtractedEntries(string idxPath)
+    {
+        string root = Path.GetDirectoryName(Path.GetFullPath(idxPath))!;
+        return ReadManifest(idxPath).Select(e => (e.Index, ResolveManifestPath(root, e.RelativePath), e.Type)).ToArray();
+    }
+
     public static DatEntry ReadOriginalEntry(string datPath, string contentDirectory, string extractedFilePath)
     {
         if (!File.Exists(datPath)) throw new FileNotFoundException("DAT original não encontrado.", datPath);

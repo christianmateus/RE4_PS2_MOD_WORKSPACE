@@ -2,6 +2,8 @@ namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
+    private static readonly Dictionary<string, Image> SidebarIcons = new();
+    private readonly ThemedToolTip sidebarTips = new();
     private bool closingAfterPendingChanges;
     private async void Form1_Shown(object? sender, EventArgs e)
     {
@@ -227,6 +229,7 @@ public partial class Form1
     {
         SaveVisualCameraIfLeaving();
         EnsureCharacterCustomizer();
+        characterCustomizer?.RefreshAvailableDats();
         ShowPage(pnlCharacters, btnNavCharacters, "Personagens");
         RememberMainPage("Characters");
     }
@@ -243,8 +246,8 @@ public partial class Form1
         characterCustomizer = new CharacterCustomizerForm(settings.LastCharacterDatPath, path =>
         {
             settings.LastCharacterDatPath = path;
-            ActivateCharacterDat(path);
-            _ = RefreshVisualEnemyModelFromDatAsync(path);
+            ActivateCharacterDat(Path.ChangeExtension(path, ".dat"));
+            _ = RefreshVisualEnemyModelFromDatAsync(characterCustomizer?.WorkingDatPath ?? path);
             if (!restoringSession) SaveSettings();
         }, characterRoots, savedCamera, camera =>
         {
@@ -252,7 +255,8 @@ public partial class Form1
             settings.CharacterCameraX = camera.X; settings.CharacterCameraY = camera.Y; settings.CharacterCameraZ = camera.Z;
             settings.CharacterCameraYaw = camera.Yaw; settings.CharacterCameraPitch = camera.Pitch;
             if (!restoringSession) SaveSettings();
-        }, settings.Ps2BinToolPath, path => { settings.Ps2BinToolPath = path; if (!restoringSession) SaveSettings(); })
+        }, project.RootPath,
+        settings.CharacterLockRoot, locked => { settings.CharacterLockRoot = locked; if (!restoringSession) SaveSettings(); })
         {
             TopLevel = false,
             FormBorderStyle = FormBorderStyle.None,
@@ -323,30 +327,50 @@ public partial class Form1
             lblLogo.Text = collapsed ? "RE4" : "RE4 PS2";
             lblLogo.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             lblLogoSub.Visible = !collapsed;
-            lblVersion.Text = "v0.8.1";
+            lblVersion.Text = "v0.9.0";
             lblVersion.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
             btnSidebarToggle.Text = collapsed ? "›" : "RETRAIR  ‹";
             btnSidebarToggle.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleRight;
             lblSidebarModules.Visible = !collapsed;
 
-            (Button Button, string Short)[] items =
+            (Button Button, string Icon)[] items =
             {
-                (btnNavDashboard,"DB"),(btnNavWorkspace,"PR"),(btnNavAssets,"AR"),(btnNavTextures,"TX"),
-                (btnNavMessages,"MS"),(btnNavVisualEditor,"VE"),(btnNavCharacters,"CH"),(btnNavEnemies,"IN"),
-                (btnNavAnimations,"AN"),(btnNavSounds,"SO"),(btnNavVideos,"VI"),(btnNavBuild,"B&T"),
-                (btnNavTools,"TL"),(btnNavSettings,"CFG"),(btnNavLogs,"LOG")
+                (btnNavDashboard,"Dashboard"),(btnNavWorkspace,"Projeto"),(btnNavAssets,"Arquivos"),(btnNavTextures,"Textures"),
+                (btnNavMessages,"Mensagens"),(btnNavVisualEditor,"Visual_editor"),(btnNavCharacters,"Personagens"),(btnNavEnemies,"Inimigos"),
+                (btnNavAnimations,"Animações"),(btnNavSounds,"Sons"),(btnNavVideos,"Videos"),(btnNavBuild,"Build"),
+                (btnNavTools,"Ferramentas"),(btnNavSettings,"Configurações"),(btnNavLogs,"Logs")
             };
-            foreach ((Button button, string shortText) in items)
+            foreach ((Button button, string icon) in items)
             {
                 string fullText = button.Tag as string ?? button.Text.Trim();
-                button.Text = collapsed ? shortText : "  " + fullText;
+                if (collapsed && button.Image == null)
+                    button.Image = LoadSidebarIcon(icon);
+                button.Text = collapsed ? "" : "  " + fullText;
+                button.ImageAlign = ContentAlignment.MiddleCenter;
+                button.TextImageRelation = TextImageRelation.Overlay;
+                button.Image = collapsed ? button.Image : null;
                 button.TextAlign = collapsed ? ContentAlignment.MiddleCenter : ContentAlignment.MiddleLeft;
+                sidebarTips.SetToolTip(button, collapsed ? fullText : "");
             }
         }
         finally
         {
             pnlSidebar.ResumeLayout(true);
         }
+    }
+
+    private static Image LoadSidebarIcon(string name)
+    {
+        if (SidebarIcons.TryGetValue(name, out Image? cached)) return cached;
+        using Stream stream = typeof(Form1).Assembly.GetManifestResourceStream("SidebarIcon." + name + ".png")
+            ?? throw new InvalidOperationException("Ícone da barra lateral não encontrado: " + name);
+        using var source = Image.FromStream(stream);
+        var icon = new Bitmap(28, 28);
+        using var graphics = Graphics.FromImage(icon);
+        graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+        graphics.DrawImage(source, 0, 0, icon.Width, icon.Height);
+        SidebarIcons.Add(name, icon);
+        return icon;
     }
 
     private void RestoreMainPage()
@@ -385,3 +409,5 @@ public partial class Form1
         RestoreMainPage();
     }
 }
+
+

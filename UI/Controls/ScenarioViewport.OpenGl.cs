@@ -271,6 +271,8 @@ uniform vec4 uLitBehavior0[32];
 uniform vec4 uLitBehavior1[32];
 uniform vec4 uLitMeta[32];
 uniform float uLitTime;
+uniform uint uLitSelectMask;
+uniform float uLitSceneScale;
 uniform int uFogEnabled;
 uniform int uFogType;
 uniform vec3 uFogColor;
@@ -311,7 +313,10 @@ void main()
         // foliage/fences/cutout geometry. Do not force those texels opaque.
         if (baseColor.a <= 0.06) discard;
     }
-    vec3 rgb = baseColor.rgb * vVertexColor * shade;
+    // Editor overlays (selection outlines, gizmos and helper volumes) must retain their
+    // authored UI colour. They share scene VAOs in a few paths, so multiplying by the
+    // mesh's baked vertex colour or the room lighting scale can turn yellow outlines black.
+    vec3 rgb = uUnlit != 0 ? baseColor.rgb : baseColor.rgb * vVertexColor * shade * uLitSceneScale;
     if (uUnlit == 0 && uLitEnabled != 0)
     {
         vec3 n = normalize(vNormal);
@@ -319,6 +324,12 @@ void main()
         for (int i=0; i<32; i++)
         {
             if (i >= uLitCount) break;
+            int packedMaskAndIndex=int(uLitMeta[i].w+0.5);
+            int lightEnableMask=packedMaskAndIndex>>8;
+            uint sourceIndex=uint(packedMaskAndIndex&255);
+            if((lightEnableMask&16)==0)continue;
+            // The game's cLightInfo::SelectMask excludes lights whose bit is set.
+            if(sourceIndex<32u&&(uLitSelectMask&(1u<<sourceIndex))!=0u)continue;
             vec3 color = uLitColorIntensity[i].rgb;
             float intensity = max(0.0, uLitColorIntensity[i].a);
             int kind = int(uLitDirectionType[i].w + 0.5);
@@ -361,13 +372,16 @@ void main()
                 float denominator=uLitAttnK[i].x+uLitAttnK[i].y*gameDistance+uLitAttnK[i].z*gameDistance*gameDistance;
                 attenuation=angular/max(0.0001,denominator);
             }
-            else if(kind==5){diffuse=max(dot(n,-direction),0.0);attenuation=litRangeFade(distanceToLight,radius,uLitAttnA[i].y);}
+            else if(kind==5){diffuse=max(dot(n,direction),0.0);attenuation=litRangeFade(distanceToLight,radius,uLitAttnA[i].y);}
             else if(kind==7){float local=litRangeFade(distanceToLight,radius,abs(uLitAttnA[i].w));illumination=max(illumination,color*intensity*local);continue;}
             illumination+=color*intensity*diffuse*max(0.0,attenuation);
         }
-        rgb = baseColor.rgb * vVertexColor * clamp(illumination, vec3(0.0), vec3(4.0));
+        // PS2/GX combines the baked raster (vertex) colour with the light
+        // contribution before applying the final TEV colour scale. Multiplying
+        // both terms makes the deliberately dark baked colours almost black.
+        rgb = baseColor.rgb * clamp((vVertexColor+illumination)*uLitSceneScale,vec3(0.0),vec3(4.0));
     }
-    if (uFogEnabled != 0)
+    if (uFogEnabled != 0 && uUnlit == 0)
     {
         // GX fog is based on camera-space Z, not radial distance. The low three
         // bits select the hardware curve for perspective and orthographic modes.

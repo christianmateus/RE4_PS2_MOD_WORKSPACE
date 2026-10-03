@@ -5,12 +5,59 @@ public static class SmdEmbeddedBinService
     public static void RemoveEntries(string smdPath,IReadOnlyCollection<int> fileOrders,int entryCount,int binCount)
     {
         if(fileOrders.Count==0)return;var remove=fileOrders.ToHashSet();if(remove.Any(x=>x<0||x>=entryCount))throw new ArgumentOutOfRangeException(nameof(fileOrders));if(remove.Count>=entryCount)throw new InvalidOperationException("O SMD precisa manter pelo menos uma entry.");
-        byte[] data=File.ReadAllBytes(smdPath);int table=checked((int)BitConverter.ToUInt32(data,4));int tplOffset=checked((int)BitConverter.ToUInt32(data,8));int oldEntriesEnd=checked(0x10+entryCount*0x40);if(oldEntriesEnd>table)throw new InvalidDataException("Tabela de entries SMD inválida.");
-        int kept=entryCount-remove.Count,delta=remove.Count*0x40,newTable=table-delta,newTplOffset=tplOffset-delta;byte[] output=new byte[data.Length-delta];Buffer.BlockCopy(data,0,output,0,0x10);int cursor=0x10;
-        for(int i=0;i<entryCount;i++)if(!remove.Contains(i)){Buffer.BlockCopy(data,0x10+i*0x40,output,cursor,0x40);cursor+=0x40;}
-        Buffer.BlockCopy(data,oldEntriesEnd,output,cursor,data.Length-oldEntriesEnd);BitConverter.GetBytes((ushort)kept).CopyTo(output,2);BitConverter.GetBytes((uint)newTable).CopyTo(output,4);BitConverter.GetBytes((uint)newTplOffset).CopyTo(output,8);AtomicWrite(smdPath,output);
+        byte[] data=File.ReadAllBytes(smdPath);int table=checked((int)BitConverter.ToUInt32(data,4));int tplOffset=checked((int)BitConverter.ToUInt32(data,8));int oldEntriesEnd=checked(0x10+entryCount*0x40);
+        if(oldEntriesEnd>table||binCount<=0||table+(long)binCount*4>tplOffset||tplOffset>data.Length)throw new InvalidDataException("Estrutura SMD inválida para remover entries e BINs.");
+
+        var keptEntries=new List<byte[]>(entryCount-remove.Count);var usedBins=new HashSet<int>();
+        for(int i=0;i<entryCount;i++)
+        {
+            if(remove.Contains(i))continue;
+            byte[] raw=data.AsSpan(0x10+i*0x40,0x40).ToArray();int binId=raw[0x30];
+            if(binId>=binCount)throw new InvalidDataException($"A entry {i} referencia o BIN {binId}, fora da tabela ({binCount} BINs).");
+            keptEntries.Add(raw);usedBins.Add(binId);
+        }
+
+        // BIN IDs are local to the SMD. Keep every still-referenced payload and compact
+        // unreferenced ones (including the last slot), remapping entries above each gap.
+        uint[] oldOffsets=new uint[binCount];int firstOffset=int.MaxValue;
+        for(int i=0;i<binCount;i++)
+        {
+            oldOffsets[i]=BitConverter.ToUInt32(data,table+i*4);
+            if(oldOffsets[i]!=0)firstOffset=Math.Min(firstOffset,checked((int)oldOffsets[i]));
+        }
+        var oldBins=new byte[binCount][];
+        for(int i=0;i<binCount;i++)
+        {
+            if(oldOffsets[i]==0){oldBins[i]=Array.Empty<byte>();continue;}
+            int start=checked(table+(int)oldOffsets[i]),end=tplOffset;
+            for(int j=i+1;j<binCount;j++)if(oldOffsets[j]!=0){end=checked(table+(int)oldOffsets[j]);break;}
+            if(start<table+binCount*4||end<=start||end>tplOffset)throw new InvalidDataException($"Intervalo do BIN {i} inválido.");
+            oldBins[i]=data.AsSpan(start,end-start).ToArray();
+        }
+
+        int[] retainedIds=Enumerable.Range(0,binCount).Where(usedBins.Contains).ToArray();
+        var remap=new int[binCount];Array.Fill(remap,-1);
+        var bins=new List<byte[]>(retainedIds.Length);
+        foreach(int oldId in retainedIds){remap[oldId]=bins.Count;bins.Add(oldBins[oldId]);}
+        foreach(byte[] raw in keptEntries)raw[0x30]=checked((byte)remap[raw[0x30]]);
+
+        int kept=keptEntries.Count,delta=remove.Count*0x40,newTable=table-delta;
+        int oldGap=firstOffset==int.MaxValue?0:Math.Max(0,firstOffset-binCount*4);
+        int binCursor=Align16(checked(bins.Count*4+oldGap));var newOffsets=new uint[bins.Count];
+        for(int i=0;i<bins.Count;i++)if(bins[i].Length>0){newOffsets[i]=checked((uint)binCursor);binCursor=checked(binCursor+bins[i].Length);}
+        int newTplOffset=checked(newTable+binCursor);byte[] output=Enumerable.Repeat((byte)0xCD,checked(newTplOffset+data.Length-tplOffset)).ToArray();
+        Buffer.BlockCopy(data,0,output,0,0x10);int entryCursor=0x10;
+        foreach(byte[] raw in keptEntries){Buffer.BlockCopy(raw,0,output,entryCursor,0x40);entryCursor+=0x40;}
+        if(table>oldEntriesEnd)Buffer.BlockCopy(data,oldEntriesEnd,output,entryCursor,table-oldEntriesEnd);
+        BitConverter.GetBytes((ushort)kept).CopyTo(output,2);BitConverter.GetBytes((uint)newTable).CopyTo(output,4);BitConverter.GetBytes((uint)newTplOffset).CopyTo(output,8);
+        for(int i=0;i<bins.Count;i++)
+        {
+            BitConverter.GetBytes(newOffsets[i]).CopyTo(output,newTable+i*4);
+            if(newOffsets[i]!=0)Buffer.BlockCopy(bins[i],0,output,newTable+(int)newOffsets[i],bins[i].Length);
+        }
+        Buffer.BlockCopy(data,tplOffset,output,newTplOffset,data.Length-tplOffset);AtomicWrite(smdPath,output);
     }
-    public static int AppendEntry(string smdPath, ScenarioEntry template, int entryCount, int binCount, byte[]? newBin = null)
+    public static int AppendEntry(string smdPath, ScenarioEntry template, int entryCount, int binCount, byte[]? newBin = null,bool preserveSmxRegistration=false)
     {
         byte[] data=File.ReadAllBytes(smdPath);int table=checked((int)BitConverter.ToUInt32(data,4));int tplOffset=checked((int)BitConverter.ToUInt32(data,8));
         int oldEntriesEnd=checked(0x10+entryCount*0x40);if(oldEntriesEnd>table||table+binCount*4>data.Length)throw new InvalidDataException("Estrutura SMD inválida.");
@@ -25,7 +72,7 @@ public static class SmdEmbeddedBinService
         int newTable=checked(table+0x40);int oldFirst=offsets.Where(x=>x!=0).Select(x=>(int)x).DefaultIfEmpty(binCount*4).Min();int oldGap=Math.Max(0,oldFirst-binCount*4);int cursor=Align16(newBinCount*4+oldGap);
         var newOffsets=new uint[newBinCount];for(int i=0;i<bins.Count;i++){if(bins[i].Length==0)continue;newOffsets[i]=(uint)cursor;cursor=checked(cursor+bins[i].Length);}
         int newTplOffset=checked(newTable+cursor);byte[] tail=data.AsSpan(tplOffset).ToArray();byte[] output=Enumerable.Repeat((byte)0xCD,checked(newTplOffset+tail.Length)).ToArray();
-        Buffer.BlockCopy(data,0,output,0,oldEntriesEnd);byte[] raw=template.RawData.Length==0x40?(byte[])template.RawData.Clone():new byte[0x40];WriteEntry(raw,template,(byte)newBinId);PrepareIndependentEntry(raw);Buffer.BlockCopy(raw,0,output,oldEntriesEnd,0x40);
+        Buffer.BlockCopy(data,0,output,0,oldEntriesEnd);byte[] raw=template.RawData.Length==0x40?(byte[])template.RawData.Clone():new byte[0x40];WriteEntry(raw,template,(byte)newBinId);if(!preserveSmxRegistration)PrepareIndependentEntry(raw);Buffer.BlockCopy(raw,0,output,oldEntriesEnd,0x40);
         if(table>oldEntriesEnd)Buffer.BlockCopy(data,oldEntriesEnd,output,oldEntriesEnd+0x40,table-oldEntriesEnd);
         BitConverter.GetBytes((ushort)newEntryCount).CopyTo(output,2);BitConverter.GetBytes((uint)newTable).CopyTo(output,4);BitConverter.GetBytes((uint)newTplOffset).CopyTo(output,8);
         for(int i=0;i<newOffsets.Length;i++)BitConverter.GetBytes(newOffsets[i]).CopyTo(output,newTable+i*4);
@@ -78,7 +125,7 @@ public static class SmdEmbeddedBinService
         byte[] selectedBin=Extract(smdPath,entry.BinId,binCount);foreach(int flag in all.Where(x=>!selected.Contains(x))){if(flag<0||flag+2>selectedBin.Length)throw new InvalidDataException("Uma face aponta para fora do BIN.");selectedBin[flag]=1;selectedBin[flag+1]=0;}
         // PS2 strips cannot grow safely in place without rebuilding their VIF segments. A
         // private BIN clone preserves vertices, materials and texture for the duplicate.
-        return AppendEntry(smdPath,entry,entryCount,binCount,selectedBin);
+        return AppendEntry(smdPath,entry,entryCount,binCount,selectedBin,preserveSmxRegistration:true);
     }
     public static void SetMaterialTexture(string smdPath,int binId,int binCount,byte textureIndex)
     {

@@ -1,9 +1,36 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Collision;
 
 public static class Ps2EsatVertexWriter
 {
+    public static int RepairSpatialBounds(EsatFile file,string backupPath,EsatFile beforeEdits)
+    {
+        if(beforeEdits.Meshes.Count!=file.Meshes.Count)throw new InvalidDataException("A referência de colisão possui outro número de blocos.");
+        int changed=file.Meshes.Select((mesh,i)=>EsatSpatialHierarchy.RepairBounds(mesh,beforeEdits.Meshes[i].Positions.Count)).Sum();
+        if(changed==0)return 0;
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(backupPath))!);
+        if(!File.Exists(backupPath))File.Copy(file.SourcePath,backupPath,false);
+        string temp=file.SourcePath+".spatial-repair.tmp";
+        try
+        {
+            File.Copy(file.SourcePath,temp,true);
+            using(var stream=new FileStream(temp,FileMode.Open,FileAccess.Write,FileShare.None))
+            using(var writer=new BinaryWriter(stream))
+                foreach(var mesh in file.Meshes)foreach(var group in mesh.Groups)
+                {
+                    stream.Position=group.FileOffset;WriteVector(writer,group.Position);WriteVector(writer,group.Size);
+                }
+            var check=Ps2EsatReader.Read(temp,file.Kind);
+            if(check.FaceCount!=file.FaceCount||check.Meshes.Count!=file.Meshes.Count||new FileInfo(temp).Length!=new FileInfo(file.SourcePath).Length)
+                throw new InvalidDataException("O reparo dos grupos alterou a estrutura da colisão.");
+            if(check.Meshes.Select((mesh,i)=>EsatSpatialHierarchy.RepairBounds(mesh,beforeEdits.Meshes[i].Positions.Count)).Sum()!=0)
+                throw new InvalidDataException("Os limites dos grupos espaciais continuam inconsistentes.");
+            File.Move(temp,file.SourcePath,true);return changed;
+        }
+        finally{if(File.Exists(temp))File.Delete(temp);}
+    }
+
     public static bool Save(EsatFile file, string backupPath)
     {
         ArgumentNullException.ThrowIfNull(file);
@@ -11,7 +38,7 @@ public static class Ps2EsatVertexWriter
         foreach (EsatMesh mesh in file.Meshes)
             foreach (Vector3 p in mesh.Positions)
                 if (!float.IsFinite(p.X) || !float.IsFinite(p.Y) || !float.IsFinite(p.Z)) throw new InvalidDataException("Não é possível salvar vértice com coordenada não finita.");
-        bool requiresRebuild=false;foreach (EsatMesh mesh in file.Meshes.Where(x=>x.IsModified)) requiresRebuild|=PrepareFixedSizeEdit(mesh);
+        bool requiresRebuild=file.Meshes.Any(m=>m.RequiresCategoryRebuild);foreach (EsatMesh mesh in file.Meshes.Where(x=>x.IsModified)) requiresRebuild|=PrepareFixedSizeEdit(mesh);
         Directory.CreateDirectory(Path.GetDirectoryName(backupPath)!);
         if (!File.Exists(backupPath)) File.Copy(file.SourcePath, backupPath, false);
         string temp = file.SourcePath + ".vertex-edit.tmp";
@@ -40,7 +67,7 @@ public static class Ps2EsatVertexWriter
             if(check.Meshes.Count!=file.Meshes.Count||check.FaceCount!=file.FaceCount)throw new InvalidDataException("A validação estrutural da colisão editada falhou.");
             if(!requiresRebuild&&new FileInfo(temp).Length!=new FileInfo(file.SourcePath).Length)throw new InvalidDataException("A edição alterou indevidamente o tamanho do SAT/EAT.");
             File.Move(temp, file.SourcePath, true);
-            foreach (EsatMesh mesh in file.Meshes) { mesh.OriginalPositions.Clear(); mesh.OriginalPositions.AddRange(mesh.Positions);mesh.OriginalNormals.Clear();mesh.OriginalNormals.AddRange(mesh.Normals);mesh.OriginalFaces.Clear();mesh.OriginalFaces.AddRange(mesh.Faces); }
+            foreach (EsatMesh mesh in file.Meshes) { mesh.OriginalPositions.Clear(); mesh.OriginalPositions.AddRange(mesh.Positions);mesh.OriginalNormals.Clear();mesh.OriginalNormals.AddRange(mesh.Normals);mesh.OriginalFaces.Clear();mesh.OriginalFaces.AddRange(mesh.Faces);mesh.AcceptCategoryChanges(); }
             return true;
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
@@ -117,7 +144,7 @@ public static class Ps2EsatVertexWriter
 
     private static void ExpandSpatialGroups(EsatMesh mesh,HashSet<int> changedFaces)
     {
-        var ancestors=BuildAncestorMap(mesh.Groups);
+        var ancestors=EsatSpatialHierarchy.Ancestors(mesh.Groups);
         foreach(int faceIndex in changedFaces)
         {
             EsatFace face=mesh.Faces[faceIndex];Vector3 a=mesh.Positions[face.Vertex0],b=mesh.Positions[face.Vertex1],c=mesh.Positions[face.Vertex2];
@@ -127,15 +154,11 @@ public static class Ps2EsatVertexWriter
                 EsatGroup group=mesh.Groups[gi];
                 if(!group.FloorFaces.Contains((ushort)faceIndex)&&!group.SlopeFaces.Contains((ushort)faceIndex)&&!group.WallFaces.Contains((ushort)faceIndex))continue;
                 Expand(group,min,max);
-                if(ancestors.TryGetValue(gi,out List<int>? parents))foreach(int parent in parents)Expand(mesh.Groups[parent],min,max);
+                foreach(int parent in ancestors[gi])Expand(mesh.Groups[parent],min,max);
             }
         }
     }
 
-    private static Dictionary<int,List<int>> BuildAncestorMap(IReadOnlyList<EsatGroup> groups)
-    {
-        var result=new Dictionary<int,List<int>>();for(int leaf=0;leaf<groups.Count;leaf++){EsatGroup item=groups[leaf];if(item.Flags!=2)continue;Vector3 leafMin=item.Position,leafMax=item.Position+item.Size;var parents=new List<int>();for(int i=0;i<groups.Count;i++){EsatGroup parent=groups[i];if(parent.Flags!=1)continue;Vector3 min=parent.Position,max=min+parent.Size;if(leafMin.X>=min.X-2f&&leafMin.Y>=min.Y-2f&&leafMin.Z>=min.Z-2f&&leafMax.X<=max.X+2f&&leafMax.Y<=max.Y+2f&&leafMax.Z<=max.Z+2f)parents.Add(i);}result[leaf]=parents;}return result;
-    }
     private static void Expand(EsatGroup group,Vector3 min,Vector3 max)
     {
         Vector3 oldMin=group.Position,oldMax=group.Position+group.Size;Vector3 newMin=Vector3.Min(oldMin,min),newMax=Vector3.Max(oldMax,max);

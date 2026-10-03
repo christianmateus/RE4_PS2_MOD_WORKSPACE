@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Collision;
 
@@ -34,7 +34,20 @@ public sealed class EsatMesh
     public List<EsatFace> Faces { get; } = new();
     public List<EsatFace> OriginalFaces { get; } = new();
     public List<EsatGroup> Groups { get; } = new();
-    public bool IsModified => (Positions.Count == OriginalPositions.Count && Positions.Where((p, i) => p != OriginalPositions[i]).Any()) || (Faces.Count == OriginalFaces.Count && Faces.Where((f,i)=>f!=OriginalFaces[i]).Any());
+    private readonly Dictionary<int,EsatFaceCategory> categories=new();
+    private readonly Dictionary<int,EsatFaceCategory> savedCategories=new();
+    public bool RequiresCategoryRebuild {get;private set;}
+    public EsatFaceCategory GetFaceCategory(int index)=>categories.TryGetValue(index,out var category)?category:index<FloorCount?EsatFaceCategory.Floor:index<FloorCount+SlopeCount?EsatFaceCategory.Slope:EsatFaceCategory.Wall;
+    public void SetFaceCategory(int index,EsatFaceCategory category)
+    {
+        if(index<0||index>=Faces.Count)throw new ArgumentOutOfRangeException(nameof(index));
+        if(!Enum.IsDefined(category))throw new ArgumentOutOfRangeException(nameof(category));
+        if(GetFaceCategory(index)==category)return;
+        categories[index]=category;RequiresCategoryRebuild=true;
+    }
+    public bool CategoriesModified=>categories.Keys.Concat(savedCategories.Keys).Distinct().Any(i=>GetFaceCategory(i)!=(savedCategories.TryGetValue(i,out var category)?category:i<FloorCount?EsatFaceCategory.Floor:i<FloorCount+SlopeCount?EsatFaceCategory.Slope:EsatFaceCategory.Wall));
+    public void AcceptCategoryChanges(){savedCategories.Clear();foreach(var pair in categories)savedCategories.Add(pair.Key,pair.Value);}
+    public bool IsModified => CategoriesModified || (Positions.Count == OriginalPositions.Count && Positions.Where((p, i) => p != OriginalPositions[i]).Any()) || (Faces.Count == OriginalFaces.Count && Faces.Where((f,i)=>f!=OriginalFaces[i]).Any());
 }
 
 public sealed record EsatFace(

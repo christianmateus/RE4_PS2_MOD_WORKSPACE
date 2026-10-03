@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 using RE4_PS2_MOD_WORKSPACE.Core.Effects;
@@ -88,9 +88,10 @@ public sealed partial class ScenarioViewport : GLControl
             return rotateDistance <= 11f ? 9 : -1;
         }
 
-        NVector3 sideEnd = origin + new NVector3(length, 0f, 0f);
+        var directions=GetAevTransformAxes(entry);
+        NVector3 sideEnd = origin + directions[0]*length;
         NVector3 upEnd = origin + new NVector3(0f, size * 4.2f, 0f);
-        NVector3 depthEnd = origin + new NVector3(0f, 0f, length);
+        NVector3 depthEnd = origin + directions[2]*length;
 
         float sideDistance = ScreenDistanceToWorldSegment(screen, origin, sideEnd);
         float upDistance = ScreenDistanceToWorldSegment(screen, origin, upEnd);
@@ -586,6 +587,7 @@ public sealed partial class ScenarioViewport : GLControl
                 DisposeLitGpu();
                 DisposeEffGpu();
                 DisposeRtpGpu();
+                DisposeEmiGpu();
                 DisposeCamGpu();
                 DisposeSoundGpu();
                 if (shaderProgram != 0) GL.DeleteProgram(shaderProgram);
@@ -595,4 +597,3 @@ public sealed partial class ScenarioViewport : GLControl
         base.Dispose(disposing);
     }
 }
-

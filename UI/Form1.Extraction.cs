@@ -11,7 +11,7 @@ public partial class Form1
         if (string.IsNullOrWhiteSpace(iso) || !File.Exists(iso)) { MessageBox.Show("Selecione uma ISO válida primeiro.", "ISO", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         try
         {
-            btnScanIso.Enabled = false; btnExtractScenario.Enabled = false; btnExtractAllScenarios.Enabled = false; cmbAfsEntries.Enabled = false; cmbAfsEntries.Items.Clear(); cmbDatEntries.Items.Clear(); loadedAfs = null;
+            btnScanIso.Enabled = false; btnExtractScenario.Enabled = false; btnExtractAllScenarios.Enabled = false; btnExtractBatch.Enabled = false; cmbAfsEntries.Enabled = false; cmbAfsEntries.Items.Clear(); cmbDatEntries.Items.Clear(); loadedAfs = null;
             lblAfsName.Text = "AFS: procurando...";
             ExtractLog("Lendo ISO9660 e procurando arquivos AFS...");
             var afsFiles = await Task.Run(() => AfsService.FindAfsFiles(iso));
@@ -37,7 +37,7 @@ public partial class Form1
         if (string.IsNullOrWhiteSpace(iso) || !File.Exists(iso) || cmbAfsEntries.SelectedItem is not IsoFileEntry selected) return;
         try
         {
-            cmbAfsEntries.Enabled = false; btnExtractScenario.Enabled = false; btnExtractAllScenarios.Enabled = false; cmbDatEntries.Items.Clear(); loadedAfs = null;
+            cmbAfsEntries.Enabled = false; btnExtractScenario.Enabled = false; btnExtractAllScenarios.Enabled = false; btnExtractBatch.Enabled = false; cmbDatEntries.Items.Clear(); loadedAfs = null;
             ExtractLog($"Abrindo AFS: {selected.FullPath}...");
             loadedAfs = await Task.Run(() => AfsService.OpenAfsFromIso(iso, selected));
             lblAfsName.Text = $"AFS ativo: {selected.FullPath}  |  {FormatBytes(selected.Size)}";
@@ -58,7 +58,7 @@ public partial class Form1
             ExtractLog("ERRO AO ABRIR AFS: " + ex.Message);
             MessageBox.Show(ex.Message, "Erro ao abrir AFS", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-        finally { cmbAfsEntries.Enabled = true; btnExtractScenario.Enabled = cmbDatEntries.SelectedItem is AfsEntry; btnExtractAllScenarios.Enabled = GetBulkScenarioEntries().Count > 0; }
+        finally { cmbAfsEntries.Enabled = true; btnExtractScenario.Enabled = cmbDatEntries.SelectedItem is AfsEntry; btnExtractAllScenarios.Enabled = GetBulkScenarioEntries().Count > 0; btnExtractBatch.Enabled = loadedAfs != null; }
     }
 
     private async void cmbAfsEntries_SelectedIndexChanged(object? sender, EventArgs e)
@@ -210,6 +210,13 @@ public partial class Form1
         if (selected < 0 && !string.IsNullOrWhiteSpace(project.ActiveDatName)) selected = Array.FindIndex(entries, x => x.FileName.Equals(project.ActiveDatName, StringComparison.OrdinalIgnoreCase));
         cmbDatEntries.SelectedIndex = selected >= 0 ? selected : (entries.Length > 0 ? 0 : -1);
         ExtractLog(chkShowAllAfsFiles.Checked ? $"Exibindo todos os {entries.Length:N0} arquivos válidos do AFS." : $"Filtro DAT ativo: {entries.Length:N0} pacote(s).");
+    }
+
+    private void btnExtractBatch_Click(object? sender, EventArgs e)
+    {
+        if (!RequireWorkspace() || loadedAfs == null) return;
+        using var dialog = new AfsBatchExtractionDialog(loadedAfs, project.RootPath!) { Log = ExtractLog };
+        dialog.ShowLocalizedDialog(this);
     }
 
     private async Task ExtractScenarioAsync(AfsEntry entry, bool updateActiveProject)

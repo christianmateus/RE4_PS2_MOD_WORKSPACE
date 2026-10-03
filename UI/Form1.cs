@@ -34,8 +34,8 @@ public partial class Form1 : AppForm
         InitializeAutoSave();
         InitializeVisualSpeedPersistence();
         ApplyVisualLayerSettings();
-        if (chkVisualEnemyLabels != null) chkVisualEnemyLabels.Checked = settings.VisualEnemyLabels;
-        if (visualViewport != null) visualViewport.ShowEnemyLabels = settings.VisualEnemyLabels;
+        if (btnVisualLabels != null) { btnVisualLabels.SetChecked("aev", settings.VisualAevLabels); btnVisualLabels.SetChecked("enemy", settings.VisualEnemyLabels); btnVisualLabels.SetChecked("emi", settings.VisualEmiLabels); }
+        if (visualViewport != null) { visualViewport.ShowAevLabels = settings.VisualAevLabels; visualViewport.ShowEnemyLabels = settings.VisualEnemyLabels; visualViewport.ShowEmiLabels = settings.VisualEmiLabels; }
         if (chkVisualEnemyAnimated != null) chkVisualEnemyAnimated.Checked = settings.VisualEnemyAnimated;
         if (chkVisualEnemyInactive != null) chkVisualEnemyInactive.Checked = settings.VisualShowInactiveEnemies;
         if (tabVisualEntities != null && tabVisualEntities.TabCount > 0)
@@ -47,5 +47,6 @@ public partial class Form1 : AppForm
         CreateStartupLoadingOverlay();
         Shown += Form1_Shown;
         FormClosing += Form1_FormClosing;
+        FormClosed += (_, _) => sidebarTips.Dispose();
     }
 }

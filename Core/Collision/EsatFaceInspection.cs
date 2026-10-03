@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Numerics;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Collision;
@@ -15,7 +15,7 @@ public sealed class EsatFaceInspection
     [Category("Face"), DisplayName("Arquivo")] public string FileType => File.Kind.ToString().ToUpperInvariant();
     [Category("Face"), DisplayName("Submesh")] public int MeshIndex { get; init; }
     [Category("Face"), DisplayName("Índice")] public int FaceIndex { get; init; }
-    [Category("Face"), DisplayName("Categoria")] public EsatFaceCategory Category { get; init; }
+    [Category("Face"), DisplayName("Categoria")] public EsatFaceCategory Category { get=>Mesh.GetFaceCategory(FaceIndex); set=>Mesh.SetFaceCategory(FaceIndex,value); }
     [Category("Face"), DisplayName("Vértices")] public string VertexIndices => $"{Face.Vertex0}, {Face.Vertex1}, {Face.Vertex2}";
     [Category("Face"), DisplayName("Normal")] public ushort NormalIndex => Face.Normal;
     [Category("Face"), DisplayName("Arestas")] public string EdgeIndices => $"{Face.Edge0}, {Face.Edge1}, {Face.Edge2}";
@@ -84,7 +84,10 @@ public static class EsatFlagCatalog
             Add(face.Blue, 0x40, "No Effect Set", names); Add(face.Blue, 0x80, "Effect Bit 2", names);
         }
         Add(face.Connectivity, 0x20, "Edge 0 Shared", names); Add(face.Connectivity, 0x40, "Edge 1 Shared", names); Add(face.Connectivity, 0x80, "Edge 2 Shared", names);
-        return names.Count == 0 ? "Nenhuma flag conhecida" : string.Join(" • ", names);
+        if(names.Count>0)return string.Join(" • ",names);
+        if(face.Blue==0&&face.Green==0&&face.Red==0)
+            return kind==EsatKind.Sat?"Colisão comum (sem flags especiais)":"Colisão de efeitos (sem flags especiais)";
+        return $"Flags não mapeadas: BB={face.Blue:X2} GG={face.Green:X2} RR={face.Red:X2} YY={face.Connectivity:X2}";
     }
 
     private static void Add(byte value, byte mask, string name, List<string> output) { if ((value & mask) != 0) output.Add(name); }

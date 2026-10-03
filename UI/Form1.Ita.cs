@@ -78,6 +78,54 @@ public partial class Form1
         visualItaScene.Entries.Remove(entry);ReindexItaFileOrder();MarkItaModified();RefreshVisualItaEntries();visualViewport?.RefreshItaGeometry();
     }
 
+    private void AddItaItemsToSelectedObjects()
+    {
+        if (visualEtsScene == null || visualItaScene == null || string.IsNullOrWhiteSpace(visualItaPath))
+        {
+            MessageBox.Show(this, "Este cenário precisa ter ETS e ITA carregados para adicionar um item dentro de um objeto.", "Adicionar item", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        EtsEntry[] parents = lstVisualObjectEntries.SelectedItems.Cast<EtsEntry>().ToArray();
+        if (parents.Length == 0) return;
+        EtsEntry[] unsupported = parents.Where(x => x.InstanceIndex > byte.MaxValue).ToArray();
+        if (unsupported.Length > 0)
+        {
+            MessageBox.Show(this, "O ITA armazena o vínculo com o objeto em um byte. As instâncias selecionadas precisam ter ID ETS entre 0 e 255.", "ID ETS incompatível", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        using var dialog = new ItaChildItemDialog();
+        if (dialog.ShowLocalizedDialog(this) != DialogResult.OK) return;
+
+        ItaEntry? template = visualItaScene.Entries.FirstOrDefault(x => x.AppearanceType == 2);
+        var added = new List<ItaEntry>(parents.Length);
+        foreach (EtsEntry parent in parents)
+        {
+            ItaEntry entry = template?.Clone() ?? new ItaEntry { RawData = new byte[Ps2ItaReader.EntrySize] };
+            entry.FileOrder = visualItaScene.Entries.Count;
+            entry.DataBlockIndex = NextFreeItaByte(visualItaScene.Entries.Select(x => x.DataBlockIndex).Concat(added.Select(x => x.DataBlockIndex)));
+            entry.ScriptLink = NextFreeItaUShort(visualItaScene.Entries.Select(x => x.ScriptLink).Concat(added.Select(x => x.ScriptLink)));
+            entry.ItemId = dialog.ItemId;
+            entry.Amount = dialog.Amount;
+            entry.Randomness = dialog.Randomness;
+            entry.AuraType = dialog.AuraType;
+            entry.AppearanceType = 2;
+            entry.LinkedInstanceId = (byte)parent.InstanceIndex;
+            entry.PositionSource = 0;
+            entry.PositionX = entry.PositionY = entry.PositionZ = 0f;
+            entry.RotationX = entry.RotationY = entry.RotationZ = 0f;
+            visualItaScene.Entries.Add(entry);
+            added.Add(entry);
+        }
+
+        MarkItaModified();
+        RefreshVisualItaEntries(added[^1]);
+        visualViewport?.RefreshItaGeometry(added[^1]);
+        UpdateTopVisualSaveState();
+        ExtractLog($"Visual Editor: {added.Count} item(ns) ITA adicionado(s) como filho(s) de {parents.Length} objeto(s) ETS • posição local 0,0,0.");
+    }
+
     private static byte NextFreeItaByte(IEnumerable<byte> values){var used=values.ToHashSet();for(int i=0;i<=byte.MaxValue;i++)if(!used.Contains((byte)i))return(byte)i;throw new InvalidOperationException("No free ITA data block index.");}
     private static ushort NextFreeItaUShort(IEnumerable<ushort> values){var used=values.ToHashSet();for(int i=1;i<=ushort.MaxValue;i++)if(!used.Contains((ushort)i))return(ushort)i;throw new InvalidOperationException("No free ITA script link.");}
     private void ReindexItaFileOrder(){if(visualItaScene==null)return;for(int i=0;i<visualItaScene.Entries.Count;i++)visualItaScene.Entries[i].FileOrder=i;}

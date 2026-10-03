@@ -19,6 +19,7 @@ public partial class Form1
     private readonly System.Windows.Forms.Timer visualEnemyDatWatchTimer = new() { Interval = 1000 };
     private bool visualEnemyDatWatcherInitialized;
     private bool loadingVisualEnemyModels;
+    private bool visualEnemyModelsEnsurePending;
 
 
     private sealed record EnemyLocationFilter(byte? StageId, byte? RoomId, string Label)
@@ -146,6 +147,56 @@ public partial class Form1
     private void btnEnemyOpen_Click(object? sender, EventArgs e) => OpenSelectedEnemyEsl(false);
     private void btnEnemyReextract_Click(object? sender, EventArgs e) => OpenSelectedEnemyEsl(true);
     private void btnEnemySave_Click(object? sender, EventArgs e) => SaveCurrentEnemyEsl();
+    private void btnEnemyQuickAdjustments_Click(object? sender,EventArgs e)
+    {
+        if(selectedEnemyScene==null||loadedAfs==null||string.IsNullOrWhiteSpace(project.RootPath)){MessageBox.Show(this,"Abra um arquivo ESL antes de usar os ajustes rápidos.","Ajustes rápidos",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+        try
+        {
+            Dictionary<string,EslScene> scenes=LoadEnemyQuickAdjustmentScenes();
+            var locations=scenes.ToDictionary(x=>x.Key,x=>(IReadOnlyList<(byte Stage,byte Room,byte Active)>)x.Value.Entries.Select(e=>(e.StageID,e.RoomID,e.Active)).Where(e=>e.StageID!=0||e.RoomID!=0).ToArray(),StringComparer.OrdinalIgnoreCase);
+            using var dialog=new EnemyQuickAdjustmentsDialog(Path.GetFileName(currentEnemyEslPath!),scenes.Keys.ToArray(),locations);
+            if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||dialog.Options==null)return;
+            if(dialog.SelectedFiles.Any(path=>Path.GetFullPath(path).Equals(Path.GetFullPath(currentEnemyEslPath!),StringComparison.OrdinalIgnoreCase))&&enemySceneModified&&!SaveCurrentEnemyEsl(false))return;
+            EnemyQuickAdjustmentResult total=default;
+            if(dialog.SelectedFiles.Count>1||dialog.AllFiles)
+            {
+                foreach(string selectedPath in dialog.SelectedFiles)
+                {
+                    if(!scenes.TryGetValue(selectedPath,out EslScene? selectedScene))continue;
+                    var pair=new KeyValuePair<string,EslScene>(selectedPath,selectedScene);
+                    EslScene scene=pair.Value;EnemyQuickAdjustmentResult result=EnemyQuickAdjustments.Apply(scene,dialog.Options,Path.GetFileName(pair.Key));
+                    total=new(total.Matched+result.Matched,total.Changed+result.Changed,total.Weapons+result.Weapons,total.Equipment+result.Equipment,total.Scales+result.Scales);
+                    if(result.Changed>0)Ps2EslWriter.Save(scene);
+                }
+                if(dialog.SelectedFiles.Any(path=>Path.GetFullPath(path).Equals(Path.GetFullPath(currentEnemyEslPath!),StringComparison.OrdinalIgnoreCase)))
+                {if(!string.IsNullOrWhiteSpace(currentEnemyEslPath)&&File.Exists(currentEnemyEslPath))selectedEnemyScene=Ps2EslReader.Read(currentEnemyEslPath);enemySceneModified=false;RefreshEnemyEntries();OnEnemySceneLoaded(selectedEnemyScene!);}
+            }
+            else
+            {
+                total=EnemyQuickAdjustments.Apply(selectedEnemyScene,dialog.Options,Path.GetFileName(currentEnemyEslPath!));
+                NotifyEnemyEntriesChanged();
+            }
+            lblEnemyStatus.Text=$"Ajustes rápidos: {total.Changed:N0} de {total.Matched:N0} inimigos alterados.";
+            MessageBox.Show(this,$"Ajustes concluídos.\n\nInimigos encontrados: {total.Matched:N0}\nInimigos alterados: {total.Changed:N0}\nArmas sorteadas: {total.Weapons:N0}\nEquipamentos sorteados: {total.Equipment:N0}\nTamanhos sorteados: {total.Scales:N0}"+(dialog.AllFiles?"\n\nOs ESLs foram salvos e os backups .bak foram preservados.":"\n\nClique em SALVAR para gravar o ESL atual."),"Ajustes rápidos",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        }
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Não foi possível aplicar os ajustes",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+    }
+
+    private Dictionary<string,EslScene> LoadEnemyQuickAdjustmentScenes()
+    {
+        var result=new Dictionary<string,EslScene>(StringComparer.OrdinalIgnoreCase);string dir=Path.Combine(project.RootPath!,"Extracted","ESL");Directory.CreateDirectory(dir);
+        foreach(AfsEntry entry in AfsService.GetEmleonEslEntries(loadedAfs!))
+        {
+            string path=Path.Combine(dir,entry.FileName);
+            if(!File.Exists(path))
+            {
+                AfsService.ExtractEntry(loadedAfs!,entry,path);
+                ExtractLog($"Enemy Manager: {entry.FileName} extraído automaticamente para indexar os cenários disponíveis.");
+            }
+            result[path]=Path.GetFullPath(path).Equals(Path.GetFullPath(currentEnemyEslPath!),StringComparison.OrdinalIgnoreCase)?selectedEnemyScene!:Ps2EslReader.Read(path);
+        }
+        return result;
+    }
     private void chkEnemyActiveOnly_CheckedChanged(object? sender, EventArgs e)
     {
         RefreshEnemyEntries();
@@ -296,6 +347,7 @@ public partial class Form1
         btnEnemyOpen.Enabled = hasFile;
         btnEnemyReextract.Enabled = hasFile;
         btnEnemySave.Enabled = selectedEnemyScene != null && !string.IsNullOrWhiteSpace(currentEnemyEslPath);
+        if(btnEnemyQuickAdjustments!=null)btnEnemyQuickAdjustments.Enabled=selectedEnemyScene!=null;
     }
 
     private void OpenSelectedEnemyEsl(bool forceExtract)
@@ -344,7 +396,6 @@ public partial class Form1
 
     private async Task EnsureDefaultVisualEnemyEslAsync()
     {
-        if (selectedEnemyScene != null && currentEnemyAfsEntry != null && currentEnemyAfsEntry.FileName.Equals("emleon00.esl", StringComparison.OrdinalIgnoreCase)) return;
         if (!RequireWorkspace()) return;
         if (loadedAfs == null)
         {
@@ -352,9 +403,77 @@ public partial class Form1
             await LoadIsoAfsAsync(project.ActiveAfsPath, project.ActiveDatName);
         }
         if (loadedAfs == null) return;
+        if (EnsureVisualEnemyEslForScenario(project.ActiveDatName)) return;
+        if (selectedEnemyScene != null && currentEnemyAfsEntry != null && currentEnemyAfsEntry.FileName.Equals("emleon00.esl", StringComparison.OrdinalIgnoreCase)) return;
         AfsEntry? entry = AfsService.GetEmleonEslEntries(loadedAfs).FirstOrDefault(x => x.FileName.Equals("emleon00.esl", StringComparison.OrdinalIgnoreCase));
         if (entry == null) { ExtractLog("Visual Editor: emleon00.esl não encontrado no AFS ativo."); return; }
         LoadEnemyEslEntry(entry, false, false);
+    }
+
+    private bool EnsureVisualEnemyEslForScenario(string? datName)
+    {
+        if (loadedAfs == null || string.IsNullOrWhiteSpace(project.RootPath) ||
+            !TryParseScenarioLocation(datName, out byte stage, out byte room)) return false;
+
+        string directory = Path.Combine(project.RootPath, "Extracted", "ESL");
+        Directory.CreateDirectory(directory);
+        AfsEntry? matchingEntry = null;
+        EslScene? matchingScene = null;
+        foreach (AfsEntry entry in AfsService.GetEmleonEslEntries(loadedAfs))
+        {
+            string path = Path.Combine(directory, entry.FileName);
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    AfsService.ExtractEntry(loadedAfs, entry, path);
+                    ExtractLog($"Visual Editor: {entry.FileName} extraído automaticamente para localizar os inimigos de {Path.GetFileNameWithoutExtension(datName)}.");
+                }
+
+                EslScene scene = !string.IsNullOrWhiteSpace(currentEnemyEslPath) && Path.GetFullPath(path).Equals(Path.GetFullPath(currentEnemyEslPath), StringComparison.OrdinalIgnoreCase)
+                    ? selectedEnemyScene ?? Ps2EslReader.Read(path)
+                    : Ps2EslReader.Read(path);
+                if (!scene.Entries.Any(x => x.StageID == stage && x.RoomID == room)) continue;
+                matchingEntry = entry;
+                matchingScene = scene;
+                break;
+            }
+            catch (Exception ex)
+            {
+                ExtractLog($"Visual Editor: não foi possível verificar {entry.FileName}: {ex.Message}");
+            }
+        }
+
+        if (matchingEntry == null || matchingScene == null)
+        {
+            ExtractLog($"Visual Editor: nenhum emleon*.ESL contém entries para {Path.GetFileNameWithoutExtension(datName)}.");
+            return false;
+        }
+
+        if (currentEnemyAfsEntry?.FileName.Equals(matchingEntry.FileName, StringComparison.OrdinalIgnoreCase) == true && selectedEnemyScene != null)
+            return true;
+
+        if (enemySceneModified && !string.IsNullOrWhiteSpace(currentEnemyEslPath))
+        {
+            DialogResult answer = MessageBox.Show(this,
+                $"O arquivo {Path.GetFileName(currentEnemyEslPath)} tem alterações não salvas. Salvar antes de carregar {matchingEntry.FileName}?\n\nSim: salvar • Não: descartar • Cancelar: manter o ESL atual",
+                "Alterações no ESL", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            if (answer == DialogResult.Cancel) return false;
+            if (answer == DialogResult.Yes && !SaveCurrentEnemyEsl(false)) return false;
+        }
+
+        int selection = -1;
+        for (int i = 0; i < cmbEnemyFiles.Items.Count; i++)
+            if (cmbEnemyFiles.Items[i] is AfsEntry item && item.FileName.Equals(matchingEntry.FileName, StringComparison.OrdinalIgnoreCase)) { selection = i; break; }
+        if (selection >= 0)
+        {
+            syncingEnemyFileSelection = true;
+            try { cmbEnemyFiles.SelectedIndex = selection; }
+            finally { syncingEnemyFileSelection = false; }
+        }
+        if (!LoadEnemyEslEntry(matchingEntry, false, false)) return false;
+        ExtractLog($"Visual Editor: {matchingEntry.FileName} selecionado automaticamente para {Path.GetFileNameWithoutExtension(datName)} ({matchingScene.Entries.Count(x => x.StageID == stage && x.RoomID == room):N0} inimigos no cenário).");
+        return true;
     }
 
     private void PopulateEnemyLocationFilter()
@@ -413,7 +532,8 @@ public partial class Form1
 
     private async Task EnsureVisualEnemyModelsAsync()
     {
-        if (loadingVisualEnemyModels || selectedEnemyScene == null || visualViewport == null || visualViewport.IsDisposed || loadedAfs == null || string.IsNullOrWhiteSpace(project.RootPath)) return;
+        if (loadingVisualEnemyModels) { visualEnemyModelsEnsurePending = true; return; }
+        if (selectedEnemyScene == null || visualViewport == null || visualViewport.IsDisposed || loadedAfs == null || string.IsNullOrWhiteSpace(project.RootPath)) return;
         byte? stage = null, room = null;
         if (cmbVisualEnemyLocationFilter?.SelectedItem is VisualEnemyLocationFilterItem filter) { stage = filter.StageId; room = filter.RoomId; }
         IEnumerable<EslEnemyEntry> source = selectedEnemyScene.Entries;
@@ -455,7 +575,15 @@ public partial class Form1
             RefreshVisualEnemyAnimationChoices();
             UpdateVisualStatus();
         }
-        finally { loadingVisualEnemyModels = false; }
+        finally
+        {
+            loadingVisualEnemyModels = false;
+            if (visualEnemyModelsEnsurePending)
+            {
+                visualEnemyModelsEnsurePending = false;
+                if (!IsDisposed && IsHandleCreated) BeginInvoke(new Action(() => _ = EnsureVisualEnemyModelsAsync()));
+            }
+        }
     }
 
     private void ResetVisualEnemyModelCache()

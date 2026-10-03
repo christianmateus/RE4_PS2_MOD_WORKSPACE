@@ -460,7 +460,7 @@ public partial class Form1
     {
         if (string.IsNullOrWhiteSpace(settings.TplManagerPath) || !File.Exists(settings.TplManagerPath))
         {
-            MessageBox.Show("Configure o TPL Manager em Ferramentas para usar o editor externo.", "TPL Manager", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show("Configure o TPL Manager em Configurações > Geral para usar o editor externo.", "TPL Manager", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         var psi = new System.Diagnostics.ProcessStartInfo(settings.TplManagerPath) { UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(settings.TplManagerPath)! };

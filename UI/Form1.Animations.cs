@@ -15,7 +15,6 @@ public partial class Form1
     private string? animationLabDatPath;
     private int animationLabWeaponPartBinIndex=-1;
     private Dictionary<string,string> animationNames = new(StringComparer.OrdinalIgnoreCase);
-    private string? animationNamesFile;
     private bool refreshingAnimationChoices;
     private bool applyingAnimationLabSettings;
 
@@ -62,23 +61,17 @@ public partial class Form1
         if(!string.IsNullOrWhiteSpace(animationLabDatPath))
         {
             string stem=Path.GetFileNameWithoutExtension(animationLabDatPath);
-            string datDirectory=Path.GetDirectoryName(animationLabDatPath)!;
-            string extractedDirectory=Path.Combine(datDirectory,stem);
-            string searchRoot=Directory.Exists(extractedDirectory)?extractedDirectory:datDirectory;
             LoadAnimationNames();
-            var embeddedNames=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                DatArchive archive=NativeDatService.Read(animationLabDatPath);
-                foreach(DatEntry entry in archive.Entries.Where(x=>x.Type.Equals("FCV",StringComparison.OrdinalIgnoreCase)))
+                foreach(FcvCatalogEntry entry in FcvCatalog.List(animationLabDatPath))
                 {
-                    string file=$"{stem}_{entry.Index:D2}.FCV";embeddedNames.Add(file);
+                    string file=entry.FileName;
                     string label=animationNames.TryGetValue(AnimationNameKey(stem,file),out string? name)&&!string.IsNullOrWhiteSpace(name)?$"{file} - {name}":file;
-                    cmbAnimationFiles.Items.Add(new AnimationFileItem(Path.Combine(datDirectory,file),label,entry.Data));
+                    cmbAnimationFiles.Items.Add(new AnimationFileItem(entry.Path,label,entry.EmbeddedData));
                 }
             }
             catch { }
-            try{foreach(string path in Directory.EnumerateFiles(searchRoot,stem+"_*.fcv",SearchOption.AllDirectories).OrderBy(AnimationFileNumber).ThenBy(Path.GetFileName)){string file=Path.GetFileName(path);if(embeddedNames.Contains(file))continue;string label=animationNames.TryGetValue(AnimationNameKey(stem,file),out string? name)&&!string.IsNullOrWhiteSpace(name)?$"{file} — {name}":file;cmbAnimationFiles.Items.Add(new AnimationFileItem(path,label,null));}}catch{ }
         }
         cmbAnimationFiles.EndUpdate();
         if (cmbAnimationFiles.Items.Count > 0)
@@ -95,8 +88,6 @@ public partial class Form1
         refreshingAnimationChoices=false;
         if(cmbAnimationFiles.SelectedItem is AnimationFileItem chosen&&(currentFcv==null||!string.Equals(Path.GetFileName(currentFcv.FilePath),Path.GetFileName(chosen.Path),StringComparison.OrdinalIgnoreCase)))LoadFcv(chosen);
     }
-
-    private static int AnimationFileNumber(string path){string stem=Path.GetFileNameWithoutExtension(path);int separator=stem.LastIndexOf('_');return separator>=0&&int.TryParse(stem[(separator+1)..],out int number)?number:int.MaxValue;}
 
     private void LoadFcv(AnimationFileItem item)
     {
@@ -197,7 +188,7 @@ public partial class Form1
             {
                 string leonPath=FindLeonDat(path)??throw new FileNotFoundException("Nao encontrei pl00.dat no workspace. Extraia o pacote do Leon antes de abrir a arma no Laboratorio de Animacoes.");
                 EnemyModelScene leon=Ps2EnemyDatReader.Read(leonPath,enemyType),weaponModel=Ps2EnemyDatReader.Read(path,enemyType);
-                animationLabModel=MergeLeonAndFirstWeaponModel(leon,weaponModel,path,out int weaponPart);animationLabWeaponPartBinIndex=weaponPart;
+                animationLabModel=WeaponPreviewModel.MergeLeonAndFirstWeaponModel(leon,weaponModel,path,out int weaponPart);animationLabWeaponPartBinIndex=weaponPart;
             }
             else animationLabModel=Ps2EnemyDatReader.Read(path,enemyType);
             if(animationLabModel.Skeleton==null)throw new InvalidDataException("O DAT não contém um BIN com skeleton reconhecível.");
@@ -231,24 +222,11 @@ public partial class Form1
         catch { }
         return null;
     }
-    private static EnemyModelScene MergeLeonAndFirstWeaponModel(EnemyModelScene leon,EnemyModelScene weapon,string sourcePath,out int weaponPartBinIndex)
-    {
-        EnemyModelPart source=weapon.Parts.Where(x=>x.Triangles.Count>0).OrderBy(x=>x.DatEntryIndex).FirstOrDefault()??throw new InvalidDataException("O primeiro modelo BIN da arma nao contem geometria renderizavel.");
-        int tplKey=source.TplEntryIndex,mergedTplKey=leon.TexturePackages.Keys.DefaultIfEmpty(-1).Max()+1;
-        var triangles=source.Triangles.Select(x=>x with { TplEntryIndex=tplKey>=0?mergedTplKey:-1 }).ToArray();
-        weaponPartBinIndex=leon.Parts.Select(x=>x.BinIndex).DefaultIfEmpty(-1).Max()+1;
-        var added=new EnemyModelPart{BinIndex=weaponPartBinIndex,DatEntryIndex=source.DatEntryIndex,TplEntryIndex=tplKey>=0?mergedTplKey:-1,TplResolution=source.TplResolution,DiffuseMaps=source.DiffuseMaps,Triangles=triangles,BoundsMin=source.BoundsMin,BoundsMax=source.BoundsMax};
-        var packages=leon.TexturePackages.ToDictionary(x=>x.Key,x=>x.Value);
-        if(tplKey>=0&&weapon.TexturePackages.TryGetValue(tplKey,out EnemyTexturePackage? package))packages[mergedTplKey]=new EnemyTexturePackage{DatEntryIndex=mergedTplKey,Data=package.Data};
-        return new EnemyModelScene{Skeleton=leon.Skeleton,SkeletonSourceDatEntryIndex=leon.SkeletonSourceDatEntryIndex,EnemyType=leon.EnemyType,SourcePath=sourcePath,DatEntryCount=leon.DatEntryCount+weapon.DatEntryCount,BinCount=leon.BinCount+1,LoadedBinCount=leon.LoadedBinCount+1,Warnings=leon.Warnings.Concat(weapon.Warnings).ToArray(),Parts=leon.Parts.Append(added).ToArray(),TexturePackages=packages,Triangles=leon.Triangles.Concat(triangles).ToArray(),BoundsMin=System.Numerics.Vector3.Min(leon.BoundsMin,source.BoundsMin),BoundsMax=System.Numerics.Vector3.Max(leon.BoundsMax,source.BoundsMax)};
-    }
-
     private static bool TryEnemyTypeFromDatName(string path,out byte enemyType){enemyType=0;string stem=Path.GetFileNameWithoutExtension(path);return stem.Length>=4&&stem.StartsWith("em",StringComparison.OrdinalIgnoreCase)&&byte.TryParse(stem.AsSpan(2,2),System.Globalization.NumberStyles.HexNumber,null,out enemyType);}
-    private string AnimationNameKey(string datStem,string fcvFile)=>$"{datStem.ToLowerInvariant()}/{fcvFile.ToLowerInvariant()}";
-    private string? GetAnimationNamesFile(){string? root=!string.IsNullOrWhiteSpace(project.RootPath)?project.RootPath:animationLabDatPath is string dat?Path.GetDirectoryName(dat):null;return string.IsNullOrWhiteSpace(root)?null:Path.Combine(root,".re4-animation-names.json");}
-    private void LoadAnimationNames(){string? file=GetAnimationNamesFile();if(string.Equals(file,animationNamesFile,StringComparison.OrdinalIgnoreCase))return;animationNamesFile=file;animationNames=new(StringComparer.OrdinalIgnoreCase);try{if(file!=null&&File.Exists(file)){var loaded=System.Text.Json.JsonSerializer.Deserialize<Dictionary<string,string>>(File.ReadAllText(file));if(loaded!=null)animationNames=new(loaded,StringComparer.OrdinalIgnoreCase);}}catch{ }if(!animationNames.ContainsKey("em22/em22_04.fcv"))animationNames["em22/em22_04.fcv"]="Caminhando";if(!animationNames.ContainsKey("em22/em22_16.fcv"))animationNames["em22/em22_16.fcv"]="Levantando do chão";}
+    private string AnimationNameKey(string datStem,string fcvFile)=>FcvNameCatalog.Key(datStem,fcvFile);
+    private void LoadAnimationNames(){if(animationLabDatPath==null)return;try{animationNames=FcvNameCatalog.Load(animationLabDatPath,project.RootPath);}catch{animationNames=new(StringComparer.OrdinalIgnoreCase);}string walk=FcvNameCatalog.Key("em22","em22_04.fcv"),rise=FcvNameCatalog.Key("em22","em22_16.fcv");if(!animationNames.ContainsKey(walk))animationNames[walk]="Caminhando";if(!animationNames.ContainsKey(rise))animationNames[rise]="Levantando do chão";}
     private void UpdateAnimationCatalogEditor(){if(txtAnimationCatalogName==null)return;LoadAnimationNames();string? dat=animationLabDatPath==null?null:Path.GetFileNameWithoutExtension(animationLabDatPath);string? fcv=currentFcv==null?null:Path.GetFileName(currentFcv.FilePath);txtAnimationCatalogName.Text=dat!=null&&fcv!=null&&animationNames.TryGetValue(AnimationNameKey(dat,fcv),out string? name)?name:"";btnAnimationCatalogSave.Enabled=dat!=null&&fcv!=null;}
-    private void btnAnimationCatalogSave_Click(object? sender,EventArgs e){if(animationLabDatPath==null||currentFcv==null)return;LoadAnimationNames();string key=AnimationNameKey(Path.GetFileNameWithoutExtension(animationLabDatPath),Path.GetFileName(currentFcv.FilePath));string name=txtAnimationCatalogName.Text.Trim();if(name.Length==0)animationNames.Remove(key);else animationNames[key]=name;string? file=GetAnimationNamesFile();if(file!=null){Directory.CreateDirectory(Path.GetDirectoryName(file)!);File.WriteAllText(file,System.Text.Json.JsonSerializer.Serialize(animationNames,new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));}RefreshAnimationFiles();lblAnimationStatus.Text=name.Length==0?"Nome removido do catálogo.":$"Nome salvo: {name}";}
+    private void btnAnimationCatalogSave_Click(object? sender,EventArgs e){if(animationLabDatPath==null||currentFcv==null)return;LoadAnimationNames();string key=AnimationNameKey(Path.GetFileNameWithoutExtension(animationLabDatPath),Path.GetFileName(currentFcv.FilePath));string name=txtAnimationCatalogName.Text.Trim();animationNames[key]=name;try{FcvNameCatalog.Save(animationLabDatPath,project.RootPath,animationNames);RefreshAnimationFiles();lblAnimationStatus.Text=name.Length==0?"Nome removido do catálogo.":$"Nome salvo: {name}";}catch(Exception ex){MessageBox.Show(this,ex.Message,"Não foi possível salvar o nome",MessageBoxButtons.OK,MessageBoxIcon.Error);}}
     private void txtAnimationCatalogName_KeyDown(object? sender,KeyEventArgs e){if(e.KeyCode==Keys.Enter){btnAnimationCatalogSave_Click(sender,EventArgs.Empty);e.SuppressKeyPress=true;}}
     private void btnAnimationLabFit_Click(object? sender,EventArgs e){if(animationLabEnemy!=null&&animationLabModel!=null)animationLabViewport.FocusEnemyModel(animationLabEnemy,animationLabModel);}
     private void trkAnimationLabBackground_Scroll(object? sender,EventArgs e){if(animationLabViewport!=null)animationLabViewport.BackgroundBrightness=trkAnimationLabBackground.Value;settings.AnimationLabBackgroundBrightness=trkAnimationLabBackground.Value;if(!applyingAnimationLabSettings&&!restoringSession)SaveSettings();}

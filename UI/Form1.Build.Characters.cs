@@ -6,14 +6,16 @@ public partial class Form1
         Path.Combine(project.RootPath ?? AppContext.BaseDirectory, ".workspace", "state", Path.GetFileNameWithoutExtension(datName) + ".character-dat.sha256");
 
     /// <summary>
-    /// Character editing works on the complete DAT, while the regular build
-    /// repacks the extracted Content directory. Before repacking, expand a DAT
+    /// Compatibility for older character edits made on a complete DAT. The build
+    /// uses extracted Content directly for IDX workspaces. Otherwise, expand a DAT
     /// changed by the character viewer back into Content so the build includes it.
     /// </summary>
     private async Task SyncCharacterDatToContentAsync(DatProjectState state)
     {
         string? contentDir = state.ContentPath;
         if (string.IsNullOrWhiteSpace(contentDir) || !Directory.Exists(contentDir)) return;
+
+        if (File.Exists(Path.Combine(contentDir, ".character-extracted.json"))) return;
 
         // Older versions of the viewer preferred Content/<name>.dat; newer ones
         // prefer OriginalDAT. Accept either location so existing edits are not lost.
@@ -50,7 +52,9 @@ public partial class Form1
             return fileName.Equals(state.DatName, StringComparison.OrdinalIgnoreCase) ||
                    fileName.Equals(state.DatName + ".bak", StringComparison.OrdinalIgnoreCase) ||
                    fileName.Equals(state.DatName + ".tmp", StringComparison.OrdinalIgnoreCase) ||
-                   fileName.Equals(state.DatName + ".texture-map.json", StringComparison.OrdinalIgnoreCase);
+                   // JSON metadata is not part of the DAT payload, regardless of its name.
+                   fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+                   fileName.EndsWith(".json.tmp", StringComparison.OrdinalIgnoreCase);
         }
         string[] independentChanges = contentState.Diff.Changed
             .Concat(contentState.Diff.Added)
@@ -102,3 +106,5 @@ public partial class Form1
         if (state != null) await SyncCharacterDatToContentAsync(state);
     }
 }
+
+

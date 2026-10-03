@@ -114,11 +114,13 @@ public static class LanguageService
         applying = true;
         try
         {
-            root.Text = Translate(root.Text);
+            bool preserve=root is TextBoxBase||PreservedContent.TryGetValue(root,out _);
+            if(!preserve)root.Text = Translate(root.Text);
+            if(root is TextBox input)input.PlaceholderText=Translate(input.PlaceholderText);
             if (root.Tag is string tag) root.Tag = Translate(tag);
-            if (root is ComboBox combo)
+            if (!preserve && root is ComboBox combo)
                 for (int i = 0; i < combo.Items.Count; i++) if (combo.Items[i] is string item) combo.Items[i] = Translate(item);
-            if (root is ListBox list)
+            if (!preserve && root is ListBox list)
                 for (int i = 0; i < list.Items.Count; i++) if (list.Items[i] is string item) list.Items[i] = Translate(item);
             if (root is ListView view)
                 foreach (ColumnHeader column in view.Columns) column.Text = Translate(column.Text);
@@ -137,12 +139,17 @@ public static class LanguageService
     private static void LocalizeChangedText(object? sender, EventArgs e)
     {
         if (applying || sender is not Control control) return;
+        if(control is TextBoxBase||PreservedContent.TryGetValue(control,out _))return;
         string translated = Translate(control.Text);
         if (translated == control.Text) return;
         applying = true;
         try { control.Text = translated; }
         finally { applying = false; }
     }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control,object> PreservedContent=new();
+    /// <summary>Keep user-defined names and categories literal while translating the surrounding UI.</summary>
+    public static void PreserveContent(Control control)=>PreservedContent.GetValue(control,_=>new object());
 
     public static void InstallRuntimeLocalization()
     {

@@ -11,7 +11,6 @@ public sealed class AppSettings
     public string? SetupDraftTplManagerPath { get; set; }
     public string? TplManagerPath { get; set; }
     public string? Pcsx2Path { get; set; }
-    public string? Ps2BinToolPath { get; set; }
     public string? LastWorkspace { get; set; }
     public string? LastMainPage { get; set; } = "Workspace";
     public bool SidebarCollapsed { get; set; }
@@ -24,12 +23,16 @@ public sealed class AppSettings
     public bool VisualCollisionEatVisible { get; set; } = true;
     public bool VisualLightingLayer { get; set; } = true;
     public bool VisualEffectsLayer { get; set; } = true;
+    public bool VisualEffMistVisible { get; set; } = true;
     public bool VisualRtpLayer { get; set; } = true;
     public bool VisualCamLayer { get; set; } = true;
     public bool VisualItaLayer { get; set; } = true;
     public bool VisualSoundLayer { get; set; } = false;
+    public bool VisualEmiLayer { get; set; } = true;
     public string? SelectedEnemyEslName { get; set; }
+    public bool VisualAevLabels { get; set; } = true;
     public bool VisualEnemyLabels { get; set; } = false;
+    public bool VisualEmiLabels { get; set; } = true;
     public bool VisualEnemySnap { get; set; } = false;
     public bool VisualEnemyAnimated { get; set; } = false;
     public bool VisualShowInactiveEnemies { get; set; } = false;
@@ -49,6 +52,7 @@ public sealed class AppSettings
     public bool AnimationLabShowSkeleton { get; set; } = true;
     public bool AnimationLabRestPose { get; set; } = false;
     public bool AnimationLabIgnoreRootMotion { get; set; } = true;
+    public bool CharacterLockRoot { get; set; } = true;
     public int AnimationLabBackgroundBrightness { get; set; } = 24;
     public int AnimationInspectorAxisIndex { get; set; } = 0;
     public int AnimationViewTabIndex { get; set; } = 0;

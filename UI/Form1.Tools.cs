@@ -39,6 +39,48 @@ public partial class Form1
         manager.ShowDialog(this);
     }
 
+    private void OpenRelInspector()
+    {
+        static bool HasRelFiles(string path) => Directory.Exists(path) &&
+            Directory.EnumerateFiles(path, "*.rel", SearchOption.AllDirectories).Any();
+        string? sourceRelDirectory = null;
+        string? sourceSles = null;
+        string[] roots = { Directory.GetCurrentDirectory(), AppContext.BaseDirectory };
+        foreach (string root in roots)
+        {
+            DirectoryInfo? directory = new(root);
+            for (int i = 0; i < 6 && directory is not null; i++, directory = directory.Parent)
+            {
+                string references = Path.Combine(directory.FullName, "_references");
+                string rels = Path.Combine(references, "REL");
+                string elf = Path.Combine(references, "ELFs", "SLES_537.02");
+                if (sourceRelDirectory is null && HasRelFiles(rels)) sourceRelDirectory = rels;
+                if (sourceSles is null && File.Exists(elf)) sourceSles = elf;
+            }
+        }
+        string? relDirectory = null;
+        if (!string.IsNullOrWhiteSpace(project.RootPath))
+        {
+            string extracted = Path.Combine(project.RootPath, "Extracted", "_AFS", "BIO4DAT", "REL");
+            string references = Path.Combine(project.RootPath, "_references", "REL");
+            relDirectory = HasRelFiles(extracted) ? extracted : HasRelFiles(references) ? references : null;
+        }
+        relDirectory ??= sourceRelDirectory;
+        string? sles = null;
+        if (!string.IsNullOrWhiteSpace(project.RootPath))
+        {
+            string build = Path.Combine(project.RootPath, "Build", "SLES_537.02");
+            string buildIso = Path.Combine(project.RootPath, "Build", "RE4_PS2_MOD.iso");
+            if (!string.IsNullOrWhiteSpace(project.ActiveBuildIsoPath) && File.Exists(project.ActiveBuildIsoPath))
+                sles = project.ActiveBuildIsoPath;
+            else if (File.Exists(buildIso)) sles = buildIso;
+            else if (File.Exists(build)) sles = build;
+        }
+        sles ??= sourceSles;
+        using var inspector = new RelInspectorForm(relDirectory, sles);
+        inspector.ShowDialog(this);
+    }
+
     private void btnBrowseTpl_Click(object? sender, EventArgs e) => PickTool(txtTplManager, v => settings.TplManagerPath = v);
 
     private void btnBrowsePcsx2_Click(object? sender, EventArgs e) => PickTool(txtPcsx2, v => settings.Pcsx2Path = v);
@@ -59,7 +101,9 @@ public partial class Form1
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
         {
             MessageBox.Show($"Configure o caminho do {toolName} primeiro.", "Ferramenta não configurada", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            btnNavTools_Click(null, EventArgs.Empty); return;
+            btnNavSettings_Click(null, EventArgs.Empty);
+            if (pnlSettings.Controls.OfType<TabControl>().FirstOrDefault() is TabControl tabs) tabs.SelectedIndex = 0;
+            return;
         }
         try
         {

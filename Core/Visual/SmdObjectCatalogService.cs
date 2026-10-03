@@ -1,4 +1,4 @@
-using System.Drawing.Imaging;
+﻿using System.Drawing.Imaging;
 using System.Security.Cryptography;
 using System.Text.Json;
 using RE4_PS2_MOD_WORKSPACE.Core.Smd;
@@ -16,6 +16,7 @@ public sealed class SmdCatalogItem
     public List<SmdCatalogEntry> Entries { get; set; } = new();
     public List<SmdCatalogBin> Bins { get; set; } = new();
     public List<SmdCatalogTexture> Textures { get; set; } = new();
+    public List<SmdCatalogCollisionFace> Collisions { get; set; } = new();
     public string Folder { get; set; } = "";
     public string PreviewPath => Path.Combine(Folder,"preview.png");
     public override string ToString()=>Name;
@@ -29,18 +30,45 @@ public sealed class SmdObjectCatalogService
     private static readonly JsonSerializerOptions JsonOptions=new(){WriteIndented=true,PropertyNameCaseInsensitive=true};
     public string RootPath {get;}
     public SmdObjectCatalogService(string? root=null){RootPath=root??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"RE4_PS2_MOD_WORKSPACE","SmdCatalog");}
+    private sealed class CatalogSettings
+    {
+        public List<string> Categories {get;set;}=new();
+        public int ThumbnailSize {get;set;}=144;
+    }
+    private string SettingsPath=>Path.Combine(RootPath,"catalog-settings.json");
+    private CatalogSettings ReadSettings()=>File.Exists(SettingsPath)?JsonSerializer.Deserialize<CatalogSettings>(File.ReadAllText(SettingsPath),JsonOptions)??new():new();
+    private void WriteSettings(CatalogSettings settings)
+    {
+        Directory.CreateDirectory(RootPath);string temp=SettingsPath+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try{File.WriteAllText(temp,JsonSerializer.Serialize(settings,JsonOptions));File.Move(temp,SettingsPath,true);}
+        finally{if(File.Exists(temp))File.Delete(temp);}
+    }
+    public IReadOnlyList<string> GetCategories()=>new[]{"Cenário","Vegetação","Decoração","Interativos"}
+        .Concat(ReadSettings().Categories??new()).Concat(LoadAll().Select(i=>i.Category))
+        .Where(c=>!string.IsNullOrWhiteSpace(c)).Select(c=>c.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c=>c,StringComparer.CurrentCultureIgnoreCase).ToArray();
+    public string AddCategory(string category)
+    {
+        category=category.Trim();if(category.Length==0||category.Length>100)throw new ArgumentException("Informe uma categoria de até 100 caracteres.");
+        string? existing=GetCategories().FirstOrDefault(c=>c.Equals(category,StringComparison.OrdinalIgnoreCase));if(existing!=null)return existing;
+        var settings=ReadSettings();settings.Categories??=new();settings.Categories.Add(category);WriteSettings(settings);return category;
+    }
+    public int ThumbnailSize
+    {
+        get=>Math.Clamp(ReadSettings().ThumbnailSize,96,240);
+        set{var settings=ReadSettings();int size=Math.Clamp(value,96,240);if(settings.ThumbnailSize==size)return;settings.ThumbnailSize=size;WriteSettings(settings);}
+    }
     public IReadOnlyList<SmdCatalogItem> LoadAll()
     {
         Directory.CreateDirectory(RootPath);var result=new List<SmdCatalogItem>();foreach(string file in Directory.EnumerateFiles(RootPath,"object.json",SearchOption.AllDirectories)){try{var item=JsonSerializer.Deserialize<SmdCatalogItem>(File.ReadAllText(file),JsonOptions);if(item!=null){item.Folder=Path.GetDirectoryName(file)!;result.Add(item);}}catch{}}return result.OrderBy(x=>x.Category).ThenBy(x=>x.Name).ToArray();
     }
-    public SmdCatalogItem Export(string smdPath,string tplPath,IReadOnlyList<ScenarioEntry> entries,int binCount,string name,string category,string notes,Bitmap? preview)
+    public SmdCatalogItem Export(string smdPath,string tplPath,IReadOnlyList<ScenarioEntry> entries,int binCount,string name,string category,string notes,Bitmap? preview,IReadOnlyList<SmdCatalogCollisionFace>? collisions=null)
     {
         if(entries.Count==0)throw new InvalidOperationException("Selecione pelo menos uma entry SMD.");Directory.CreateDirectory(RootPath);var item=new SmdCatalogItem{Name=name.Trim(),Category=string.IsNullOrWhiteSpace(category)?"Sem categoria":category.Trim(),Notes=notes.Trim()};item.Folder=Path.Combine(RootPath,item.Id);Directory.CreateDirectory(item.Folder);Directory.CreateDirectory(Path.Combine(item.Folder,"textures"));Directory.CreateDirectory(Path.Combine(item.Folder,"bins"));
         var binKeys=entries.Select(x=>(int)x.BinId).Distinct().ToArray();foreach(int key in binKeys){string file=$"bins/bin_{key:D3}.bin";File.WriteAllBytes(Path.Combine(item.Folder,file.Replace('/',Path.DirectorySeparatorChar)),SmdEmbeddedBinService.Extract(smdPath,key,binCount));item.Bins.Add(new(){Key=key,File=file});}
         foreach(ScenarioEntry e in entries)item.Entries.Add(new(){BinKey=e.BinId,RawData=(byte[])e.RawData.Clone(),X=e.PositionX,Y=e.PositionY,Z=e.PositionZ,Rx=e.RotationX,Ry=e.RotationY,Rz=e.RotationZ,Sx=e.ScaleX,Sy=e.ScaleY,Sz=e.ScaleZ});
         int[] textures=entries.SelectMany(e=>e.LocalTriangles).Select(t=>t.TextureIndex).Where(i=>i>=0&&i<=255).Distinct().OrderBy(i=>i).ToArray();var textureService=new TextureWorkspaceService();foreach(int index in textures){string file=$"textures/texture_{index:D3}.png";string path=Path.Combine(item.Folder,file.Replace('/',Path.DirectorySeparatorChar));textureService.ExportPng(tplPath,index,path);item.Textures.Add(new(){SourceIndex=index,File=file,PixelHash=ComputePixelHash(path)});}
         if(preview!=null)preview.Save(item.PreviewPath,ImageFormat.Png);else if(item.Textures.Count>0)File.Copy(Path.Combine(item.Folder,item.Textures[0].File.Replace('/',Path.DirectorySeparatorChar)),item.PreviewPath,true);
-        Save(item);return item;
+        item.Collisions=collisions?.ToList()??new();Save(item);return item;
     }
     public int Import(SmdCatalogItem item,string smdPath,string tplPath,int entryCount,int binCount)
     {

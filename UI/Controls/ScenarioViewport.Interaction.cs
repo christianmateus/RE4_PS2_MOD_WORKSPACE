@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 using RE4_PS2_MOD_WORKSPACE.Core.Effects;
@@ -30,7 +30,11 @@ public sealed partial class ScenarioViewport : GLControl
                 mouseDownPoint = e.Location;
                 leftMouseMoved = false;
 
+                if(CatalogCollisionPicking){Capture=true;return;}
+
                 if (TryBeginAssetGizmo(e.Location)) { Capture=true; return; }
+
+                if (TryBeginEmiDrag(e.Location)) { Capture = true; return; }
 
                 if (TryBeginRtpDrag(e.Location)) { Capture = true; return; }
                 ClearRtpSelectionOnMiss(e.Location);
@@ -128,10 +132,11 @@ public sealed partial class ScenarioViewport : GLControl
             bool wasCollisionDrag = e.Button == MouseButtons.Left && draggingCollisionVertex;
             bool wasFaceGizmoDrag = e.Button == MouseButtons.Left && enemyFaceGizmoAxis != 0;
             bool wasRtpDrag = e.Button == MouseButtons.Left && IsRtpDragging;
+            bool wasEmiDrag = e.Button == MouseButtons.Left && IsEmiDragging;
             bool wasCamDrag = e.Button == MouseButtons.Left && IsCamDragging;
             bool wasCamPointClick = e.Button == MouseButtons.Left && ConsumeCamPointClick();
             bool wasAssetGizmoDrag=e.Button==MouseButtons.Left&&assetGizmoDragging;
-            bool clickAev = e.Button == MouseButtons.Left && !leftMouseMoved && !wasHandleDrag && !wasEnemyDrag && !wasEtsDrag && !wasItaDrag && !wasSoundDrag && !wasSmdDrag && !wasCollisionDrag && !wasFaceGizmoDrag && !wasRtpDrag && !wasCamDrag;
+            bool clickAev = e.Button == MouseButtons.Left && !leftMouseMoved && !wasHandleDrag && !wasEnemyDrag && !wasEtsDrag && !wasItaDrag && !wasSoundDrag && !wasSmdDrag && !wasCollisionDrag && !wasFaceGizmoDrag && !wasRtpDrag && !wasEmiDrag && !wasCamDrag;
 
             if (wasSmdDrag) EndSmdDrag();
             if(wasSmdFaceBox){if(leftMouseMoved){CompleteSmdFaceBoxSelection();dragButton=MouseButtons.None;Capture=false;return;}smdFaceBoxSelecting=false;Invalidate();}
@@ -140,13 +145,17 @@ public sealed partial class ScenarioViewport : GLControl
             if (wasSoundDrag) EndSoundDrag();
             if (wasCollisionDrag) EndCollisionVertexDrag();
             if (wasRtpDrag) EndRtpDrag();
+            if (wasEmiDrag) EndEmiDrag();
             if (wasCamDrag) EndCamDrag();
             if(wasAssetGizmoDrag)EndAssetGizmo();
             if (wasFaceGizmoDrag)
             {
                 NVector3 delta = enemyFaceGizmoDelta;
-                enemyFaceGizmoAxis = 0; enemyFaceGizmoDelta = NVector3.Zero;
-                if (delta.LengthSquared() > 0.0000001f)
+                NVector3 rotation = enemyFaceGizmoRotationDegrees;
+                enemyFaceGizmoAxis = 0; enemyFaceGizmoDelta = NVector3.Zero; enemyFaceGizmoRotationDegrees = NVector3.Zero;
+                if (EnemyModelGizmoMode == EnemyMeshGizmoMode.Rotate && !EnemyModelFacePickingEnabled && rotation.LengthSquared() > 0.000001f)
+                    EnemyModelPartRotationRequested?.Invoke(rotation);
+                else if (delta.LengthSquared() > 0.0000001f)
                 {
                     if (EnemyModelFacePickingEnabled) EnemyModelFaceTranslationRequested?.Invoke(delta);
                     else EnemyModelPartTranslationRequested?.Invoke(delta);
@@ -200,6 +209,9 @@ public sealed partial class ScenarioViewport : GLControl
             dragButton = MouseButtons.None;
             Capture = false;
 
+            if(CatalogCollisionPicking){if(e.Button==MouseButtons.Left&&!leftMouseMoved)PickCatalogCollision(e.Location);dragButton=MouseButtons.None;Capture=false;return;}
+
+            if(wasAssetGizmoDrag)return;
             if(wasCamPointClick)return;
 
             if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasSoundDrag&&!wasCamDrag&&!wasSmdDrag&&!wasCollisionDrag&&EnemiesVisible)
@@ -211,10 +223,11 @@ public sealed partial class ScenarioViewport : GLControl
 
             if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasItaDrag&&!wasAssetGizmoDrag&&ItaVisible&&itaScene!=null)
             {
-                ItaEntry? item=PickIta(e.Location);if(item!=null){SelectItaEntry(item);ItaEntryClicked?.Invoke(item);if(AssetMeshEditingEnabled){AssetMeshSelection? itaSelection=PickItaSurface(e.Location,item);if(itaSelection.HasValue&&AssetSelectionMode==AssetMeshSelectionMode.Object)itaSelection=itaSelection.Value with{Mode=AssetMeshSelectionMode.Object};SetAssetMeshSelection(itaSelection,ita:item);}else SetAssetMeshSelection(null);return;}
+                ItaEntry? item=PickIta(e.Location);if(item!=null){SelectItaEntry(item);ItaEntryClicked?.Invoke(item);if(AssetMeshEditingEnabled){AssetMeshSelection? itaSelection=PickItaSurface(e.Location,item);if(itaSelection.HasValue&&AssetSelectionMode==AssetMeshSelectionMode.Object)itaSelection=itaSelection.Value with{Mode=AssetMeshSelectionMode.Object};SetAssetMeshSelection(itaSelection,ita:item,additive:(ModifierKeys&(Keys.Control|Keys.Shift))!=0);}else SetAssetMeshSelection(null);return;}
                 SelectItaEntry(null);ItaEntryClicked?.Invoke(null);SetAssetMeshSelection(null);
             }
 
+            if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasEmiDrag&&HandleEmiClick(e.Location))return;
             if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasRtpDrag&&!wasCamDrag&&HandleRtpClick(e.Location))return;
             if(e.Button==MouseButtons.Left&&!leftMouseMoved&&!wasCamDrag&&HandleCamClick(e.Location))return;
 
@@ -260,11 +273,11 @@ public sealed partial class ScenarioViewport : GLControl
             }
             if (!collisionHit && e.Button == MouseButtons.Left && !leftMouseMoved && !wasEtsDrag&&!wasAssetGizmoDrag && ObjectsVisible && etsScene != null)
             {
-                EtsEntry? hit=PickEtsEntry(e.Location);bool additive=(ModifierKeys&Keys.Control)!=0;
+                EtsEntry? hit=PickEtsEntry(e.Location);bool additive=(ModifierKeys&Keys.Control)!=0&&!AssetMeshEditingEnabled;
                 if(additive&&hit!=null){if(!selectedEtsFileOrders.Add(hit.FileOrder))selectedEtsFileOrders.Remove(hit.FileOrder);selectedEtsFileOrder=selectedEtsFileOrders.Contains(hit.FileOrder)?hit.FileOrder:selectedEtsFileOrders.LastOrDefault(-1);etsGpuDirty=true;Invalidate();}
                 else SelectEtsEntry(hit);
                 EtsEntry? primary=SelectedEts();EtsEntryClicked?.Invoke(primary);EtsSelectionChanged?.Invoke(etsScene.Entries.Where(x=>selectedEtsFileOrders.Contains(x.FileOrder)).ToArray());
-                if(AssetMeshEditingEnabled)SetAssetMeshSelection(primary==null?null:AssetSelectionMode==AssetMeshSelectionMode.Object?SelectWholeEtsMesh(primary):PickEtsMeshElement(e.Location,primary),primary);else SetAssetMeshSelection(null);
+                if(AssetMeshEditingEnabled)SetAssetMeshSelection(primary==null?null:AssetSelectionMode==AssetMeshSelectionMode.Object?SelectWholeEtsMesh(primary):PickEtsMeshElement(e.Location,primary),primary,additive:(ModifierKeys&(Keys.Control|Keys.Shift))!=0);else SetAssetMeshSelection(null);
             }
         }
     }
@@ -282,8 +295,9 @@ public sealed partial class ScenarioViewport : GLControl
             foreach (EnemyModelPart part in model.Parts)
             {
                 if (!IsEnemyModelPartVisible(entry.EnemyType, part.BinIndex)) continue;
-                foreach (EnemyModelTriangle triangle in part.Triangles)
+                foreach (EnemyModelTriangle sourceTriangle in part.Triangles)
                 {
+                    EnemyModelTriangle triangle=ApplyEnemyGameplayModelTransform(entry,sourceTriangle);
                     NVector3 a = TransformEnemyModelVertex(triangle.A, origin, rx, ry, rz);
                     NVector3 b = TransformEnemyModelVertex(triangle.B, origin, rx, ry, rz);
                     NVector3 c = TransformEnemyModelVertex(triangle.C, origin, rx, ry, rz);
@@ -307,8 +321,9 @@ public sealed partial class ScenarioViewport : GLControl
             foreach(EnemyModelPart part in model.Parts)
             {
                 if(!IsEnemyModelPartAutomaticallyVisible(entry,part))continue;
-                foreach(EnemyModelTriangle triangle in part.Triangles)
+                foreach(EnemyModelTriangle sourceTriangle in part.Triangles)
                 {
+                    EnemyModelTriangle triangle=ApplyEnemyGameplayModelTransform(entry,sourceTriangle);
                     NVector3 a=TransformEnemyModelVertex(triangle.A,origin,rx,ry,rz),b=TransformEnemyModelVertex(triangle.B,origin,rx,ry,rz),c=TransformEnemyModelVertex(triangle.C,origin,rx,ry,rz);
                     if(!TryProjectWorldToScreen(a,out PointF pa)||!TryProjectWorldToScreen(b,out PointF pb)||!TryProjectWorldToScreen(c,out PointF pc)||!PointInScreenTriangle(mouse,pa,pb,pc))continue;
                     float depth=NVector3.DistanceSquared(cameraPosition,(a+b+c)/3f);if(depth<bestDepth){bestDepth=depth;bestEntry=entry;}
@@ -332,12 +347,13 @@ public sealed partial class ScenarioViewport : GLControl
             foreach (EnemyModelPart part in model.Parts)
             {
                 if (!IsEnemyModelPartVisible(entry.EnemyType, part.BinIndex)) continue;
-                foreach (EnemyModelTriangle triangle in part.Triangles)
+                foreach (EnemyModelTriangle sourceTriangle in part.Triangles)
                 {
+                    EnemyModelTriangle triangle=ApplyEnemyGameplayModelTransform(entry,sourceTriangle);
                     NVector3 a = TransformEnemyModelVertex(triangle.A, origin, rx, ry, rz), b = TransformEnemyModelVertex(triangle.B, origin, rx, ry, rz), c = TransformEnemyModelVertex(triangle.C, origin, rx, ry, rz);
                     if (!TryProjectWorldToScreen(a, out PointF pa) || !TryProjectWorldToScreen(b, out PointF pb) || !TryProjectWorldToScreen(c, out PointF pc) || !PointInScreenTriangle(mouse, pa, pb, pc)) continue;
                     float depth = NVector3.DistanceSquared(cameraPosition, (a + b + c) / 3f);
-                    if (depth < bestDepth) { bestDepth = depth; best = new EnemyModelFaceHit(part, triangle); }
+                    if (depth < bestDepth) { bestDepth = depth; best = new EnemyModelFaceHit(part, sourceTriangle); }
                 }
             }
         }
@@ -392,6 +408,7 @@ public sealed partial class ScenarioViewport : GLControl
         {
             if(smdFaceBoxSelecting){smdFaceBoxEnd=e.Location;Invalidate();}
             else if(assetGizmoDragging)UpdateAssetGizmo(e.Location);
+            else if (IsEmiDragging) UpdateEmiDrag(e.Location);
             else if (IsRtpDragging) UpdateRtpDrag(e.Location);
             else if (IsCamDragging) UpdateCamDrag(e.Location);
             else if (IsSmdDragging) UpdateSmdDrag(e.Location);
@@ -399,6 +416,25 @@ public sealed partial class ScenarioViewport : GLControl
             {
                 if (TryGetEnemyMeshGizmo(out NVector3 center, out float length))
                 {
+                    if (EnemyModelGizmoMode == EnemyMeshGizmoMode.Rotate && !EnemyModelFacePickingEnabled)
+                    {
+                        if (eslScene?.Entries.FirstOrDefault(EnemyIsVisible) is EslEnemyEntry rotationEntry) center += EslToWorld(rotationEntry);
+                        if (TryProjectWorldToScreen(center, out PointF projected))
+                        {
+                            float startAngle = MathF.Atan2(enemyFaceGizmoStartMouse.Y - projected.Y, enemyFaceGizmoStartMouse.X - projected.X);
+                            float currentAngle = MathF.Atan2(e.Y - projected.Y, e.X - projected.X);
+                            float degrees = MathF.IEEERemainder(currentAngle - startAngle, MathF.Tau) * 180f / MathF.PI;
+                            enemyFaceGizmoRotationDegrees = enemyFaceGizmoAxis switch
+                            {
+                                1 => new NVector3(degrees, 0f, 0f),
+                                2 => new NVector3(0f, degrees, 0f),
+                                _ => new NVector3(0f, 0f, degrees)
+                            };
+                            enemyGpuDirty = true;
+                        }
+                        Invalidate();
+                        return;
+                    }
                     NVector3 axis = enemyFaceGizmoAxis == 1 ? NVector3.UnitX : enemyFaceGizmoAxis == 2 ? NVector3.UnitY : NVector3.UnitZ;
                     center -= enemyFaceGizmoDelta;
                     if (eslScene?.Entries.FirstOrDefault(EnemyIsVisible) is EslEnemyEntry entry) center += EslToWorld(entry);
@@ -480,9 +516,10 @@ public sealed partial class ScenarioViewport : GLControl
                         dragStartState.HasValue)
                     {
                         System.Numerics.Vector2 delta = new(currentWorld.X - startWorld.X, currentWorld.Z - startWorld.Z);
-                        if (draggingAevHandle == 6) delta.Y = 0f;
-                        else delta.X = 0f;
                         dragStartState.Value.Apply(draggingAevEntry);
+                        var direction=GetAevTransformAxes(draggingAevEntry)[draggingAevHandle==6?0:2];
+                        var axis=new System.Numerics.Vector2(direction.X,direction.Z);
+                        delta=axis*System.Numerics.Vector2.Dot(delta,axis);
                         TranslateAev(draggingAevEntry, delta);
                         aevGpuDirty = true;
                     }
@@ -531,6 +568,7 @@ public sealed partial class ScenarioViewport : GLControl
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if(CatalogCollisionPicking){if(!e.Control&&e.KeyCode is Keys.W or Keys.A or Keys.S or Keys.D or Keys.Q or Keys.E or Keys.ShiftKey or Keys.ControlKey)movementKeys.Add(e.KeyCode);e.Handled=true;return;}
 
         if(FseEditingEnabled&&e.Control&&e.KeyCode is Keys.D1 or Keys.NumPad1 or Keys.D2 or Keys.NumPad2 or Keys.D3 or Keys.NumPad3)
         {SetFseTransformMode(e.KeyCode is Keys.D1 or Keys.NumPad1?FseGizmoMode.Move:e.KeyCode is Keys.D2 or Keys.NumPad2?FseGizmoMode.Vertex:FseGizmoMode.Face);e.Handled=true;e.SuppressKeyPress=true;return;}

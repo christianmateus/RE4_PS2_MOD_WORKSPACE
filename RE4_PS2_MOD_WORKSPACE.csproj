@@ -1,12 +1,12 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
-    <Version>0.8.1</Version>
-    <AssemblyVersion>0.8.1.0</AssemblyVersion>
-    <FileVersion>0.8.1.0</FileVersion>
+    <Version>0.9.0</Version>
+    <AssemblyVersion>0.9.0.0</AssemblyVersion>
+    <FileVersion>0.9.0.0</FileVersion>
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -26,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Core\Executable\Resources\SlusCheats.json" LogicalName="SlusCheats.json" />
     <EmbeddedResource Include="_references\ita\HEX -Items &amp; Weapons.txt" LogicalName="ItaItems.txt" />
     <EmbeddedResource Include="_references\weapon list.txt" LogicalName="WeaponList.txt" />
     <EmbeddedResource Include="_references\Teleport locations (HEX).txt" LogicalName="TeleportLocations1.txt" />
@@ -60,10 +61,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="THIRD_PARTY_NOTICES.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Content Include="locales\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+    <EmbeddedResource Include="UI\Icons\*.png" LogicalName="SidebarIcon.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

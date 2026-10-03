@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using NVector3 = System.Numerics.Vector3;
@@ -296,7 +296,7 @@ public sealed partial class ScenarioViewport
     private void EnsureSmdBuffers(){if(smdSelectedVao==0)smdSelectedVao=GL.GenVertexArray();if(smdSelectedVbo==0)smdSelectedVbo=GL.GenBuffer();if(smdFaceVao==0)smdFaceVao=GL.GenVertexArray();if(smdFaceVbo==0)smdFaceVbo=GL.GenBuffer();for(int i=0;i<4;i++){if(smdGizmoVaos[i]==0)smdGizmoVaos[i]=GL.GenVertexArray();if(smdGizmoVbos[i]==0)smdGizmoVbos[i]=GL.GenBuffer();}}
     private void DrawSmdOverlay()
     {
-        if(!SmdEditingEnabled||SelectedSmd()==null)return;GL.Uniform1(uUseTexture,0);GL.Uniform1(uUnlit,1);GL.Disable(EnableCap.DepthTest);GL.Disable(EnableCap.CullFace);GL.Uniform3(uColor,1f,.82f,.12f);GL.BindVertexArray(smdSelectedVao);GL.LineWidth(2f);GL.DrawArrays(PrimitiveType.Lines,0,smdSelectedCount);GL.Uniform3(uColor,1f,.35f,.08f);GL.BindVertexArray(smdFaceVao);GL.LineWidth(5f);GL.DrawArrays(PrimitiveType.Lines,0,smdFaceCount);var colors=new[]{(1f,.15f,.12f),(.2f,.9f,.25f),(.15f,.48f,1f),(.92f,.92f,.92f)};for(int i=0;i<4;i++){bool active=draggingSmd!=null&&smdDragAxis==i+1;if(active)GL.Uniform3(uColor,1f,.95f,.25f);else GL.Uniform3(uColor,colors[i].Item1,colors[i].Item2,colors[i].Item3);GL.BindVertexArray(smdGizmoVaos[i]);GL.LineWidth(active?10f:6f);GL.DrawArrays(PrimitiveType.Lines,0,smdGizmoCounts[i]);}GL.LineWidth(1f);GL.Enable(EnableCap.DepthTest);GL.Enable(EnableCap.CullFace);GL.Uniform1(uUnlit,0);
+        if(CatalogCollisionPicking||!SmdEditingEnabled||SelectedSmd()==null)return;GL.Uniform1(uUseTexture,0);GL.Uniform1(uUnlit,1);GL.Disable(EnableCap.DepthTest);GL.Disable(EnableCap.CullFace);GL.Uniform3(uColor,1f,.82f,.12f);GL.BindVertexArray(smdSelectedVao);GL.LineWidth(2f);GL.DrawArrays(PrimitiveType.Lines,0,smdSelectedCount);GL.Uniform3(uColor,1f,.35f,.08f);GL.BindVertexArray(smdFaceVao);GL.LineWidth(5f);GL.DrawArrays(PrimitiveType.Lines,0,smdFaceCount);var colors=new[]{(1f,.15f,.12f),(.2f,.9f,.25f),(.15f,.48f,1f),(.92f,.92f,.92f)};for(int i=0;i<4;i++){bool active=draggingSmd!=null&&smdDragAxis==i+1;if(active)GL.Uniform3(uColor,1f,.95f,.25f);else GL.Uniform3(uColor,colors[i].Item1,colors[i].Item2,colors[i].Item3);GL.BindVertexArray(smdGizmoVaos[i]);GL.LineWidth(active?10f:6f);GL.DrawArrays(PrimitiveType.Lines,0,smdGizmoCounts[i]);}GL.LineWidth(1f);GL.Enable(EnableCap.DepthTest);GL.Enable(EnableCap.CullFace);GL.Uniform1(uUnlit,0);
     }
     private NVector3 GetSmdGizmoOrigin(ScenarioEntry e)
     {if(draggingSmd!=null&&smdGroupDragStart!=null&&smdGroupDragStart.TryGetValue(e,out SmdTransformState start)){if(SmdTransformMode==SmdGizmoMode.Move)return smdGroupPivot+(e.Position-new NVector3(start.Px,start.Py,start.Pz));return smdGroupPivot;}if(!SmdFaceEditMode){IReadOnlyList<ScenarioEntry> group=SelectedSmdGroup();if(group.Count==1)return GetSmdEntryVisualCenter(e);NVector3 min=new(float.PositiveInfinity),max=new(float.NegativeInfinity);bool any=false;foreach(ScenarioEntry item in group)foreach(ScenarioTriangle t in item.LocalTriangles){NVector3 a=TransformSmd(t.A,item),b=TransformSmd(t.B,item),c=TransformSmd(t.C,item);min=NVector3.Min(min,NVector3.Min(a,NVector3.Min(b,c)));max=NVector3.Max(max,NVector3.Max(a,NVector3.Max(b,c)));any=true;}return any?(min+max)*.5f:e.Position;}HashSet<int> offsets=GetSelectedSmdVertexOffsets(e);if(offsets.Count==0)return GetSmdEntryVisualCenter(e);var points=EnumerateSmdVertices(e).Where(v=>offsets.Contains(v.Offset)).GroupBy(v=>v.Offset).Select(g=>TransformSmd(g.First().Position,e)).ToArray();return points.Length==0?GetSmdEntryVisualCenter(e):points.Aggregate(NVector3.Zero,(a,b)=>a+b)/points.Length;}
@@ -440,6 +440,12 @@ public sealed partial class ScenarioViewport
     private void ApplySmdEntryModel(SmdEntryGpu gpu)
     {
         ScenarioEntry e=gpu.Entry;SmdTransformState current=SmdTransformState.From(e);
+        // cLightInfo::SelectMask is an exclusion mask in the game: a set bit
+        // means that light must NOT be applied to the model.
+        uint lightMask=e.Smx?.LightSelectMask??0u;
+        GL.Uniform1(uLitSelectMask,lightMask);
+        Color smxColor=e.Smx?.PrimaryColor??Color.White;
+        GL.Uniform4(uTextureTint,smxColor.R/255f,smxColor.G/255f,smxColor.B/255f,1f);
         if(!gpu.HasModel||gpu.CachedTransform!=current)
         {
             float sx=SafeSmdScale(e.ScaleX),sy=SafeSmdScale(e.ScaleY),sz=SafeSmdScale(e.ScaleZ);Matrix4 rx=Matrix4.CreateRotationX(e.RotationX),ry=Matrix4.CreateRotationY(e.RotationY),rz=Matrix4.CreateRotationZ(e.RotationZ);gpu.Model=Matrix4.CreateScale(sx,sy,sz)*rx*ry*rz*Matrix4.CreateTranslation(e.PositionX,e.PositionY,e.PositionZ);
@@ -447,7 +453,7 @@ public sealed partial class ScenarioViewport
         }
         GL.UniformMatrix4(uModel,true,ref gpu.Model);GL.UniformMatrix4(uNormalMatrix,true,ref gpu.Normal);GL.Uniform1(uNormalSign,gpu.NormalSign);GL.FrontFace(gpu.NormalSign<0f?FrontFaceDirection.Cw:FrontFaceDirection.Ccw);
     }
-    private void ResetSmdEntryModel(){Matrix4 identity=Matrix4.Identity;GL.UniformMatrix4(uModel,true,ref identity);GL.UniformMatrix4(uNormalMatrix,true,ref identity);GL.Uniform1(uNormalSign,1f);GL.FrontFace(FrontFaceDirection.Ccw);}
+    private void ResetSmdEntryModel(){Matrix4 identity=Matrix4.Identity;GL.UniformMatrix4(uModel,true,ref identity);GL.UniformMatrix4(uNormalMatrix,true,ref identity);GL.Uniform1(uNormalSign,1f);GL.Uniform1(uLitSelectMask,0u);GL.Uniform4(uTextureTint,1f,1f,1f,1f);GL.FrontFace(FrontFaceDirection.Ccw);}
 
     private sealed class SmdEntryGpu { public ScenarioEntry Entry=null!;public int Vao,Vbo,VertexCount;public bool HasModel;public float NormalSign=1f;public SmdTransformState CachedTransform;public Matrix4 Model=Matrix4.Identity,Normal=Matrix4.Identity;public List<ScenarioDrawBatch> Batches{get;}=new(); }
 

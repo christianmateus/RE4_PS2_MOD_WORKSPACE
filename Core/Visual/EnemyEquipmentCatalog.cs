@@ -151,6 +151,7 @@ public static class EnemyEquipmentCatalog
 
     public static IReadOnlyList<string> GetWeaponPresetNames(byte enemyType) => GetWeaponPresets(enemyType).Select(x=>x.Name).ToArray();
     public static IReadOnlyList<string> GetEquipmentPresetNames(byte enemyType) => GetEquipmentPresets(enemyType).Select(x=>x.Name).ToArray();
+    public static bool SupportsPresets(byte enemyType) => IsVillageGanadoPackage(enemyType)||IsZealotPackage(enemyType)||IsIslandPackage(enemyType);
     public static string GetWeaponPresetName(EslEnemyEntry e) => FindCurrentWeaponPreset(e)?.Name ?? $"Personalizado • E1 {e.Equip1:X2} E2 {e.Equip2:X2} W {e.Weapon:X2}";
     public static string GetEquipmentPresetName(EslEnemyEntry e) => FindCurrentEquipmentPreset(e)?.Name ?? $"Personalizado • E1 {e.Equip1:X2} E2 {e.Equip2:X2}";
 

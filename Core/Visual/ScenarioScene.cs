@@ -61,10 +61,14 @@ public sealed class ScenarioEntry
     [Browsable(false)] public IReadOnlyList<ScenarioTriangle> LocalTriangles { get; set; } = Array.Empty<ScenarioTriangle>();
     [Category("Object"), DisplayName("Entry")] public int Index => FileOrder;
     [Category("Object"), DisplayName("BIN ID")] public byte BinId { get; set; }
-    [Category("Object"), DisplayName("SMX ID"), ReadOnly(true), Description("ID usado para localizar as propriedades complementares no arquivo SMX.")]
-    public byte SmxId => RawData.Length > 0x33 ? RawData[0x33] : (byte)0xFF;
-    internal void SetSmxId(byte value) { if (RawData.Length > 0x33) RawData[0x33] = value; }
-    [Category("SMX"), DisplayName("Propriedades SMX"), Description("Parâmetros visuais e comportamentais associados pelo SMX ID.")]
+    [Category("SMX"), DisplayName("SMX ID"), RefreshProperties(RefreshProperties.All), Description("ID usado para localizar as propriedades complementares no arquivo SMX. Aceita 0 a 255; 0xFE é independente e 0xFF desativa a entry no jogo.")]
+    public byte SmxId
+    {
+        get => RawData.Length > 0x33 ? RawData[0x33] : (byte)0xFF;
+        set { if (RawData.Length > 0x33) RawData[0x33] = value; }
+    }
+    internal void SetSmxId(byte value) => SmxId=value;
+    [Category("SMX"), DisplayName("Propriedades SMX"), RefreshProperties(RefreshProperties.All), Description("Parâmetros visuais e comportamentais associados pelo SMX ID. Só pode ser expandido quando existir um registro com esse ID no arquivo SMX.")]
     public SmxRecord? Smx { get; internal set; }
     [Category("SMX"), DisplayName("Status"), ReadOnly(true)]
     public string SmxStatus => Smx != null ? $"Associado ao ID 0x{SmxId:X2}" : SmxId switch { 0xFE => "Objeto independente (0xFE)", 0xFF => "Entrada não utilizada (0xFF)", _ => $"Sem registro para ID 0x{SmxId:X2}" };

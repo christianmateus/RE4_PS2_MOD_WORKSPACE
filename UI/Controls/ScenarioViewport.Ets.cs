@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using OpenTK.Graphics.OpenGL4;
 
 namespace RE4_PS2_MOD_WORKSPACE;
@@ -34,12 +34,79 @@ public sealed partial class ScenarioViewport
     public event Action<AssetMeshSelection,System.Numerics.Vector3>? AssetMeshRotationRequested;
     private AssetMeshSelection? assetMeshSelection;private EtsEntry? assetSelectionEts;private ItaEntry? assetSelectionIta;
     private bool assetOverlayDirty=true,assetGizmoDragging;private int assetOverlayVao,assetOverlayVbo,assetOverlayCount,assetGizmoVao,assetGizmoVbo,assetGizmoCount,assetComponentVertexCount,assetGizmoAxis;private Point assetGizmoMouse;private System.Numerics.Vector3 assetGizmoStart,assetGizmoDelta;
-    public void SetAssetMeshSelection(AssetMeshSelection? selection,EtsEntry? ets=null,ItaEntry? ita=null){assetGizmoDragging=false;assetGizmoAxis=0;assetGizmoDelta=System.Numerics.Vector3.Zero;assetMeshSelection=selection;assetSelectionEts=ets;assetSelectionIta=ita;assetOverlayDirty=true;AssetMeshSelectionChanged?.Invoke(selection);Invalidate();}
+    private readonly List<AssetMeshSelection> assetMeshSelections=new();
+    public IReadOnlyList<AssetMeshSelection> AssetMeshSelections=>assetMeshSelections.ToArray();
+    public void SetAssetMeshSelection(AssetMeshSelection? selection,EtsEntry? ets=null,ItaEntry? ita=null,bool additive=false)
+    {
+        assetGizmoDragging=false;assetGizmoAxis=0;assetGizmoDelta=System.Numerics.Vector3.Zero;
+        if(!additive || !ReferenceEquals(ets,assetSelectionEts) || !ReferenceEquals(ita,assetSelectionIta))assetMeshSelections.Clear();
+        if(selection is AssetMeshSelection picked)
+        {
+            int existing=assetMeshSelections.FindIndex(x=>SameAssetElement(x,picked,ets,ita));
+            if(additive&&existing>=0)assetMeshSelections.RemoveAt(existing);else if(existing<0)assetMeshSelections.Add(picked);
+        }
+        else if(!additive)assetMeshSelections.Clear();
+        assetSelectionEts=ets;assetSelectionIta=ita;
+        assetMeshSelection=assetMeshSelections.Count==0?null:assetMeshSelections[^1] with { Position=assetMeshSelections.Aggregate(System.Numerics.Vector3.Zero,(sum,x)=>sum+x.Position)/assetMeshSelections.Count };
+        assetOverlayDirty=true;AssetMeshSelectionChanged?.Invoke(assetMeshSelection);Invalidate();
+    }
+    private bool SameAssetElement(AssetMeshSelection a,AssetMeshSelection b,EtsEntry? ets,ItaEntry? ita)
+    {
+        if(a.Mode!=b.Mode||a.PartIndex!=b.PartIndex)return false;
+        if(a.Mode==AssetMeshSelectionMode.Object)return true;
+        if(a.Mode==AssetMeshSelectionMode.Face)return a.TriangleIndex==b.TriangleIndex;
+        IReadOnlyList<EtmModelPart>? parts=null;
+        if(ets!=null)etmCatalog?.ModelParts.TryGetValue(ets.ObjectId,out parts);
+        else if(ita!=null)itmCatalog?.ModelParts.TryGetValue(ita.ItemId,out parts);
+        if(parts==null||a.PartIndex<0||a.PartIndex>=parts.Count)return a.TriangleIndex==b.TriangleIndex&&a.ElementIndex==b.ElementIndex;
+        var triangles=parts[a.PartIndex].Triangles;
+        if(a.TriangleIndex<0||b.TriangleIndex<0||a.TriangleIndex>=triangles.Count||b.TriangleIndex>=triangles.Count)return false;
+        int[] Offsets(AssetMeshSelection s){var t=triangles[s.TriangleIndex];var offsets=new[]{t.SourceOffsetA,t.SourceOffsetB,t.SourceOffsetC};return s.Mode==AssetMeshSelectionMode.Vertex?new[]{offsets[s.ElementIndex]}:new[]{offsets[s.ElementIndex],offsets[(s.ElementIndex+1)%3]}.Order().ToArray();}
+        return Offsets(a).SequenceEqual(Offsets(b));
+    }
+    public void RestoreAssetSelections(IReadOnlyList<AssetMeshSelection> selections)
+    {
+        var ets=SelectedEts();var ita=itaScene?.Entries.FirstOrDefault(x=>x.FileOrder==selectedItaOrder);
+        IReadOnlyList<EtmModelPart>? parts=null;
+        if(ets!=null)etmCatalog?.ModelParts.TryGetValue(ets.ObjectId,out parts);
+        else if(ita!=null)itmCatalog?.ModelParts.TryGetValue(ita.ItemId,out parts);
+        if(parts==null)return;
+        foreach(var selection in selections)
+        {
+            if(selection.PartIndex<0||selection.PartIndex>=parts.Count||selection.TriangleIndex<0||selection.TriangleIndex>=parts[selection.PartIndex].Triangles.Count)continue;
+            var t=parts[selection.PartIndex].Triangles[selection.TriangleIndex];
+            var points=new[]{t.A,t.B,t.C}.Select(p=>ets!=null?TransformEtsVertex(p,ets):TransformIta(p,ita!)).ToArray();
+            var pos=selection.Mode==AssetMeshSelectionMode.Vertex?points[selection.ElementIndex]:selection.Mode==AssetMeshSelectionMode.Edge?(points[selection.ElementIndex]+points[(selection.ElementIndex+1)%3])/2:(points[0]+points[1]+points[2])/3;
+            if(selection.Mode==AssetMeshSelectionMode.Object)
+            {
+                var all=parts[selection.PartIndex].Triangles.SelectMany(t=>new[]{t.A,t.B,t.C}).Select(p=>ets!=null?TransformEtsVertex(p,ets):TransformIta(p,ita!)).ToArray();
+                pos=all.Aggregate(System.Numerics.Vector3.Zero,(sum,p)=>sum+p)/all.Length;
+            }
+            SetAssetMeshSelection(selection with{Position=pos},ets,ets==null?ita:null,true);
+        }
+    }
     public void RefreshAssetOverlay(){assetOverlayDirty=true;Invalidate();}
 
-    private void UploadAssetOverlay(){assetOverlayDirty=false;assetOverlayCount=assetGizmoCount=assetComponentVertexCount=0;if(!glReady||assetMeshSelection is not AssetMeshSelection s)return;if(assetOverlayVao==0){assetOverlayVao=GL.GenVertexArray();assetOverlayVbo=GL.GenBuffer();assetGizmoVao=GL.GenVertexArray();assetGizmoVbo=GL.GenBuffer();}ScenarioTriangle? tri=null;if(assetSelectionEts!=null&&etmCatalog?.ModelParts.TryGetValue(assetSelectionEts.ObjectId,out var ep)==true&&s.PartIndex<ep.Count&&s.TriangleIndex<ep[s.PartIndex].Triangles.Count)tri=ep[s.PartIndex].Triangles[s.TriangleIndex];else if(assetSelectionIta!=null&&itmCatalog?.ModelParts.TryGetValue(assetSelectionIta.ItemId,out var ip)==true&&s.PartIndex<ip.Count&&s.TriangleIndex<ip[s.PartIndex].Triangles.Count)tri=ip[s.PartIndex].Triangles[s.TriangleIndex];if(tri==null)return;System.Numerics.Vector3 T(System.Numerics.Vector3 p)=>assetSelectionEts!=null?TransformEtsVertex(p,assetSelectionEts):TransformIta(p,assetSelectionIta!);var a=T(tri.Value.A);var b=T(tri.Value.B);var c=T(tri.Value.C);var n=System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Cross(b-a,c-a));var fill=new List<float>();WriteEnemyModelVertex(fill,a,n,System.Numerics.Vector2.Zero);WriteEnemyModelVertex(fill,b,n,System.Numerics.Vector2.Zero);WriteEnemyModelVertex(fill,c,n,System.Numerics.Vector2.Zero);UploadEnemyModelBuffer(assetOverlayVao,assetOverlayVbo,fill,out assetOverlayCount);var g=new List<float>();void L(System.Numerics.Vector3 x,System.Numerics.Vector3 y)=>g.AddRange(new[]{x.X,x.Y,x.Z,0f,0f,0f,y.X,y.Y,y.Z,0f,0f,0f});if(s.Mode==AssetMeshSelectionMode.Face){L(a,b);L(b,c);L(c,a);}else if(s.Mode==AssetMeshSelectionMode.Edge){var q=new[]{a,b,c};L(q[s.ElementIndex],q[(s.ElementIndex+1)%3]);}else{float r=Math.Max(.08f,(scene?.Radius??1)*.012f);L(s.Position-System.Numerics.Vector3.UnitX*r,s.Position+System.Numerics.Vector3.UnitX*r);L(s.Position-System.Numerics.Vector3.UnitY*r,s.Position+System.Numerics.Vector3.UnitY*r);L(s.Position-System.Numerics.Vector3.UnitZ*r,s.Position+System.Numerics.Vector3.UnitZ*r);}assetComponentVertexCount=g.Count/6;float len=CamScreenSize(s.Position,72f),head=len*.14f;if(AssetTransformMode==AssetMeshTransformMode.Move)for(int axis=0;axis<3;axis++){var direction=axis==0?System.Numerics.Vector3.UnitX:axis==1?System.Numerics.Vector3.UnitY:System.Numerics.Vector3.UnitZ;var side=axis==1?System.Numerics.Vector3.UnitX:System.Numerics.Vector3.UnitY;var end=s.Position+direction*len;L(s.Position,end);L(end,end-direction*head+side*head*.45f);L(end,end-direction*head-side*head*.45f);}else for(int axis=0;axis<3;axis++)for(int i=0;i<48;i++){float q=i*MathF.Tau/48,r=(i+1)*MathF.Tau/48;var p=axis==0?new System.Numerics.Vector3(0,MathF.Cos(q)*len,MathF.Sin(q)*len):axis==1?new System.Numerics.Vector3(MathF.Cos(q)*len,0,MathF.Sin(q)*len):new System.Numerics.Vector3(MathF.Cos(q)*len,MathF.Sin(q)*len,0);var p2=axis==0?new System.Numerics.Vector3(0,MathF.Cos(r)*len,MathF.Sin(r)*len):axis==1?new System.Numerics.Vector3(MathF.Cos(r)*len,0,MathF.Sin(r)*len):new System.Numerics.Vector3(MathF.Cos(r)*len,MathF.Sin(r)*len,0);L(s.Position+p,s.Position+p2);}UploadLineBuffer(assetGizmoVao,assetGizmoVbo,g,out assetGizmoCount);}
+    private void UploadAssetOverlay(){assetOverlayDirty=false;assetOverlayCount=assetGizmoCount=assetComponentVertexCount=0;if(!glReady||assetMeshSelection is not AssetMeshSelection s)return;if(assetOverlayVao==0){assetOverlayVao=GL.GenVertexArray();assetOverlayVbo=GL.GenBuffer();assetGizmoVao=GL.GenVertexArray();assetGizmoVbo=GL.GenBuffer();}var fill=new List<float>();var g=new List<float>();
+        void L(System.Numerics.Vector3 x,System.Numerics.Vector3 y)=>g.AddRange(new[]{x.X,x.Y,x.Z,0f,0f,0f,y.X,y.Y,y.Z,0f,0f,0f});
+        foreach(var selected in assetMeshSelections)
+        {
+            ScenarioTriangle? tri=null;
+            if(assetSelectionEts!=null&&etmCatalog?.ModelParts.TryGetValue(assetSelectionEts.ObjectId,out var ep)==true&&selected.PartIndex<ep.Count&&selected.TriangleIndex<ep[selected.PartIndex].Triangles.Count)tri=ep[selected.PartIndex].Triangles[selected.TriangleIndex];
+            else if(assetSelectionIta!=null&&itmCatalog?.ModelParts.TryGetValue(assetSelectionIta.ItemId,out var ip)==true&&selected.PartIndex<ip.Count&&selected.TriangleIndex<ip[selected.PartIndex].Triangles.Count)tri=ip[selected.PartIndex].Triangles[selected.TriangleIndex];
+            if(tri==null)continue;
+            System.Numerics.Vector3 T(System.Numerics.Vector3 p)=>assetSelectionEts!=null?TransformEtsVertex(p,assetSelectionEts):TransformIta(p,assetSelectionIta!);
+            var a=T(tri.Value.A);var b=T(tri.Value.B);var c=T(tri.Value.C);
+            var n=System.Numerics.Vector3.Cross(b-a,c-a);n=n.LengthSquared()>1e-10f?System.Numerics.Vector3.Normalize(n):System.Numerics.Vector3.UnitY;
+            if(selected.Mode is AssetMeshSelectionMode.Face or AssetMeshSelectionMode.Object){WriteEnemyModelVertex(fill,a,n,System.Numerics.Vector2.Zero);WriteEnemyModelVertex(fill,b,n,System.Numerics.Vector2.Zero);WriteEnemyModelVertex(fill,c,n,System.Numerics.Vector2.Zero);}
+            if(selected.Mode==AssetMeshSelectionMode.Face){L(a,b);L(b,c);L(c,a);}
+            else if(selected.Mode==AssetMeshSelectionMode.Edge){var q=new[]{a,b,c};L(q[selected.ElementIndex],q[(selected.ElementIndex+1)%3]);}
+            else{float r=Math.Max(.08f,(scene?.Radius??1)*.012f);var pos=selected.Position;L(pos-System.Numerics.Vector3.UnitX*r,pos+System.Numerics.Vector3.UnitX*r);L(pos-System.Numerics.Vector3.UnitY*r,pos+System.Numerics.Vector3.UnitY*r);L(pos-System.Numerics.Vector3.UnitZ*r,pos+System.Numerics.Vector3.UnitZ*r);}
+        }
+        UploadEnemyModelBuffer(assetOverlayVao,assetOverlayVbo,fill,out assetOverlayCount);
+        assetComponentVertexCount=g.Count/6;float len=CamScreenSize(s.Position,72f),head=len*.14f;if(AssetTransformMode==AssetMeshTransformMode.Move)for(int axis=0;axis<3;axis++){var direction=axis==0?System.Numerics.Vector3.UnitX:axis==1?System.Numerics.Vector3.UnitY:System.Numerics.Vector3.UnitZ;var side=axis==1?System.Numerics.Vector3.UnitX:System.Numerics.Vector3.UnitY;var end=s.Position+direction*len;L(s.Position,end);L(end,end-direction*head+side*head*.45f);L(end,end-direction*head-side*head*.45f);}else for(int axis=0;axis<3;axis++)for(int i=0;i<48;i++){float q=i*MathF.Tau/48,r=(i+1)*MathF.Tau/48;var p=axis==0?new System.Numerics.Vector3(0,MathF.Cos(q)*len,MathF.Sin(q)*len):axis==1?new System.Numerics.Vector3(MathF.Cos(q)*len,0,MathF.Sin(q)*len):new System.Numerics.Vector3(MathF.Cos(q)*len,MathF.Sin(q)*len,0);var p2=axis==0?new System.Numerics.Vector3(0,MathF.Cos(r)*len,MathF.Sin(r)*len):axis==1?new System.Numerics.Vector3(MathF.Cos(r)*len,0,MathF.Sin(r)*len):new System.Numerics.Vector3(MathF.Cos(r)*len,MathF.Sin(r)*len,0);L(s.Position+p,s.Position+p2);}UploadLineBuffer(assetGizmoVao,assetGizmoVbo,g,out assetGizmoCount);}
     private void DrawAssetOverlay(){if(assetMeshSelection==null)return;GL.Enable(EnableCap.DepthTest);GL.Enable(EnableCap.Blend);GL.BlendFunc(BlendingFactor.SrcAlpha,BlendingFactor.OneMinusSrcAlpha);GL.Disable(EnableCap.CullFace);GL.Uniform1(uUseTexture,0);GL.Uniform1(uUnlit,1);GL.Uniform1(uOpacity,.38f);GL.Uniform3(uColor,1f,.78f,.05f);GL.BindVertexArray(assetOverlayVao);GL.DrawArrays(PrimitiveType.Triangles,0,assetOverlayCount);GL.Uniform1(uOpacity,1f);GL.Disable(EnableCap.DepthTest);GL.BindVertexArray(assetGizmoVao);GL.Uniform3(uColor,1f,.78f,.05f);GL.LineWidth(4);GL.DrawArrays(PrimitiveType.Lines,0,assetComponentVertexCount);var colors=new[]{(1f,.18f,.14f),(.22f,.9f,.28f),(.18f,.5f,1f)};int axisVertices=AssetTransformMode==AssetMeshTransformMode.Move?6:96;for(int axis=0;axis<3;axis++){bool active=assetGizmoDragging&&assetGizmoAxis==axis+1;GL.Uniform3(uColor,active?1f:colors[axis].Item1,active?1f:colors[axis].Item2,active?.2f:colors[axis].Item3);GL.LineWidth(active?8:5);GL.DrawArrays(PrimitiveType.Lines,assetComponentVertexCount+axis*axisVertices,axisVertices);}GL.LineWidth(1);GL.Disable(EnableCap.Blend);GL.Enable(EnableCap.DepthTest);}
-    private bool TryBeginAssetGizmo(Point mouse){if(!AssetMeshEditingEnabled||assetMeshSelection is not AssetMeshSelection s)return false;float len=CamScreenSize(s.Position,72f),best=10;int axis=0;if(AssetTransformMode==AssetMeshTransformMode.Move){for(int i=0;i<3;i++){var end=s.Position+(i==0?System.Numerics.Vector3.UnitX:i==1?System.Numerics.Vector3.UnitY:System.Numerics.Vector3.UnitZ)*len;if(TryProjectWorldToScreen(s.Position,out var a)&&TryProjectWorldToScreen(end,out var b)){float d=DistancePointToSegment(mouse,a,b);if(d<best){best=d;axis=i+1;}}}}else for(int a=0;a<3;a++)for(int i=0;i<48;i++){float q=i*MathF.Tau/48,r=(i+1)*MathF.Tau/48;System.Numerics.Vector3 P(float v)=>a==0?new(0,MathF.Cos(v)*len,MathF.Sin(v)*len):a==1?new(MathF.Cos(v)*len,0,MathF.Sin(v)*len):new(MathF.Cos(v)*len,MathF.Sin(v)*len,0);if(TryProjectWorldToScreen(s.Position+P(q),out var p)&&TryProjectWorldToScreen(s.Position+P(r),out var p2)){float d=DistancePointToSegment(mouse,p,p2);if(d<best){best=d;axis=a+1;}}}if(axis==0)return false;assetGizmoDragging=true;assetGizmoAxis=axis;assetGizmoMouse=mouse;assetGizmoStart=s.Position;assetGizmoDelta=System.Numerics.Vector3.Zero;assetOverlayDirty=true;Invalidate();return true;}
+    private bool TryBeginAssetGizmo(Point mouse){if(!AssetMeshEditingEnabled||(ModifierKeys&(Keys.Control|Keys.Shift))!=0||assetMeshSelection is not AssetMeshSelection s)return false;float len=CamScreenSize(s.Position,72f),best=10;int axis=0;if(AssetTransformMode==AssetMeshTransformMode.Move){for(int i=0;i<3;i++){var end=s.Position+(i==0?System.Numerics.Vector3.UnitX:i==1?System.Numerics.Vector3.UnitY:System.Numerics.Vector3.UnitZ)*len;if(TryProjectWorldToScreen(s.Position,out var a)&&TryProjectWorldToScreen(end,out var b)){float d=DistancePointToSegment(mouse,a,b);if(d<best){best=d;axis=i+1;}}}}else for(int a=0;a<3;a++)for(int i=0;i<48;i++){float q=i*MathF.Tau/48,r=(i+1)*MathF.Tau/48;System.Numerics.Vector3 P(float v)=>a==0?new(0,MathF.Cos(v)*len,MathF.Sin(v)*len):a==1?new(MathF.Cos(v)*len,0,MathF.Sin(v)*len):new(MathF.Cos(v)*len,MathF.Sin(v)*len,0);if(TryProjectWorldToScreen(s.Position+P(q),out var p)&&TryProjectWorldToScreen(s.Position+P(r),out var p2)){float d=DistancePointToSegment(mouse,p,p2);if(d<best){best=d;axis=a+1;}}}if(axis==0)return false;assetGizmoDragging=true;assetGizmoAxis=axis;assetGizmoMouse=mouse;assetGizmoStart=s.Position;assetGizmoDelta=System.Numerics.Vector3.Zero;assetOverlayDirty=true;Invalidate();return true;}
     private void UpdateAssetGizmo(Point mouse){if(!assetGizmoDragging)return;if(AssetTransformMode==AssetMeshTransformMode.Rotate){float degrees=(mouse.X-assetGizmoMouse.X)*.5f;assetGizmoDelta=assetGizmoAxis==1?new(degrees,0,0):assetGizmoAxis==2?new(0,degrees,0):new(0,0,degrees);}else{if(assetGizmoAxis is 1 or 3&&TryScreenPointOnHorizontalPlane(assetGizmoMouse,assetGizmoStart.Y,out var a)&&TryScreenPointOnHorizontalPlane(mouse,assetGizmoStart.Y,out var b)){var d=b-a;assetGizmoDelta=assetGizmoAxis==1?new(d.X,0,0):new(0,0,d.Z);}else if(assetGizmoAxis==2){float units=Math.Max(.001f,(scene?.Radius??1)/Math.Max(120,Height));assetGizmoDelta=new(0,-(mouse.Y-assetGizmoMouse.Y)*units,0);}assetMeshSelection=assetMeshSelection!.Value with{Position=assetGizmoStart+assetGizmoDelta};}assetOverlayDirty=true;Invalidate();}
     private void EndAssetGizmo(){if(!assetGizmoDragging||assetMeshSelection is not AssetMeshSelection s)return;assetGizmoDragging=false;if(assetGizmoDelta.LengthSquared()>.0000001f){if(AssetTransformMode==AssetMeshTransformMode.Rotate)AssetMeshRotationRequested?.Invoke(s with{Position=assetGizmoStart},assetGizmoDelta);else AssetMeshTranslationRequested?.Invoke(s with{Position=assetGizmoStart},assetGizmoDelta);}assetGizmoAxis=0;assetGizmoDelta=System.Numerics.Vector3.Zero;assetOverlayDirty=true;Invalidate();}
 

@@ -1,4 +1,4 @@
-namespace RE4_PS2_MOD_WORKSPACE;
+﻿namespace RE4_PS2_MOD_WORKSPACE;
 
 public partial class Form1
 {
@@ -114,7 +114,7 @@ public partial class Form1
 
     private bool IsVisualEditorInteractionActive()
     {
-        if (MouseButtons != MouseButtons.None || visualViewport?.Capture == true) return true;
+        if (visualViewport?.CatalogCollisionPicking == true || MouseButtons != MouseButtons.None || visualViewport?.Capture == true) return true;
         if (pgVisualProperties?.ContainsFocus == true) return true;
 
         Control? focused = ActiveControl;

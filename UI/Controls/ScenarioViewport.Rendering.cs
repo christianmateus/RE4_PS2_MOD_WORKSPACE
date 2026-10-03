@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 using RE4_PS2_MOD_WORKSPACE.Core.Effects;
@@ -121,17 +121,17 @@ public sealed partial class ScenarioViewport : GLControl
         data[o++] = n.X; data[o++] = n.Y; data[o++] = n.Z;
     }
 
-    private static float[] BuildGridData(ScenarioScene scene)
+    private float[] BuildGridData(ScenarioScene scene)
     {
-        float radius = scene.Radius;
+        float radius = GridAtWorldOrigin && GridRadiusOverride > 0f ? GridRadiusOverride : scene.Radius;
         float rawStep = Math.Max(1f, radius / 10f);
         float power = (float)Math.Pow(10, Math.Floor(Math.Log10(rawStep)));
         float normalized = rawStep / power;
         float step = normalized < 2f ? power : normalized < 5f ? 2f * power : 5f * power;
         float extent = step * 12f;
-        float y = scene.BoundsMin.Y;
-        float cx = scene.Center.X;
-        float cz = scene.Center.Z;
+        float y = GridAtWorldOrigin ? 0f : scene.BoundsMin.Y;
+        float cx = GridAtWorldOrigin ? 0f : scene.Center.X;
+        float cz = GridAtWorldOrigin ? 0f : scene.Center.Z;
 
         var values = new List<float>(25 * 4 * 6);
         for (int i = -12; i <= 12; i++)
@@ -140,6 +140,14 @@ public sealed partial class ScenarioViewport : GLControl
             float z = cz + i * step;
             AddGridVertex(values, x, y, cz - extent); AddGridVertex(values, x, y, cz + extent);
             AddGridVertex(values, cx - extent, y, z); AddGridVertex(values, cx + extent, y, z);
+        }
+        if(ShowWorldOriginMarker)
+        {
+            float len=step*.65f;
+            AddGridVertex(values,0,0,0);AddGridVertex(values,len,0,0);
+            AddGridVertex(values,0,0,0);AddGridVertex(values,0,len,0);
+            AddGridVertex(values,0,0,0);AddGridVertex(values,0,0,len);
+            for(int i=0;i<32;i++){float a=i*MathF.Tau/32,b=(i+1)*MathF.Tau/32;AddGridVertex(values,MathF.Cos(a)*len*.2f,0,MathF.Sin(a)*len*.2f);AddGridVertex(values,MathF.Cos(b)*len*.2f,0,MathF.Sin(b)*len*.2f);}
         }
         return values.ToArray();
     }
@@ -159,7 +167,14 @@ public sealed partial class ScenarioViewport : GLControl
         GL.Uniform1(uUseTexture, 0);
         GL.BindVertexArray(gridVao);
         GL.LineWidth(1f);
-        GL.DrawArrays(PrimitiveType.Lines, 0, gridVertexCount);
+        int marker=ShowWorldOriginMarker?70:0;
+        GL.DrawArrays(PrimitiveType.Lines, 0, gridVertexCount-marker);
+        if(marker>0){GL.Disable(EnableCap.DepthTest);GL.LineWidth(3);int start=gridVertexCount-marker;
+            GL.Uniform3(uColor,1f,.25f,.2f);GL.DrawArrays(PrimitiveType.Lines,start,2);
+            GL.Uniform3(uColor,.3f,1f,.4f);GL.DrawArrays(PrimitiveType.Lines,start+2,2);
+            GL.Uniform3(uColor,.25f,.6f,1f);GL.DrawArrays(PrimitiveType.Lines,start+4,2);
+            GL.Uniform3(uColor,1f,.85f,.35f);GL.DrawArrays(PrimitiveType.Lines,start+6,64);GL.LineWidth(1);GL.Enable(EnableCap.DepthTest);
+        }
     }
 
     private void DrawMeshGpu()
@@ -422,6 +437,33 @@ public sealed partial class ScenarioViewport : GLControl
             GL.Uniform1(uUnlit,0);
         }
 
+        if (EnemyModelEditWireframeVisible && enemyModelVertexCount > 0)
+        {
+            Matrix4 identity = Matrix4.Identity;
+            GL.UniformMatrix4(uModel, true, ref identity);
+            GL.BindVertexArray(enemyModelVao);
+            GL.Uniform1(uUseTexture, 0);
+            GL.Uniform1(uUnlit, 1);
+            GL.Uniform3(uColor, 1f, 0.78f, 0.08f);
+            GL.Uniform1(uOpacity, 0.55f);
+            GL.Enable(EnableCap.Blend);
+            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            GL.Disable(EnableCap.CullFace);
+            GL.DepthMask(false);
+            GL.LineWidth(1f);
+            GL.Enable(EnableCap.PolygonOffsetLine);
+            GL.PolygonOffset(-1f, -1f);
+            GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
+            GL.DrawArrays(PrimitiveType.Triangles, 0, enemyModelVertexCount);
+            GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
+            GL.Disable(EnableCap.PolygonOffsetLine);
+            GL.DepthMask(true);
+            GL.Enable(EnableCap.CullFace);
+            GL.Disable(EnableCap.Blend);
+            GL.Uniform1(uOpacity, 1f);
+            GL.Uniform1(uUnlit, 0);
+        }
+
         Matrix4 enemyIdentity=Matrix4.Identity;
         GL.UniformMatrix4(uModel,true,ref enemyIdentity);
 
@@ -451,7 +493,7 @@ public sealed partial class ScenarioViewport : GLControl
         var axisColors=new[]{(1f,.16f,.12f),(.18f,.9f,.28f),(.14f,.48f,1f)};
         for(int i=0;i<3;i++)
         {
-            bool active=enemyDragMode!=0&&((enemyDragMode-1)%3)==i;
+            bool active=(enemyDragMode!=0&&((enemyDragMode-1)%3)==i)||enemyFaceGizmoAxis==i+1;
             if(active)GL.Uniform3(uColor,1f,.95f,.3f);else GL.Uniform3(uColor,axisColors[i].Item1,axisColors[i].Item2,axisColors[i].Item3);
             GL.BindVertexArray(enemyGizmoVaos[i]);GL.LineWidth(active?9f:6f);GL.DrawArrays(PrimitiveType.Lines,0,enemyGizmoCounts[i]);
         }

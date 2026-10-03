@@ -6,10 +6,10 @@ public partial class Form1
 
     private async void btnBuildAll_Click(object? sender, EventArgs e) => await RunBuildAllAsync(true);
 
-    private async Task RunBuildAllAsync(bool launchEmulator)
+    private async Task RunBuildAllAsync(bool launchEmulator, bool forceRepackSelectedDats = false)
     {
         if (!RequireWorkspace()) return;
-        if (launchEmulator && (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path))) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (launchEmulator && (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path))) { MessageBox.Show("Configure o PCSX2 em Configurações > Geral.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build All", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         string buildIso = Path.Combine(project.RootPath!, "Build", "RE4_PS2_MOD.iso");
         try
@@ -52,9 +52,11 @@ public partial class Form1
             foreach (var target in targets)
             {
                 var st = target.State; string scenario = Path.GetFileNameWithoutExtension(st.DatName);
+                bool shouldRepack = target.NeedsRepack ||
+                    (forceRepackSelectedDats && selectedKeys?.Contains("dat:" + st.DatName) == true);
                 SetBuildBusy(true, $"Processando {st.DatName}...");
                 WriteLog($"--- {st.DatName} ---");
-                if (target.NeedsRepack)
+                if (shouldRepack)
                 {
                     if (target.PendingTpl > 0)
                     {
@@ -81,9 +83,9 @@ public partial class Form1
                 if (verify.Entries.First(x => x.Index == entry.Index).CurrentSize != buildSize) throw new InvalidDataException($"{st.DatName}: validação após injeção falhou.");
                 var snapshot = await Task.Run(() => ChangeDetectionService.Capture(st.ContentPath!));
                 ChangeDetectionService.Save(GetChangeStatePath(st.DatName), snapshot);
-                if (target.NeedsRepack) st.LastBuildUtc = DateTime.UtcNow;
+                if (shouldRepack) st.LastBuildUtc = DateTime.UtcNow;
                 st.InjectedGeneration = project.BuildIsoGeneration;
-                WriteLog($"{st.DatName}: {(target.NeedsRepack ? "repack + " : "")}Fast Inject concluído ({FormatBytes(buildSize)}).");
+                WriteLog($"{st.DatName}: {(shouldRepack ? "repack + " : "")}Fast Inject concluído ({FormatBytes(buildSize)}).");
             }
             await InjectExtractedAfsFilesIntoBuildIsoAsync(buildIso, selectedKeys);
             if (selectedKeys == null) await InjectCurrentEnemyEslIntoBuildIsoAsync(buildIso);

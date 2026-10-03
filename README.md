@@ -1,6 +1,6 @@
-# RE4 PS2 MOD WORKSPACE — v0.8.1
+# RE4 PS2 MOD WORKSPACE — v0.9.0
 
-![Screenshot](Images/screenshot7.png)
+![Screenshot](Images/screenshot8.png)
 
 > **WIP — Work in Progress**
 
@@ -33,7 +33,8 @@ O **RE4 PS2 MOD WORKSPACE** é uma ferramenta em desenvolvimento para facilitar 
   - Auto-save sem interromper a seleção, Undo/Redo e persistência de camadas, câmera e navegação
 - Editores de inimigos, personagens, armas, áudio, arquivos CNS, animações FCV e mensagens MDT
 - Exportação de animações FCV para edição no Blender e importação de volta
-- Editor do executável com ajustes para testes na versão debug do jogo
+- Conversão interna de modelos BIN ↔ OBJ/SMD, sem executável conversor externo; núcleo adaptado da V.1.5.0 de JADERLINK, com créditos e licenças em `THIRD_PARTY_NOTICES.txt`
+- Editor do executável com ajustes para testes na versão debug do jogo e seleção reversível de trapaças CGH no SLUS-21134, em ELF ou diretamente na ISO
 - Interface traduzível com catálogos de idioma e opção de iniciar maximizado
 - Feedback de carregamento e build, detecção de modificações e limpeza completa do workspace
 

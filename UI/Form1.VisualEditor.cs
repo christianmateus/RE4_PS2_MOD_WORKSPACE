@@ -32,7 +32,7 @@ public partial class Form1
             }
             pnlVisualPropertiesHost.Visible=!settings.VisualPropertiesPanelCollapsed;
             tblVisualWorkspaceRight.ColumnStyles[1].Width=settings.VisualPropertiesPanelCollapsed?0F:(tblVisualWorkspaceRight.ClientSize.Width<850?260F:310F);
-            if(btnVisualLayersToggle!=null){btnVisualLayersToggle.Text=settings.VisualLayersPanelCollapsed?"MOSTRAR LAYERS":"OCULTAR LAYERS";btnVisualLayersToggle.AccessibleName=settings.VisualLayersPanelCollapsed?"Mostrar Layers e abas":"Recolher Layers e abas";}
+            if(btnVisualLayersToggle!=null){btnVisualLayersToggle.Text=settings.VisualLayersPanelCollapsed?"MOSTRAR CAMADAS":"OCULTAR CAMADAS";btnVisualLayersToggle.AccessibleName=settings.VisualLayersPanelCollapsed?"Mostrar camadas e abas":"Recolher camadas e abas";}
             if(btnVisualPropertiesToggle!=null){btnVisualPropertiesToggle.Text=settings.VisualPropertiesPanelCollapsed?"MOSTRAR PROPS":"OCULTAR PROPS";btnVisualPropertiesToggle.AccessibleName=settings.VisualPropertiesPanelCollapsed?"Mostrar Propriedades":"Recolher Propriedades";}
             splitVisualWorkspace.PerformLayout();
         }
@@ -79,6 +79,7 @@ public partial class Form1
     private readonly List<(string Path,int MeshIndex,int FaceIndex,int EdgeSlot)> visualCollisionMarkedEdges=new();
     private bool syncingVisualLitFile;
     private bool syncingVisualRtpSelection;
+    private bool syncingVisualEmiSelection;
     private bool syncingVisualCamFrameSelection;
     private int[] selectedVisualCamFrames=Array.Empty<int>();
     private CamPreviewForm? visualCamPreview;
@@ -125,6 +126,7 @@ public partial class Form1
     private string? visualSatPath;
     private string? visualEatPath;
     private string? visualRtpPath;
+    private string? visualEmiPath;
     private string? visualCamPath;
     private string? visualLitPath;
     private LitScene? visualLitScene;
@@ -248,6 +250,8 @@ public partial class Form1
 
                 if (!item.DatName.Equals(project.ActiveDatName, StringComparison.OrdinalIgnoreCase)) ActivateTextureDat(item);
 
+                EnsureVisualEnemyEslForScenario(item.DatName);
+
                 await LoadVisualDatAsync(item);
             }
         }
@@ -259,7 +263,10 @@ public partial class Form1
         await EnsureDefaultVisualEnemyEslAsync();
         RefreshVisualDatList();
         if (cmbVisualDat.SelectedItem is TextureDatItem item)
+        {
+            EnsureVisualEnemyEslForScenario(item.DatName);
             await LoadVisualDatAsync(item);
+        }
         else
             ClearVisualEditor("Nenhum DAT extraído disponível.");
     }
@@ -688,7 +695,7 @@ public partial class Form1
             btnVisualEditCns.Enabled = visualCnsPath != null;
             btnVisualEditCns.Text = visualCnsPath == null ? "SEM CNS" : "EDITAR CNS";
 
-            (string? smd, string? aev, string? etm, string? ets, string? sat, string? eat, string? lit, string? eff, string? rtp, string? cam) = FindVisualFiles(content, item.DatName);
+            (string? smd, string? aev, string? etm, string? ets, string? sat, string? eat, string? lit, string? eff, string? rtp, string? emi, string? cam) = FindVisualFiles(content, item.DatName);
             visualSmdPath = smd;
             visualAevPath = aev;
             visualEtmPath = etm;
@@ -698,6 +705,7 @@ public partial class Form1
             visualLitPath = lit;
             visualEffPath = eff;
             visualRtpPath = rtp;
+            visualEmiPath = emi;
             visualCamPath = cam;
             visualAevModified = false;
             visualCollisionModified = false;
@@ -785,6 +793,10 @@ public partial class Form1
             RefreshVisualRtpNodes();
             if (rtpScene != null) ExtractLog($"Visual Editor: RTP carregado: {Path.GetFileName(rtp)} • {rtpScene.Nodes.Count:N0} waypoints • {rtpScene.Connections.Count:N0} conexões direcionadas.");
 
+            EmiScene? emiScene = emi == null ? null : await Task.Run(() => Ps2EmiReader.Read(emi));
+            visualViewport.SetEmiScene(emiScene); WireVisualEmiEvents(); RefreshVisualEmiEntries();
+            if (emiScene != null) ExtractLog($"Visual Editor: EMI carregado: {Path.GetFileName(emi)} • {emiScene.Entries.Count:N0} ponto(s)."+(emiScene.WasEmptyFile?" • arquivo vazio compatível.":string.Empty));
+
             CamScene? camScene=cam==null?null:await Task.Run(()=>Ps2CamReader.Read(cam));visualViewport.SetCamScene(camScene);WireVisualCamEvents();RefreshVisualCamEntries();btnVisualAddCam.Enabled=camScene!=null;
             if(camScene!=null)ExtractLog($"Visual Editor: CAM carregado: {Path.GetFileName(cam)} • {camScene.Count} zonas • {camScene.CameraCount} câmeras.");
 
@@ -801,7 +813,7 @@ public partial class Form1
                 string[] coreEffs=FindCoreEffFiles();
                 (visualEffScene,visualEffTextures)=await Task.Run(()=>(Ps2EffReader.Read(eff),EffTextureCatalog.Build(eff,coreEffs)));visualViewport.SetEffScene(visualEffScene);LoadVisualEffViewportTextures();WireVisualEffEvents();RefreshVisualEffEntries();
                 ExtractLog($"Visual Editor: EFF carregado: {Path.GetFileName(eff)} • {visualEffScene.EstGroups.Count} grupos EST • {visualEffScene.SstGroups.Count} grupos SST • {visualEffScene.EntryCount} efeitos.");
-                ExtractLog($"Visual Editor: diagnóstico EFF • {visualViewport.FireEmitterCount} emissores de fogo • {visualViewport.EffTextureCount} texturas enviadas ao viewport • camada ligada.");
+                ExtractLog($"Visual Editor: diagnóstico EFF • {visualViewport.FireEmitterCount} fogo • {visualViewport.WeatherEffectCount} clima/chuva • {visualViewport.WaterSurfaceCount} superfície(s) de água • {visualViewport.EffTextureCount} texturas no viewport.");
             }
             else{visualEffScene=null;visualEffTextures=null;visualViewport.SetEffScene(null);lstVisualEffEntries.Items.Clear();ClearVisualEffTexture();}
 
@@ -918,13 +930,35 @@ public partial class Form1
     private void ConnectSelectedRtpNodes(){if(visualViewport?.ConnectSelectedRtpNodes()==false)ExtractLog("RTP: selecione exatamente 2 waypoints ainda não conectados.");}
     private void DeleteSelectedRtpNode(){visualViewport?.DeleteSelectedRtpNode();}
 
-    private static (string? Smd, string? Aev, string? Etm, string? Ets, string? Sat, string? Eat, string? Lit, string? Eff, string? Rtp, string? Cam) FindVisualFiles(string content, string datName)
+    private void WireVisualEmiEvents()
+    {
+        visualViewport.EmiEntrySelected-=visualViewport_EmiEntrySelected;visualViewport.EmiEntrySelected+=visualViewport_EmiEntrySelected;
+        visualViewport.EmiSceneEdited-=visualViewport_EmiSceneEdited;visualViewport.EmiSceneEdited+=visualViewport_EmiSceneEdited;
+    }
+    private void visualViewport_EmiEntrySelected(EmiEntry? entry)
+    {
+        syncingVisualEmiSelection=true;try{lstVisualEmiEntries.ClearSelected();if(entry!=null&&entry.Index<lstVisualEmiEntries.Items.Count)lstVisualEmiEntries.SelectedIndex=entry.Index;}finally{syncingVisualEmiSelection=false;}
+        pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • EMI #{entry.Index:D3}";
+        if(entry!=null)tabVisualEntities.SelectedTab=tabVisualEmi;
+    }
+    private void visualViewport_EmiSceneEdited(){RefreshVisualEmiEntries(visualViewport.SelectedEmiEntryIndex);pgVisualProperties.Refresh();UpdateTopVisualSaveState();}
+    private void RefreshVisualEmiEntries(int selected=-1){if(lstVisualEmiEntries==null)return;syncingVisualEmiSelection=true;lstVisualEmiEntries.BeginUpdate();try{lstVisualEmiEntries.Items.Clear();if(visualViewport?.EmiScene is EmiScene scene)foreach(EmiEntry entry in scene.Entries)lstVisualEmiEntries.Items.Add(entry);if(selected>=0&&selected<lstVisualEmiEntries.Items.Count)lstVisualEmiEntries.SelectedIndex=selected;}finally{lstVisualEmiEntries.EndUpdate();syncingVisualEmiSelection=false;}}
+    private void lstVisualEmiEntries_SelectedIndexChanged(object? sender,EventArgs e){if(syncingVisualEmiSelection)return;EmiEntry? entry=lstVisualEmiEntries.SelectedItem as EmiEntry;visualViewport?.SelectEmiEntry(entry?.Index??-1);pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • EMI #{entry.Index:D3}";}
+    private void lstVisualEmiEntries_KeyDown(object? sender,KeyEventArgs e){if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedEmiEntry();e.Handled=e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){DeleteSelectedEmiEntry();e.Handled=e.SuppressKeyPress=true;}}
+    private void AddEmiEntry(){if(visualViewport?.AddEmiEntry()==true)RefreshVisualEmiEntries(visualViewport.SelectedEmiEntryIndex);}
+    private void DuplicateSelectedEmiEntry(){if(visualViewport?.DuplicateSelectedEmiEntry()==true)RefreshVisualEmiEntries(visualViewport.SelectedEmiEntryIndex);}
+    private void DeleteSelectedEmiEntry(){if(visualViewport?.DeleteSelectedEmiEntry()==true){RefreshVisualEmiEntries();pgVisualProperties.SelectedObject=null;}}
+
+    private static (string? Smd, string? Aev, string? Etm, string? Ets, string? Sat, string? Eat, string? Lit, string? Eff, string? Rtp, string? Emi, string? Cam) FindVisualFiles(string content, string datName)
     {
         string datBase = Path.GetFileNameWithoutExtension(datName);
-        string[] smds = Directory.GetFiles(content, "*.SMD", SearchOption.AllDirectories)
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
-        string[] aevs = Directory.GetFiles(content, "*.AEV", SearchOption.AllDirectories)
-            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+        string[] Files(string pattern)=>Directory.GetFiles(content,pattern,SearchOption.AllDirectories)
+            .Where(path=>!Path.GetRelativePath(content,path).Split(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar)
+                .Any(part=>part.Contains("backup",StringComparison.OrdinalIgnoreCase)||part.Contains("recovery",StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(path=>Path.GetRelativePath(content,path).Count(c=>c==Path.DirectorySeparatorChar||c==Path.AltDirectorySeparatorChar))
+            .ThenBy(path=>path,StringComparer.OrdinalIgnoreCase).ToArray();
+        string[] smds = Files("*.SMD");
+        string[] aevs = Files("*.AEV");
 
         string? smd = smds.FirstOrDefault(x => Path.GetFileNameWithoutExtension(x).Equals(datBase, StringComparison.OrdinalIgnoreCase))
             ?? smds.FirstOrDefault();
@@ -934,17 +968,18 @@ public partial class Form1
             ?? aevs.FirstOrDefault(x => Path.GetFileNameWithoutExtension(x).Equals(datBase, StringComparison.OrdinalIgnoreCase))
             ?? aevs.FirstOrDefault();
 
-        string? etm = Directory.GetFiles(content, "*.ETM", SearchOption.AllDirectories).OrderBy(x => x).FirstOrDefault();
-        string? ets = Directory.GetFiles(content, "*.ETS", SearchOption.AllDirectories).OrderBy(x => x).FirstOrDefault();
-        string? sat = Directory.GetFiles(content, "*.SAT", SearchOption.AllDirectories).OrderBy(x => x).FirstOrDefault();
-        string? eat = Directory.GetFiles(content, "*.EAT", SearchOption.AllDirectories).OrderBy(x => x).FirstOrDefault();
-        string? lit = Directory.GetFiles(content, "*.LIT", SearchOption.AllDirectories).OrderBy(x => x).FirstOrDefault();
-        string[] effs=Directory.GetFiles(content,"*.EFF",SearchOption.AllDirectories).OrderBy(x=>x,StringComparer.OrdinalIgnoreCase).ToArray();
+        string? etm = Files("*.ETM").FirstOrDefault();
+        string? ets = Files("*.ETS").FirstOrDefault();
+        string? sat = Files("*.SAT").FirstOrDefault();
+        string? eat = Files("*.EAT").FirstOrDefault();
+        string? lit = Files("*.LIT").FirstOrDefault();
+        string[] effs=Files("*.EFF");
         string? eff=effs.FirstOrDefault(x=>Path.GetFileNameWithoutExtension(x).Equals(preferredBase,StringComparison.OrdinalIgnoreCase))??effs.FirstOrDefault(x=>Path.GetFileNameWithoutExtension(x).Equals(datBase,StringComparison.OrdinalIgnoreCase))??effs.FirstOrDefault();
-        string? rtp = Directory.GetFiles(content, "*.RTP", SearchOption.AllDirectories).OrderBy(x => x).FirstOrDefault();
-        string[] cams=Directory.GetFiles(content,"*.CAM",SearchOption.AllDirectories).Where(IsSupportedCamFile).OrderBy(x=>x,StringComparer.OrdinalIgnoreCase).ToArray();
+        string? rtp = Files("*.RTP").FirstOrDefault();
+        string? emi = Files("*.EMI").FirstOrDefault();
+        string[] cams=Files("*.CAM").Where(IsSupportedCamFile).ToArray();
         string? cam=cams.FirstOrDefault(x=>Path.GetFileNameWithoutExtension(x).Equals(preferredBase,StringComparison.OrdinalIgnoreCase))??cams.FirstOrDefault(x=>Path.GetFileNameWithoutExtension(x).StartsWith(datBase+"_",StringComparison.OrdinalIgnoreCase))??cams.FirstOrDefault();
-        return (smd, aev, etm, ets, sat, eat, lit, eff, rtp, cam);
+        return (smd, aev, etm, ets, sat, eat, lit, eff, rtp, emi, cam);
     }
 
     private static bool IsSupportedCamFile(string path)
@@ -958,7 +993,7 @@ public partial class Form1
         visualSmdPath = null;
         visualAevPath = null;
         visualEtmPath = null; visualEtsPath = null; visualEtmCatalog = null; visualEtsScene = null;
-        visualSatPath = null; visualEatPath = null; visualRtpPath = null; visualCamPath=null;
+        visualSatPath = null; visualEatPath = null; visualRtpPath = null; visualEmiPath=null; visualCamPath=null;
         visualLitPath=null;visualLitScene=null;
         visualEffPath=null;visualEffScene=null;visualEffTextures=null;
         ClearVisualIta();
@@ -973,8 +1008,10 @@ public partial class Form1
         visualViewport?.SetLitScene(null);
         visualViewport?.SetEffScene(null);
         visualViewport?.SetRtpScene(null);
+        visualViewport?.SetEmiScene(null);
         visualViewport?.SetCamScene(null);
         lstVisualRtpNodes?.Items.Clear();
+        lstVisualEmiEntries?.Items.Clear();
         lstVisualCamEntries?.Items.Clear();lstVisualCamParts?.Items.Clear();
         cmbVisualCollisionMesh?.Items.Clear();
         visualViewport?.SetTextureSource(null);
@@ -1178,6 +1215,19 @@ public partial class Form1
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Salvar RTP",MessageBoxButtons.OK,MessageBoxIcon.Error);ExtractLog("Visual Editor: erro ao salvar RTP: "+ex.Message);return false;}
     }
 
+    private bool SaveVisualEmi()
+    {
+        EmiScene? scene=visualViewport?.EmiScene;
+        if(scene?.IsModified!=true||string.IsNullOrWhiteSpace(visualEmiPath))return false;
+        try
+        {
+            bool backup=Ps2EmiWriter.Save(scene,GetVisualAevBackupPath(visualEmiPath));
+            EmiScene reloaded=Ps2EmiReader.Read(visualEmiPath);visualViewport!.SetEmiScene(reloaded);WireVisualEmiEvents();RefreshVisualEmiEntries();
+            ExtractLog($"Visual Editor: EMI salvo e validado: {Path.GetFileName(visualEmiPath)} • {reloaded.Entries.Count} ponto(s)."+(backup?" • backup inicial preservado.":string.Empty));UpdateTopVisualSaveState();return true;
+        }
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Salvar EMI",MessageBoxButtons.OK,MessageBoxIcon.Error);ExtractLog("Visual Editor: erro ao salvar EMI: "+ex.Message);return false;}
+    }
+
     private async Task<bool> SaveVisualAevAsync()
     {
         AevScene? scene = visualViewport?.AevScene;
@@ -1220,6 +1270,7 @@ public partial class Form1
         if (visualEffScene?.IsModified == true) savedAnything |= SaveVisualEff();
         if (visualCollisionModified) savedAnything |= SaveVisualCollision(reloadAfterSave: !preserveEditorState);
         if (visualViewport?.RtpScene?.IsModified == true) savedAnything |= SaveVisualRtp();
+        if (visualViewport?.EmiScene?.IsModified == true) savedAnything |= SaveVisualEmi();
         if (visualViewport?.CamScene?.IsModified == true) savedAnything |= SaveVisualCam();
         string? activeContent = GetActiveContentPath();
         if (!string.IsNullOrWhiteSpace(activeContent) && Directory.Exists(activeContent))
@@ -1234,7 +1285,7 @@ public partial class Form1
         if (savedAnything)
         {
             if(updateUi) { lblVisualStatus.UseMnemonic = false; lblVisualStatus.Text = "Salvo • pronto para Build & Test"; }
-            ExtractLog("Visual Editor: dados carregados salvos (SMD/AEV/ESL/ETS/ITA/ESE/FSE/DSE/LIT/EFF/RTP/CAM). O Build & Test reinserirá os arquivos automaticamente na ISO de Build.");
+            ExtractLog("Visual Editor: dados carregados salvos (SMD/AEV/ESL/ETS/ITA/ESE/FSE/DSE/LIT/EFF/RTP/EMI/CAM). O Build & Test reinserirá os arquivos automaticamente na ISO de Build.");
         }
         UpdateTopVisualSaveState();
         return savedAnything;
@@ -1262,7 +1313,7 @@ public partial class Form1
         visualViewport?.Scene?.IsModified == true ||
         visualAevModified || enemySceneModified || visualCollisionModified || visualItaScene?.IsModified == true || visualEseScene?.IsModified == true || visualFseScene?.IsModified == true || visualDseScene?.IsModified == true ||
         visualEtsScene?.IsModified == true || visualLitScene?.IsModified == true ||
-        visualEffScene?.IsModified == true || visualViewport?.RtpScene?.IsModified == true ||
+        visualEffScene?.IsModified == true || visualViewport?.RtpScene?.IsModified == true || visualViewport?.EmiScene?.IsModified == true ||
         visualViewport?.CamScene?.IsModified == true;
 
     private void UpdateTopVisualSaveState()
@@ -1276,6 +1327,7 @@ public partial class Form1
 
     private async void Form1_GlobalKeyDown(object? sender, KeyEventArgs e)
     {
+        if(visualViewport?.CatalogCollisionPicking==true){if(e.KeyCode==Keys.Escape)CancelCatalogCollisionSelection?.Invoke();if(e.Control||e.KeyCode is Keys.Delete or Keys.G or Keys.R or Keys.Escape){e.Handled=true;e.SuppressKeyPress=true;}return;}
         bool visualOpen = pnlVisualEditor != null && pnlVisualEditor.Visible;
         bool enemiesOpen = pnlEnemies != null && pnlEnemies.Visible;
         bool messagesOpen = pnlMessages != null && pnlMessages.Visible;
@@ -1595,7 +1647,9 @@ public partial class Form1
 
     private void pgVisualProperties_PropertyValueChanged(object? sender, PropertyValueChangedEventArgs e)
     {
-        if(pgVisualProperties.SelectedObject is EsatFaceInspection collisionFace){visualCollisionModified=true;btnVisualCollisionSave.Enabled=true;visualViewport?.RefreshCollisionDisplay();pgVisualProperties.Refresh();UpdateTopVisualSaveState();return;}
+        if(pgVisualProperties.SelectedObject is EmiEntry emiEntry)
+        {if(visualViewport?.EmiScene is EmiScene scene)scene.IsModified=true;visualViewport?.RefreshEmiGeometry(emiEntry);lstVisualEmiEntries.Refresh();UpdateTopVisualSaveState();return;}
+        if(pgVisualProperties.SelectedObject is EsatFaceInspection collisionFace){visualCollisionModified=(visualViewport?.SatCollision?.Meshes.Any(m=>m.IsModified)??false)||(visualViewport?.EatCollision?.Meshes.Any(m=>m.IsModified)??false);btnVisualCollisionSave.Enabled=visualCollisionModified;visualViewport?.RefreshCollisionDisplay();pgVisualProperties.Refresh();UpdateTopVisualSaveState();return;}
         if(pgVisualProperties.SelectedObject is EseEntry){MarkSoundModified(true);lstVisualEseEntries.Refresh();return;}
         if(pgVisualProperties.SelectedObject is FseEntry){MarkSoundModified(false);lstVisualFseEntries.Refresh();return;}
         if(pgVisualProperties.SelectedObject is DseEntry){MarkDseModified();lstVisualDseEntries.Refresh();return;}
@@ -1621,6 +1675,23 @@ public partial class Form1
         if (pgVisualProperties.SelectedObject is ScenarioEntry smdEntry)
         {
             ScenarioEntry[] smdEntries=pgVisualProperties.SelectedObjects.OfType<ScenarioEntry>().ToArray();if(smdEntries.Length==0)smdEntries=new[]{smdEntry};
+            foreach(var linkedEntry in smdEntries)UpdateSmdCatalogCollision(linkedEntry);
+            if(e.ChangedItem.PropertyDescriptor?.Name==nameof(ScenarioEntry.SmxId))
+            {
+                ScenarioScene scene=visualViewport.Scene!;
+                foreach(ScenarioEntry selectedEntry in smdEntries)
+                {
+                    selectedEntry.Smx=scene.Smx?.Find(selectedEntry.SmxId);
+                    visualViewport.RefreshSmdGeometry(selectedEntry);
+                }
+                scene.IsModified=true;
+                lstVisualSmdEntries.Refresh();btnVisualSaveSmd.Text="SAVE SMD *";
+                // Force PropertyGrid to rebuild the expandable child descriptor: a
+                // changed ID can turn Propriedades SMX from null into a SmxRecord.
+                pgVisualProperties.SelectedObjects=smdEntries.Cast<object>().ToArray();
+                lblVisualStatus.Text=smdEntry.Smx!=null?$"Entry {smdEntry.FileOrder:D3} associada ao SMX 0x{smdEntry.SmxId:X2}":$"Entry {smdEntry.FileOrder:D3}: sem registro SMX 0x{smdEntry.SmxId:X2}";
+                UpdateTopVisualSaveState();return;
+            }
             if(e.ChangedItem.PropertyDescriptor?.Name==nameof(ScenarioEntry.BinId))
             {
                 ScenarioScene scene=visualViewport.Scene!;
@@ -1798,6 +1869,8 @@ public partial class Form1
         if(eff!=null)modified += $" • {eff.EntryCount:N0} effects"+(eff.IsModified?" • EFF Modified":"");
         RtpScene? rtp=visualViewport?.RtpScene;
         if(rtp!=null)modified += $" • {rtp.Nodes.Count:N0} RTP nodes"+(rtp.IsModified?" • RTP Modified":"");
+        EmiScene? emi=visualViewport?.EmiScene;
+        if(emi!=null)modified += $" • {emi.Entries.Count:N0} EMI"+(emi.IsModified?" • EMI Modified":"");
         if(visualEseScene!=null)modified += $" • {visualEseScene.Entries.Count:N0} ESE"+(visualEseScene.IsModified?" • ESE Modified":"");
         if(visualFseScene!=null)modified += $" • {visualFseScene.Entries.Count:N0} FSE"+(visualFseScene.IsModified?" • FSE Modified":"");
         if(visualDseScene!=null)modified += $" • {visualDseScene.Entries.Count:N0} DSE"+(visualDseScene.IsModified?" • DSE Modificado":"");
@@ -1807,7 +1880,7 @@ public partial class Form1
         else if (scene != null) lblVisualStatus.Text = $"{scene.Triangles.Count:N0} tris • {visualViewport.LoadedTextureCount:N0} tex";
         else if (aev != null) lblVisualStatus.Text = $"{aev.Count:N0} AEV{modified}";
         else if(esl != null) lblVisualStatus.Text = $"{esl.ActiveCount:N0} enemies{modified}";
-        else lblVisualStatus.Text = "v0.8.1 • Visual Editor";
+        else lblVisualStatus.Text = "v0.9.0 • Visual Editor";
         UpdateTopVisualSaveState();
     }
 
@@ -1861,6 +1934,7 @@ public partial class Form1
         if(clbVisualLayers.Items.Count>8)clbVisualLayers.SetItemChecked(8,settings.VisualCamLayer);
         if(clbVisualLayers.Items.Count>9)clbVisualLayers.SetItemChecked(9,settings.VisualItaLayer);
         if(clbVisualLayers.Items.Count>10)clbVisualLayers.SetItemChecked(10,settings.VisualSoundLayer);
+        if(clbVisualLayers.Items.Count>11)clbVisualLayers.SetItemChecked(11,settings.VisualEmiLayer);
         if (visualViewport != null && !visualViewport.IsDisposed)
         {
             visualViewport.ScenarioVisible = settings.VisualScenarioLayer;
@@ -1870,16 +1944,19 @@ public partial class Form1
             visualViewport.CollisionVisible = settings.VisualCollisionLayer;
             visualViewport.LightingVisible = settings.VisualLightingLayer;
             visualViewport.EffectsVisible = settings.VisualEffectsLayer;
+            visualViewport.EffMistVisible = settings.VisualEffMistVisible;
             visualViewport.RtpVisible = settings.VisualRtpLayer;
             visualViewport.CamVisible=settings.VisualCamLayer;
             visualViewport.ItaVisible=settings.VisualItaLayer;
             visualViewport.SoundVisible=settings.VisualSoundLayer;
+            visualViewport.EmiVisible=settings.VisualEmiLayer;
             visualViewport.EnemySnapEnabled = settings.VisualEnemySnap;
         }
         if(chkVisualCollisionSat!=null)chkVisualCollisionSat.Checked=settings.VisualCollisionSatVisible;
         if(chkVisualCollisionEat!=null)chkVisualCollisionEat.Checked=settings.VisualCollisionEatVisible;
         if(chkVisualEnemySnap!=null) chkVisualEnemySnap.Checked=settings.VisualEnemySnap;
         if(chkVisualEnemyAnimated!=null) chkVisualEnemyAnimated.Checked=settings.VisualEnemyAnimated;
+        if(chkVisualEffMist!=null) chkVisualEffMist.Checked=settings.VisualEffMistVisible;
         SetEnemyGizmoMode(EnemyGizmoMode.Move);
     }
 
@@ -2052,6 +2129,7 @@ public partial class Form1
             if(eat is not null&&eat.Meshes.Any(x=>x.IsModified))saved|=Ps2EsatVertexWriter.Save(eat,Path.Combine(root,".workspace","backups",dat,Path.GetFileName(eat.SourcePath)+".bak"));
             if(saved)
             {
+                PersistSmdCatalogCollisionLinks();
                 if (reloadAfterSave)
                 {
                     EsatFile? refreshedSat=sat is null?null:Ps2EsatReader.Read(sat.SourcePath,EsatKind.Sat);
@@ -2093,6 +2171,7 @@ public partial class Form1
             case 8: settings.VisualCamLayer = visible; if (visualViewport != null) visualViewport.CamVisible = visible; break;
             case 9: settings.VisualItaLayer = visible; if (visualViewport != null) visualViewport.ItaVisible = visible; break;
             case 10: settings.VisualSoundLayer = visible; if (visualViewport != null) visualViewport.SoundVisible = visible; break;
+            case 11: settings.VisualEmiLayer = visible; if (visualViewport != null) visualViewport.EmiVisible = visible; break;
             default: return;
         }
         visualViewport?.Invalidate();
@@ -2381,7 +2460,11 @@ public partial class Form1
     }
     private void lstVisualSmdEntries_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;if(entry!=null)ClearVisualItaSelectionForOtherEntity();if(selected.Length>1)pgVisualProperties.SelectedObjects=selected.Cast<object>().ToArray();else pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=selected.Length>1?$"PROPERTIES • {selected.Length} SMD ENTRIES":entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • SMD ENTRY {entry.FileOrder:D3} • BIN {entry.BinId:D3}";visualViewport.SelectSmdEntries(selected,entry);btnVisualSmdImport.Enabled=entry!=null;btnVisualSmdDuplicate.Enabled=entry!=null;UpdateSmdTexturePreview(entry);
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;
+        // Re-resolve on every selection. This also repairs stale/null links after
+        // changing an ID, reloading a scene or editing several entries together.
+        Ps2SmxFile? smx=visualViewport?.Scene?.Smx;foreach(ScenarioEntry item in selected)item.Smx=smx?.Find(item.SmxId);
+        if(entry!=null)ClearVisualItaSelectionForOtherEntity();if(selected.Length>1)pgVisualProperties.SelectedObjects=selected.Cast<object>().ToArray();else pgVisualProperties.SelectedObject=entry;lblVisualPropertiesTitle.Text=selected.Length>1?$"PROPERTIES • {selected.Length} SMD ENTRIES":entry==null?"PROPERTIES • SELECTION":$"PROPERTIES • SMD ENTRY {entry.FileOrder:D3} • BIN {entry.BinId:D3}";visualViewport.SelectSmdEntries(selected,entry);btnVisualSmdImport.Enabled=entry!=null;btnVisualSmdDuplicate.Enabled=entry!=null;UpdateSmdTexturePreview(entry);
     }
     private void UpdateSmdTexturePreview(ScenarioEntry? entry)
     {
@@ -2424,23 +2507,88 @@ public partial class Form1
     private void visualViewport_DuplicateSmdRequested()=>DuplicateSelectedSmd();
     private void visualViewport_DeleteSmdRequested()=>DeleteSelectedSmdEntries();
     private void visualViewport_SmdEntryEdited(ScenarioEntry entry)
-    { btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();if(ReferenceEquals(pgVisualProperties.SelectedObject,entry))pgVisualProperties.Refresh();UpdateTopVisualSaveState(); }
+    { UpdateSmdCatalogCollision(entry);btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();if(ReferenceEquals(pgVisualProperties.SelectedObject,entry))pgVisualProperties.Refresh();UpdateTopVisualSaveState(); }
     private void SetSmdGizmoMode(SmdGizmoMode mode)
     { if(visualViewport==null)return;visualViewport.SmdTransformMode=mode;visualViewport.RefreshSmdGeometry(lstVisualSmdEntries.SelectedItem as ScenarioEntry);btnVisualSmdMove.BackColor=mode==SmdGizmoMode.Move?Accent:Surface2;btnVisualSmdRotate.BackColor=mode==SmdGizmoMode.Rotate?Accent:Surface2;btnVisualSmdScale.BackColor=mode==SmdGizmoMode.Scale?Accent:Surface2; }
     private void SetSmdSelectionMode(SmdMeshSelectionMode mode)
     {if(visualViewport==null)return;visualViewport.SetSmdSelectionMode(mode);btnVisualSmdVertex.BackColor=mode==SmdMeshSelectionMode.Vertex?Accent:Surface2;btnVisualSmdEdge.BackColor=mode==SmdMeshSelectionMode.Edge?Accent:Surface2;btnVisualSmdFace.BackColor=mode==SmdMeshSelectionMode.Face?Accent:Surface2;}
     private void CreateSelectedSmdSmx()
     {
-        ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry==null||scene?.Smx==null||entry.Smx!=null)return;
-        byte id=entry.SmxId;
-        if(id==0xFF){MessageBox.Show(this,"Esta entry está marcada como não utilizada (SMX ID 0xFF).","Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
-        if(id==0xFE)
+        ScenarioEntry[] entries=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();if(entries.Length==0&&lstVisualSmdEntries.SelectedItem is ScenarioEntry current)entries=new[]{current};ScenarioScene? scene=visualViewport?.Scene;if(entries.Length==0||scene?.Smx==null||entries.Any(x=>x.Smx!=null))return;
+        if(entries.Any(x=>x.SmxId==0xFF)){MessageBox.Show(this,"A seleção contém uma entry marcada como não utilizada (SMX ID 0xFF).","Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
+        byte id=entries.Length==1?entries[0].SmxId:(byte)0xFE;
+        if(entries.Length>1||id==0xFE)
         {
-            HashSet<byte> used=scene.Entries.Select(x=>x.SmxId).Concat(scene.Smx.Records.Select(x=>x.Id)).ToHashSet();int free=Enumerable.Range(0,250).FirstOrDefault(x=>!used.Contains((byte)x),-1);if(free<0){MessageBox.Show(this,"Não há IDs SMX livres entre 0x00 e 0xF9.","Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}id=(byte)free;entry.SetSmxId(id);
+            HashSet<byte> used=scene.Entries.Select(x=>x.SmxId).Concat(scene.Smx.Records.Select(x=>x.Id)).ToHashSet();int free=Enumerable.Range(0,250).FirstOrDefault(x=>!used.Contains((byte)x),-1);if(free<0){MessageBox.Show(this,"Não há IDs SMX livres entre 0x00 e 0xF9.","Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}id=(byte)free;
         }
-        try{entry.Smx=scene.Smx.AddDefault(id);scene.IsModified=true;pgVisualProperties.Refresh();lstVisualSmdEntries.Refresh();btnVisualSaveSmd.Text="SAVE SMD *";UpdateTopVisualSaveState();ExtractLog($"Visual Editor: registro SMX padrão criado para a entry {entry.FileOrder:D3}, ID 0x{id:X2}.");}
+        try{SmxRecord record=scene.Smx.AddDefault(id);foreach(ScenarioEntry entry in entries){entry.SetSmxId(id);entry.Smx=record;visualViewport?.RefreshSmdGeometry(entry);}scene.IsModified=true;pgVisualProperties.SelectedObjects=entries.Cast<object>().ToArray();lstVisualSmdEntries.Refresh();btnVisualSaveSmd.Text="SAVE SMD *";UpdateTopVisualSaveState();ExtractLog($"Visual Editor: registro SMX 0x{id:X2} criado e associado a {entries.Length} entry(s).");}
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Criar SMX",MessageBoxButtons.OK,MessageBoxIcon.Error);}
     }
+
+    private void NormalizeSelectedSmdLighting()
+    {
+        ScenarioEntry? target=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;
+        if(target==null||scene?.Smx==null||target.LocalTriangles.Count==0)return;
+
+        Vector3 source=AverageSmdVertexColor(target);
+        float sourceLevel=(source.X+source.Y+source.Z)/3f;
+        if(sourceLevel<0.001f){MessageBox.Show(this,"O BIN selecionado possui vertex colors pretos ou inválidos e não pode ser normalizado automaticamente.","Normalizar iluminação",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
+
+        var candidates=scene.Entries
+            .Where(x=>x.BinId!=target.BinId&&x.LocalTriangles.Count>0)
+            .Select(x=>new{Entry=x,Color=AverageSmdVertexColor(x),Distance=Vector3.Distance(x.Position,target.Position)})
+            .Where(x=>IsUsableSmdReferenceColor(x.Color))
+            .GroupBy(x=>x.Entry.BinId).Select(x=>x.OrderBy(v=>v.Distance).First())
+            .OrderBy(x=>x.Distance).Take(8).ToArray();
+        if(candidates.Length==0){MessageBox.Show(this,"Não foram encontrados objetos próximos com vertex colors adequados para servir de referência.","Normalizar iluminação",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
+
+        float weightTotal=0f;Vector3 reference=Vector3.Zero;
+        foreach(var candidate in candidates){float weight=1f/MathF.Max(1f,candidate.Distance);reference+=candidate.Color*weight;weightTotal+=weight;}
+        reference/=weightTotal;
+        byte r=NormalizeSmdColorChannel(reference.X,source.X),g=NormalizeSmdColorChannel(reference.Y,source.Y),b=NormalizeSmdColorChannel(reference.Z,source.Z);
+        Color current=target.Smx?.PrimaryColor??Color.White;int linked=target.Smx==null?1:scene.Entries.Count(x=>x.SmxId==target.SmxId);
+        string shared=linked>1?$"\n\nO registro SMX é compartilhado por {linked} entries; todas receberão a nova cor.":string.Empty;
+        string message=$"BIN {target.BinId:D3}\n\nVertex color do BIN: {source.X:0.000}; {source.Y:0.000}; {source.Z:0.000}\nReferência de {candidates.Length} BIN(s) próximo(s): {reference.X:0.000}; {reference.Y:0.000}; {reference.Z:0.000}\n\nRGB atual: {current.R}; {current.G}; {current.B}\nRGB recomendado: {r}; {g}; {b}{shared}\n\nAplicar a normalização?";
+        if(MessageBox.Show(this,message,"Normalizar iluminação pelo cenário",MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button1)!=DialogResult.Yes)return;
+
+        SmxRecord record;
+        if(target.Smx!=null)record=target.Smx;
+        else
+        {
+            byte id=target.SmxId;
+            if(id>0xF9||scene.Smx.Find(id)!=null)
+            {
+                HashSet<byte> used=scene.Entries.Select(x=>x.SmxId).Concat(scene.Smx.Records.Select(x=>x.Id)).ToHashSet();
+                int free=Enumerable.Range(0,250).FirstOrDefault(x=>!used.Contains((byte)x),-1);
+                if(free<0){MessageBox.Show(this,"Não há IDs SMX livres entre 0x00 e 0xF9.","Normalizar iluminação",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
+                id=(byte)free;
+            }
+            record=scene.Smx.AddDefault(id);target.SetSmxId(id);target.Smx=record;
+        }
+        record.PrimaryColor=Color.FromArgb(r,g,b);scene.IsModified=true;scene.Smx.IsModified=true;
+        visualViewport?.Invalidate();pgVisualProperties.SelectedObject=target;pgVisualProperties.Refresh();lstVisualSmdEntries.Refresh();btnVisualSaveSmd.Text="SAVE SMD *";UpdateTopVisualSaveState();
+        ExtractLog($"Visual Editor: iluminação do BIN {target.BinId:D3} normalizada para RGB {r}, {g}, {b} usando {candidates.Length} referência(s) próximas.");
+    }
+
+    private static Vector3 AverageSmdVertexColor(ScenarioEntry entry)
+    {
+        Vector3 sum=Vector3.Zero;long count=0;
+        foreach(ScenarioTriangle triangle in entry.LocalTriangles){sum+=triangle.ColorA+triangle.ColorB+triangle.ColorC;count+=3;}
+        return count==0?Vector3.One:sum/count;
+    }
+
+    private static bool IsUsableSmdReferenceColor(Vector3 color)
+    {
+        if(!float.IsFinite(color.X)||!float.IsFinite(color.Y)||!float.IsFinite(color.Z))return false;
+        float level=(color.X+color.Y+color.Z)/3f;
+        // Full-white vertex data normally indicates an imported/non-baked BIN,
+        // so it must not become the baseline for another imported model.
+        return level>=0.01f&&level<0.9f;
+    }
+
+    private static byte NormalizeSmdColorChannel(float reference,float source)
+        =>(byte)Math.Clamp((int)MathF.Round(255f*reference/MathF.Max(0.001f,source)),1,255);
+
     private void RemoveSelectedSmdSmx()
     {
         ScenarioEntry? entry=lstVisualSmdEntries.SelectedItem as ScenarioEntry;ScenarioScene? scene=visualViewport?.Scene;if(entry?.Smx==null||scene?.Smx==null)return;byte id=entry.SmxId;int linked=scene.Entries.Count(x=>x.SmxId==id);
@@ -2462,7 +2610,7 @@ public partial class Form1
 
     private void DuplicateSelectedSmdEntries()
     {
-        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();if(selected.Length==0||visualViewport?.Scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(visualViewport.Scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();int entries=visualViewport.Scene.EntryCount,bins=visualViewport.Scene.BinCount,last=-1;foreach(ScenarioEntry source in selected){var clone=CloneSmdEntry(source);clone.PositionX+=1f;last=SmdEmbeddedBinService.AppendEntry(visualSmdPath,clone,entries++,bins);}ReloadVisualSmd(last);ExtractLog($"Visual Editor: {selected.Length} entry(s) SMD duplicada(s) no final.");
+        ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();if(selected.Length==0||visualViewport?.Scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;if(visualViewport.Scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();int entries=visualViewport.Scene.EntryCount,bins=visualViewport.Scene.BinCount,last=-1;foreach(ScenarioEntry source in selected){var clone=CloneSmdEntry(source);clone.PositionX+=1f;last=SmdEmbeddedBinService.AppendEntry(visualSmdPath,clone,entries++,bins,preserveSmxRegistration:true);}ReloadVisualSmd(last);ExtractLog($"Visual Editor: {selected.Length} entry(s) SMD duplicada(s) no final, usando o mesmo SMX.");
     }
     private void DuplicateSelectedSmd()
     {if(chkVisualSmdEditMode.Checked)DuplicateSelectedSmdFaces();else DuplicateSelectedSmdEntries();}
@@ -2479,9 +2627,9 @@ public partial class Form1
         int lastProtected=settings.SmdProtectSpecialEntryIndices?scene.Entries.Where(e=>e.RawData.Length>0x38&&e.RawData[0x38]!=0x08).Select(e=>e.FileOrder).DefaultIfEmpty(-1).Max():-1;
         ScenarioEntry[] placeholders=settings.SmdProtectSpecialEntryIndices?selected.Where(e=>e.FileOrder<=lastProtected).ToArray():Array.Empty<ScenarioEntry>();ScenarioEntry[] physical=selected.Except(placeholders).ToArray();
         string protection=placeholders.Length>0?$"\n\nA trava preservará {placeholders.Length} índice(s), deixando esses slots invisíveis com escala zero.":"";
-        if(MessageBox.Show(this,$"Excluir {selected.Length} entry(s) SMD?\n\nOs BINs incorporados serão preservados para não afetar outras referências.{protection}","Excluir entries",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
+        if(MessageBox.Show(this,$"Excluir {selected.Length} entry(s) SMD?\n\nBINs que ainda forem usados por outras entries serão preservados; os que ficarem sem referência serão removidos.{protection}","Excluir entries",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;
         foreach(ScenarioEntry entry in placeholders)entry.ScaleX=entry.ScaleY=entry.ScaleZ=0f;if(placeholders.Length>0)scene.IsModified=true;if(scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();
-        int next=Math.Min(selected.Min(x=>x.FileOrder),scene.EntryCount-physical.Length-1);if(physical.Length>0)SmdEmbeddedBinService.RemoveEntries(visualSmdPath,physical.Select(x=>x.FileOrder).ToArray(),scene.EntryCount,scene.BinCount);ReloadVisualSmd(next);ExtractLog($"Visual Editor: {physical.Length} entry(s) removida(s) e {placeholders.Length} índice(s) protegido(s) preservado(s) como slots invisíveis.");
+        int next=Math.Min(selected.Min(x=>x.FileOrder),scene.EntryCount-physical.Length-1);if(physical.Length>0)SmdEmbeddedBinService.RemoveEntries(visualSmdPath,physical.Select(x=>x.FileOrder).ToArray(),scene.EntryCount,scene.BinCount);RemapSmdCatalogCollisionLinksAfterDeletion(selected,physical);ReloadVisualSmd(next);ExtractLog($"Visual Editor: {physical.Length} entry(s) removida(s), BINs sem referência removidos/compactados e {placeholders.Length} índice(s) protegido(s) preservado(s) como slots invisíveis.");
     }
     private void lstVisualSmdEntries_KeyDown(object? sender,KeyEventArgs e)
     {if(e.Control&&e.KeyCode==Keys.D){DuplicateSelectedSmd();e.Handled=true;e.SuppressKeyPress=true;}else if(e.Control&&e.KeyCode==Keys.K){SeparateSelectedSmdFaces();e.Handled=true;e.SuppressKeyPress=true;}else if(e.KeyCode==Keys.Delete){if(chkVisualSmdEditMode.Checked){if(visualViewport.DeleteSelectedSmdFaces()){btnVisualSaveSmd.Text="SAVE SMD *";lstVisualSmdEntries.Refresh();}}else DeleteSelectedSmdEntries();e.Handled=true;e.SuppressKeyPress=true;}}
@@ -2494,9 +2642,9 @@ public partial class Form1
         if(modelDialog.ShowLocalizedDialog(this)!=DialogResult.OK)return;
         try
         {
-            ExternalModelStats stats=ExternalPs2ModelConverter.Analyze(modelDialog.FileName);
+            ExternalModelStats stats=Ps2ModelConversionService.Analyze(modelDialog.FileName);
             IReadOnlyList<ExternalModelMaterialTexture> textures=FindExternalModelTextures(modelDialog.FileName);
-            string? converter=ResolveSmdExternalConverterPath();if(converter==null)return;
+
             if(current.IsModified&&!SaveVisualSmd())return;
             string backup=GetVisualAevBackupPath(visualSmdPath);Directory.CreateDirectory(Path.GetDirectoryName(backup)!);if(!File.Exists(backup))File.Copy(visualSmdPath,backup);
             byte[] receiver=SmdEmbeddedBinService.Extract(visualSmdPath,entry.BinId,current.BinCount);
@@ -2508,7 +2656,7 @@ public partial class Form1
             SmdModelTextureImportMode textureMode=textureOptions.Mode;bool createNewEntry=textureOptions.CreateNewEntry;
             if(textureMode==SmdModelTextureImportMode.ReplaceShared&&MessageBox.Show(this,"Esta opção altera índices globais do TPL. Outros modelos que usam as mesmas texturas também mudarão.\n\nDeseja realmente sobrescrever as texturas compartilhadas?","Sobrescrever texturas globais",MessageBoxButtons.YesNo,MessageBoxIcon.Warning,MessageBoxDefaultButton.Button2)!=DialogResult.Yes)return;
             UseWaitCursor=true;btnVisualSmdImport.Enabled=false;lblVisualStatus.Text="Convertendo modelo para BIN PS2...";
-            string generated=await ExternalPs2ModelConverter.ConvertAsync(converter,modelDialog.FileName,receiver);
+            string generated=await Ps2ModelConversionService.ConvertAsync(modelDialog.FileName,receiver);
             byte[] converted=File.ReadAllBytes(generated);int selectedAfter=entry.FileOrder;byte importedBinId=entry.BinId;
             string? stagedTpl=null;bool tplChanged=false;
             try
@@ -2532,19 +2680,22 @@ public partial class Form1
         finally{UseWaitCursor=false;btnVisualSmdImport.Enabled=lstVisualSmdEntries?.SelectedItem is ScenarioEntry;}
     }
 
-    private void AddSelectedSmdToCatalog()
+    private async void AddSelectedSmdToCatalog()
     {
         ScenarioScene? scene=visualViewport?.Scene;
         ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();
         if(scene==null||selected.Length==0||string.IsNullOrWhiteSpace(visualSmdPath))return;
         if(scene.IsModified&&!SaveVisualSmd())return;
-        if(!TryGetSmdCatalogMetadata(selected,out string name,out string category,out string notes))return;
+        using var metadata=new SmdCatalogMetadataDialog(new SmdObjectCatalogService(),selected);
+        IReadOnlyList<EsatFaceInspection> collisionFaces=Array.Empty<EsatFaceInspection>();
+        while(true){var result=metadata.ShowLocalizedDialog(this);if(result==DialogResult.Retry){var picked=await SelectSmdCatalogCollisionAsync(collisionFaces);if(picked!=null)collisionFaces=picked;metadata.SetCollisionCount(collisionFaces.Count(f=>f.File.Kind==EsatKind.Sat),collisionFaces.Count(f=>f.File.Kind==EsatKind.Eat));continue;}if(result!=DialogResult.OK)return;if(metadata.IncludeCollision&&collisionFaces.Count==0){MessageBox.Show(this,"Selecione as faces da colisão antes de adicionar ao catálogo.","Catálogo SMD",MessageBoxButtons.OK,MessageBoxIcon.Information);continue;}break;}
+        string name=metadata.ItemName,category=metadata.Category,notes=metadata.Notes;
         try
         {
             string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");
             if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);
             var service=new SmdObjectCatalogService();
-            SmdCatalogItem item=service.Export(visualSmdPath,tpl,selected,scene.BinCount,name,category,notes,null);
+            SmdCatalogItem item=service.Export(visualSmdPath,tpl,selected,scene.BinCount,name,category,notes,null,metadata.IncludeCollision?collisionFaces.Select(f=>SmdCatalogCollisionFace.Capture(f,selected[0])).ToArray():null);
             lblVisualStatus.Text=$"“{item.Name}” adicionado ao Catálogo SMD";
             ExtractLog($"Catálogo SMD: {item.Name} salvo com {item.Entries.Count} entry(s), {item.Bins.Count} BIN(s) e {item.Textures.Count} textura(s).");
         }
@@ -2570,12 +2721,12 @@ public partial class Form1
     private async Task JoinSelectedSmdEntriesAsync()
     {
         ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().OrderBy(x=>x.FileOrder).ToArray();ScenarioScene? scene=visualViewport?.Scene;if(selected.Length<2||scene==null||string.IsNullOrWhiteSpace(visualSmdPath))return;
-        string? converter=ResolveSmdExternalConverterPath();if(converter==null)return;if(scene.IsModified&&!SaveVisualSmd())return;
+        if(scene.IsModified&&!SaveVisualSmd())return;
         int faces=selected.Sum(x=>x.LocalTriangles.Count);if(MessageBox.Show(this,$"Juntar {selected.Length} entries ({faces:N0} faces) em uma única entry/BIN?\n\nAs transformações visíveis serão aplicadas à geometria. As entries originais serão substituídas pelo modelo unido.","Join de entries SMD",MessageBoxButtons.YesNo,MessageBoxIcon.Question)!=DialogResult.Yes)return;
         string recovery=visualSmdPath+".join_recovery";File.Copy(visualSmdPath,recovery,true);
         try
         {
-            UseWaitCursor=true;lblVisualStatus.Text="Juntando entries e convertendo o novo BIN...";byte[] joined=await SmdModelExporter.JoinAsBinAsync(converter,visualSmdPath,selected,scene.BinCount);
+            UseWaitCursor=true;lblVisualStatus.Text="Juntando entries e convertendo o novo BIN...";byte[] joined=await SmdModelExporter.JoinAsBinAsync(visualSmdPath,selected,scene.BinCount);
             EnsureVisualSmdBackup();ScenarioEntry template=CloneSmdEntry(selected[0]);template.PositionX=template.PositionY=template.PositionZ=0f;template.RotationX=template.RotationY=template.RotationZ=0f;template.ScaleX=template.ScaleY=template.ScaleZ=1f;
             SmdEmbeddedBinService.AppendEntry(visualSmdPath,template,scene.EntryCount,scene.BinCount,joined);SmdEmbeddedBinService.RemoveEntries(visualSmdPath,selected.Select(x=>x.FileOrder).ToArray(),scene.EntryCount+1,scene.BinCount+1);
             int joinedIndex=scene.EntryCount-selected.Length;ScenarioScene check=Ps2ScenarioReader.Read(visualSmdPath);ScenarioEntry result=check.Entries.First(x=>x.FileOrder==joinedIndex);if(result.LocalTriangles.Count==0)throw new InvalidDataException("O BIN unido não contém geometria; o SMD original foi restaurado.");
@@ -2691,36 +2842,23 @@ public partial class Form1
     {
         ScenarioScene? scene=visualViewport?.Scene;if(scene==null||string.IsNullOrWhiteSpace(visualSmdPath)){MessageBox.Show(this,"Abra um cenário com SMD antes de inserir um objeto.","Catálogo SMD",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
         var service=new SmdObjectCatalogService();using var dialog=new SmdCatalogForm(service);if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||dialog.SelectedItem==null)return;
-        if(scene.IsModified&&!SaveVisualSmd())return;EnsureVisualSmdBackup();string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);
-        string smdRecovery=visualSmdPath+".catalog_recovery";string tplRecovery=tpl+".catalog_recovery";File.Copy(visualSmdPath,smdRecovery,true);File.Copy(tpl,tplRecovery,true);
+        if(scene.IsModified&&!SaveVisualSmd())return;
+        if(visualCollisionModified&&!SaveVisualCollision(reloadAfterSave:false))return;
+        EnsureVisualSmdBackup();string tpl=GetTplWorkPath(visualSmdPath,project.ActiveDatName??"");if(!File.Exists(tpl))SmdTextureService.ExtractTpl(visualSmdPath,tpl);
         try
         {
             UseWaitCursor=true;lblVisualStatus.Text=$"Inserindo “{dialog.SelectedItem.Name}”...";
-            int index=service.Import(dialog.SelectedItem,visualSmdPath,tpl,scene.EntryCount,scene.BinCount);
-            ReloadVisualSmd(index);lblVisualStatus.Text=$"“{dialog.SelectedItem.Name}” inserido no final do SMD";
-            ExtractLog($"Catálogo SMD: {dialog.SelectedItem.Name} importado com texturas remapeadas.");
+            string backups=Path.Combine(project.RootPath??AppContext.BaseDirectory,".workspace","backups",Path.GetFileNameWithoutExtension(project.ActiveDatName??"active"));
+            int index=SmdCatalogInsertion.Insert(service,dialog.SelectedItem,visualSmdPath,tpl,scene.EntryCount,scene.BinCount,visualViewport.SatCollision,visualViewport.EatCollision,backups,visualViewport.GetCollisionCreationPosition(5f)/100f);
+            ReloadVisualSmd(index);
+            if(dialog.SelectedItem.Collisions.Count>0){visualViewport.SetCollision(visualSatPath==null?null:Ps2EsatReader.Read(visualSatPath,EsatKind.Sat),visualEatPath==null?null:Ps2EsatReader.Read(visualEatPath,EsatKind.Eat));PopulateVisualCollisionMeshes(visualViewport.SatCollision,visualViewport.EatCollision);}
+            lblVisualStatus.Text=$"“{dialog.SelectedItem.Name}” inserido • {dialog.SelectedItem.Collisions.Count} faces de colisão";
+            ExtractLog($"Catálogo SMD: {dialog.SelectedItem.Name} importado com texturas remapeadas e colisões vinculadas.");
         }
-        catch(Exception ex){File.Copy(smdRecovery,visualSmdPath,true);File.Copy(tplRecovery,tpl,true);MessageBox.Show(this,ex.Message,"Importar do Catálogo SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
-        finally{UseWaitCursor=false;try{File.Delete(smdRecovery);}catch{}try{File.Delete(tplRecovery);}catch{}}
-    }
-    private bool TryGetSmdCatalogMetadata(IReadOnlyList<ScenarioEntry> entries,out string name,out string category,out string notes)
-    {
-        name=category=notes="";using var dialog=new AppForm{Text="Adicionar ao Catálogo SMD",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(470,330),BackColor=Color.FromArgb(20,22,27),ForeColor=TextPrimary,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
-        var heading=new Label{Text=entries.Count==1?$"Salvar entry #{entries[0].FileOrder:D3} como objeto reutilizável":$"Salvar seleção de {entries.Count} entries como conjunto",Left=22,Top=18,Width=425,Height=26,Font=new Font("Segoe UI Semibold",11),ForeColor=Color.White};
-        var nameBox=new TextBox{Left=22,Top=77,Width=425,Height=28,Text=entries.Count==1?$"Objeto BIN {entries[0].BinId:D3}":$"Conjunto SMD ({entries.Count})",BackColor=Surface2,ForeColor=TextPrimary};
-        var categoryBox=new TextBox{Left=22,Top=139,Width=425,Height=28,Text="Cenário",BackColor=Surface2,ForeColor=TextPrimary};
-        var notesBox=new TextBox{Left=22,Top=201,Width=425,Height=62,Multiline=true,BackColor=Surface2,ForeColor=TextPrimary,PlaceholderText="Observações opcionais..."};
-        var save=new Button{Text="ADICIONAR AO CATÁLOGO",Left=247,Top=280,Width=200,Height=34,BackColor=Accent,ForeColor=Color.White,FlatStyle=FlatStyle.Flat,DialogResult=DialogResult.OK};var cancel=new Button{Text="CANCELAR",Left=137,Top=280,Width=100,Height=34,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat,DialogResult=DialogResult.Cancel};
-        dialog.Controls.AddRange(new Control[]{heading,new Label{Text="NOME",Left=22,Top=55,Width=100,Height=20,ForeColor=TextMuted},nameBox,new Label{Text="CATEGORIA",Left=22,Top=117,Width=120,Height=20,ForeColor=TextMuted},categoryBox,new Label{Text="DESCRIÇÃO",Left=22,Top=179,Width=120,Height=20,ForeColor=TextMuted},notesBox,save,cancel});dialog.AcceptButton=save;dialog.CancelButton=cancel;
-        if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK||string.IsNullOrWhiteSpace(nameBox.Text))return false;name=nameBox.Text;category=categoryBox.Text;notes=notesBox.Text;return true;
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Importar do Catálogo SMD",MessageBoxButtons.OK,MessageBoxIcon.Error);}
+        finally{UseWaitCursor=false;}
     }
 
-    private string? ResolveSmdExternalConverterPath()
-    {
-        if(!string.IsNullOrWhiteSpace(settings.Ps2BinToolPath)&&File.Exists(settings.Ps2BinToolPath))return settings.Ps2BinToolPath;
-        string[] names={"RE4_PS2_BIN_TOOL.exe","Re4Ps2BINrepack.exe"};foreach(string folder in new[]{Application.StartupPath,Path.Combine(Application.StartupPath,"Tools")})foreach(string name in names){string path=Path.Combine(folder,name);if(File.Exists(path))return path;}
-        using var dialog=new OpenFileDialog{Filter="RE4 PS2 BIN Tool (*.exe)|*.exe",Title="Selecione a RE4 PS2 BIN Tool"};if(dialog.ShowLocalizedDialog(this)!=DialogResult.OK)return null;settings.Ps2BinToolPath=dialog.FileName;SaveSettings();return dialog.FileName;
-    }
     private bool EnsureCurrentSmdTpl(string smdPath,string tplPath)
     {
         if(!File.Exists(tplPath)){SmdTextureService.ExtractTpl(smdPath,tplPath);return true;}

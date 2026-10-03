@@ -1,5 +1,8 @@
 using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Design;
+using System.Globalization;
+using System.Windows.Forms.Design;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
@@ -11,8 +14,8 @@ public enum SmxDisplayFlags : uint
     VertexColor = 1 << 1,
     CastOn = 1 << 2,
     AlphaTestOff = 1 << 3,
-    PointLightAllCut = 1 << 4,
-    TorchLightCut = 1 << 5
+    DisplayBit4 = 1 << 4,
+    AttributeBit0 = 1 << 5
 }
 
 public sealed class Ps2SmxFile
@@ -61,7 +64,9 @@ public sealed class Ps2SmxFile
         byte[] raw = new byte[RecordSize];
         raw[0] = id;
         raw[2] = 3;
-        BitConverter.GetBytes(uint.MaxValue).CopyTo(raw, 4);
+        // cLightInfo starts with SelectMask = 0: no room light is excluded.
+        // Using uint.MaxValue here would make a newly created SMX block every light in-game.
+        BitConverter.GetBytes(0u).CopyTo(raw, 4);
         raw[0x0C] = raw[0x0D] = raw[0x0E] = 0xFF;
         var record = new SmxRecord(raw) { Owner = this };
         Records.Add(record);
@@ -127,9 +132,9 @@ public sealed class SmxRecord
     public byte OrderType { get => RawData[2]; set => Byte(2, value); }
     [Category("SMX • Renderização"), DisplayName("Cull Mode")]
     public byte CullMode { get => RawData[3]; set => Byte(3, value); }
-    [Category("SMX • Iluminação"), DisplayName("Light Select Mask"), Description("Máscara de bits que seleciona quais luzes da sala podem afetar o modelo.")]
+    [Category("SMX • Iluminação"), DisplayName("Light Exclusion Mask"), Description("Máscara de exclusão usada pelo jogo: cada bit 1 bloqueia a luz correspondente; cada bit 0 permite que ela afete o modelo.")]
     public uint LightSelectMask { get => U32(4); set => U32(4, value); }
-    [Category("SMX • Renderização"), DisplayName("Flags")]
+    [Category("SMX • Renderização"), DisplayName("Flags"), Description("Ativa uma ou mais flags de renderização do registro SMX."), TypeConverter(typeof(SmxDisplayFlagsConverter)), Editor(typeof(SmxDisplayFlagsEditor), typeof(UITypeEditor))]
     public SmxDisplayFlags Flags { get => (SmxDisplayFlags)U32(8); set => U32(8, (uint)value); }
     [Category("SMX • Cor"), DisplayName("Cor principal")]
     public Color PrimaryColor { get => Color.FromArgb(255, RawData[0x0C], RawData[0x0D], RawData[0x0E]); set { RawData[0x0C] = value.R; RawData[0x0D] = value.G; RawData[0x0E] = value.B; Changed(); } }
@@ -155,4 +160,125 @@ public sealed class SmxRecord
     public string WorkData => Convert.ToHexString(RawData, 0x10, 0x74);
 
     public override string ToString() => $"ID 0x{Id:X2} • Type 0x{Type:X2}";
+}
+
+public sealed class SmxDisplayFlagsEditor : UITypeEditor
+{
+    private static readonly (SmxDisplayFlags Value, string Label)[] Choices =
+    {
+        (SmxDisplayFlags.Shadow, "Shadow"),
+        (SmxDisplayFlags.VertexColor, "Vertex Color (definido pelo BIN)"),
+        (SmxDisplayFlags.CastOn, "Cast On"),
+        (SmxDisplayFlags.AlphaTestOff, "Alpha Test Off"),
+        (SmxDisplayFlags.DisplayBit4, "Display Flag 0x8000"),
+        (SmxDisplayFlags.AttributeBit0, "Object Attribute bit 0")
+    };
+
+    public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext? context) => UITypeEditorEditStyle.DropDown;
+
+    public override object? EditValue(ITypeDescriptorContext? context, IServiceProvider provider, object? value)
+    {
+        if (provider.GetService(typeof(IWindowsFormsEditorService)) is not IWindowsFormsEditorService service) return value;
+
+        SmxDisplayFlags original = value is SmxDisplayFlags flags ? flags : SmxDisplayFlags.None;
+        using var panel = new Panel { Width = 230, Height = 170, BackColor = Color.FromArgb(28, 31, 37) };
+        using var list = new CheckedListBox
+        {
+            Dock = DockStyle.Fill,
+            BorderStyle = BorderStyle.None,
+            CheckOnClick = true,
+            BackColor = panel.BackColor,
+            ForeColor = Color.Gainsboro,
+            Font = new Font("Segoe UI", 9F)
+        };
+        using var apply = new Button
+        {
+            Dock = DockStyle.Bottom,
+            Height = 30,
+            Text = "Aplicar",
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(45, 49, 58),
+            ForeColor = Color.White
+        };
+
+        foreach ((SmxDisplayFlags flag, string label) in Choices)
+            list.Items.Add(new FlagChoice(flag, label), (original & flag) != 0);
+
+        SmxDisplayFlags result = original;
+        apply.Click += (_, _) =>
+        {
+            const SmxDisplayFlags known = SmxDisplayFlags.Shadow | SmxDisplayFlags.VertexColor | SmxDisplayFlags.CastOn |
+                                          SmxDisplayFlags.AlphaTestOff | SmxDisplayFlags.DisplayBit4 | SmxDisplayFlags.AttributeBit0;
+            result &= ~known;
+            for (int i = 0; i < list.Items.Count; i++)
+                if (list.GetItemChecked(i) && list.Items[i] is FlagChoice choice) result |= choice.Value;
+            service.CloseDropDown();
+        };
+        panel.Controls.Add(list);
+        panel.Controls.Add(apply);
+        service.DropDownControl(panel);
+        return result;
+    }
+
+    private sealed record FlagChoice(SmxDisplayFlags Value, string Label)
+    {
+        public override string ToString() => Label;
+    }
+}
+
+public sealed class SmxDisplayFlagsConverter : TypeConverter
+{
+    private static readonly (SmxDisplayFlags Value, string Label)[] Choices =
+    {
+        (SmxDisplayFlags.Shadow, "Shadow"),
+        (SmxDisplayFlags.VertexColor, "Vertex Color (definido pelo BIN)"),
+        (SmxDisplayFlags.CastOn, "Cast On"),
+        (SmxDisplayFlags.AlphaTestOff, "Alpha Test Off"),
+        (SmxDisplayFlags.DisplayBit4, "Display Flag 0x8000"),
+        (SmxDisplayFlags.AttributeBit0, "Object Attribute bit 0")
+    };
+
+    public override bool CanConvertFrom(ITypeDescriptorContext? context, Type sourceType) =>
+        sourceType == typeof(string) || base.CanConvertFrom(context, sourceType);
+
+    public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType) =>
+        destinationType == typeof(string) || base.CanConvertTo(context, destinationType);
+
+    public override object? ConvertTo(ITypeDescriptorContext? context, CultureInfo? culture, object? value, Type destinationType)
+    {
+        if (destinationType == typeof(string) && value is SmxDisplayFlags flags)
+        {
+            if (flags == SmxDisplayFlags.None) return "Nenhum";
+            var labels = Choices.Where(x => (flags & x.Value) != 0).Select(x => x.Label).ToList();
+            uint known = Choices.Aggregate(0u, (mask, x) => mask | (uint)x.Value);
+            uint unknown = (uint)flags & ~known;
+            if (unknown != 0) labels.Add($"0x{unknown:X8}");
+            return string.Join(", ", labels);
+        }
+        return base.ConvertTo(context, culture, value, destinationType);
+    }
+
+    public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value)
+    {
+        if (value is string text)
+        {
+            text = text.Trim();
+            if (text.Length == 0 || text.Equals("Nenhum", StringComparison.OrdinalIgnoreCase) || text.Equals("None", StringComparison.OrdinalIgnoreCase))
+                return SmxDisplayFlags.None;
+
+            SmxDisplayFlags result = SmxDisplayFlags.None;
+            foreach (string partValue in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                string part = partValue.Trim();
+                var choice = Choices.FirstOrDefault(x => x.Label.Equals(part, StringComparison.OrdinalIgnoreCase));
+                if (choice.Value != SmxDisplayFlags.None) { result |= choice.Value; continue; }
+                if (Enum.TryParse(part.Replace(" ", string.Empty), true, out SmxDisplayFlags parsed)) { result |= parsed; continue; }
+                if (part.StartsWith("0x", StringComparison.OrdinalIgnoreCase) && uint.TryParse(part[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint raw))
+                { result |= (SmxDisplayFlags)raw; continue; }
+                throw new FormatException($"'{part}' não é uma flag SMX válida.");
+            }
+            return result;
+        }
+        return base.ConvertFrom(context, culture, value);
+    }
 }

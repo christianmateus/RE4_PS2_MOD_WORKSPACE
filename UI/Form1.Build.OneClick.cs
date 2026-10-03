@@ -13,11 +13,11 @@ public partial class Form1
             buildSelectionOverride = lvTrackedDats.SelectedItems.Cast<ListViewItem>()
                 .Select(x => x.Tag as BuildListItem).Where(x => x != null).Select(x => x!.Key)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            await RunBuildAllAsync(launchEmulator);
+            await RunBuildAllAsync(launchEmulator, forceRepackSelectedDats: true);
             return;
         }
         if (string.IsNullOrWhiteSpace(project.ActiveDatName) || string.IsNullOrWhiteSpace(GetActiveContentPath())) { MessageBox.Show("Extraia um cenário primeiro.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (launchEmulator && (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path))) { MessageBox.Show("Configure o PCSX2 em Tools.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (launchEmulator && (string.IsNullOrWhiteSpace(settings.Pcsx2Path) || !File.Exists(settings.Pcsx2Path))) { MessageBox.Show("Configure o PCSX2 em Configurações > Geral.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (string.IsNullOrWhiteSpace(project.IsoPath) || !File.Exists(project.IsoPath)) { MessageBox.Show("Selecione uma ISO base válida.", "Build & Test", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
         string contentDir = GetActiveContentPath()!;
@@ -40,7 +40,10 @@ public partial class Form1
 
             var stateBefore = await GetChangeStateAsync();
             var activeDatState = GetDatState(project.ActiveDatName!, true)!;
-            bool needRepack = !activeDatState.LastBuildUtc.HasValue || stateBefore.Diff.HasChanges || stateBefore.PendingTpl > 0 || string.IsNullOrWhiteSpace(project.ActiveBuildDatPath) || !File.Exists(project.ActiveBuildDatPath);
+            // The one-click flow is also the user's explicit "build now" action.
+            // Always produce a fresh DAT here: the change snapshot can miss edits
+            // made by external tools or stale/corrupt prior build artifacts.
+            bool needRepack = true;
             bool needInject = needRepack || !File.Exists(buildIso) || activeDatState.InjectedGeneration != project.BuildIsoGeneration;
 
             if (stateBefore.PendingTpl > 0)
@@ -55,7 +58,9 @@ public partial class Form1
                 SetBuildBusy(true, $"Reconstruindo {project.ActiveDatName}...");
                 string stagingDir = Path.Combine(project.RootPath!, "Temp", "Repack", scenario);
                 string outputDat = Path.Combine(project.RootPath!, "Build", scenario, project.ActiveDatName);
-                WriteLog("Mudanças detectadas: reconstruindo DAT com o parser nativo...");
+                WriteLog(stateBefore.Diff.HasChanges || stateBefore.PendingTpl > 0
+                    ? "Mudanças detectadas: reconstruindo DAT com o parser nativo..."
+                    : "Rebuild forçado: reconstruindo o DAT mesmo sem mudanças detectadas...");
                 var result = await NativeDatService.RepackAsync(contentDir, project.ActiveDatName, stagingDir, outputDat);
                 project.ActiveBuildDatPath = result.OutputDatPath;
                 var activeState = GetDatState(project.ActiveDatName!, true)!;
@@ -63,7 +68,7 @@ public partial class Form1
                 SaveProject();
                 WriteLog($"DAT reconstruído: {result.OutputDatPath} ({FormatBytes(result.NewSize)})");
             }
-            else WriteLog("Nenhuma mudança em Content/TPL: repack ignorado.");
+            else WriteLog("Repack ignorado.");
 
             if (needInject)
             {

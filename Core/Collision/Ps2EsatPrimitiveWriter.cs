@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace RE4_PS2_MOD_WORKSPACE.Core.Collision;
 
@@ -132,6 +132,27 @@ public static class Ps2EsatPrimitiveWriter
         finally{if(File.Exists(temp))File.Delete(temp);}
     }
 
+    // Imported faces get private vertices and retain their native flags. Spatial links are rebuilt.
+    public static void AppendCatalogFaces(EsatFile file,IReadOnlyList<RE4_PS2_MOD_WORKSPACE.Core.Visual.SmdCatalogCollisionFace> source,RE4_PS2_MOD_WORKSPACE.Core.Visual.ScenarioEntry anchor,string output)
+    {
+        var imported=source.Where(f=>f.Kind==file.Kind).ToArray();if(imported.Length==0){WriteEditedCopy(file,output);return;}
+        int target=file.Meshes.FindIndex(m=>m.Groups.Any(g=>g.Flags==2));if(target<0)throw new InvalidDataException("O arquivo não possui um grupo folha para receber a colisão.");
+        var all=file.Meshes.Select(Copy).ToList();var m=all[target];
+        if(m.Positions.Count+imported.Length*3>ushort.MaxValue||m.Normals.Count+imported.Length>ushort.MaxValue||m.Edges.Count+imported.Length*3>ushort.MaxValue||m.Faces.Count+imported.Length>ushort.MaxValue)throw new InvalidDataException("A colisão ultrapassa o limite de índices do submesh.");
+        var added=new List<(EsatFace Face,int Category)>();
+        foreach(var f in imported){Vector3 a=f.Point(f.A,anchor),b=f.Point(f.B,anchor),c=f.Point(f.C,anchor);Vector3 cross=Vector3.Cross(b-a,c-a);if(cross.LengthSquared()<.000001f||!float.IsFinite(cross.LengthSquared()))throw new InvalidDataException("O catálogo contém uma face de colisão degenerada.");ushort vi=(ushort)m.Positions.Count,ni=(ushort)m.Normals.Count,ei=(ushort)m.Edges.Count;m.Positions.AddRange(new[]{a,b,c});m.Normals.Add(Vector3.Normalize(cross)*(f.NormalSign<0?-1:1));m.Edges.AddRange(new[]{b-a,c-b,a-c});added.Add((new(vi,(ushort)(vi+1),(ushort)(vi+2),ni,ei,(ushort)(ei+1),(ushort)(ei+2),f.Unknown,f.Blue,f.Green,f.Red,f.Connectivity),Math.Clamp(f.Category,0,2)));}
+        int[] counts=Enumerable.Range(0,3).Select(cat=>added.Count(f=>f.Category==cat)).ToArray();int oldFloor=m.Floors,oldSlope=m.Slopes;
+        ushort Map(ushort i)=>checked((ushort)(i<oldFloor?i:i<oldFloor+oldSlope?i+counts[0]:i+counts[0]+counts[1]));
+        var faces=new List<EsatFace>();var ids=new List<ushort>[3]{new(),new(),new()};
+        for(int cat=0;cat<3;cat++){int start=cat==0?0:cat==1?oldFloor:oldFloor+oldSlope;int count=cat==0?oldFloor:cat==1?oldSlope:m.Walls;faces.AddRange(m.Faces.Skip(start).Take(count));foreach(var f in added.Where(f=>f.Category==cat)){ids[cat].Add((ushort)faces.Count);faces.Add(f.Face);}}
+        var groups=m.Groups.Select(g=>g with{Floors=g.Floors.Select(Map).ToArray(),Slopes=g.Slopes.Select(Map).ToArray(),Walls=g.Walls.Select(Map).ToArray()}).ToList();
+        Vector3 center=imported.Select(f=>f.Point(f.A,anchor)).Aggregate(Vector3.Zero,(a,b)=>a+b)/imported.Length;
+        int leaf=Enumerable.Range(0,groups.Count).Where(i=>groups[i].Flags==2).OrderBy(i=>Vector3.DistanceSquared(groups[i].Position+groups[i].Size/2,center)).First();var group=groups[leaf];groups[leaf]=group with{Floors=group.Floors.Concat(ids[0]).ToArray(),Slopes=group.Slopes.Concat(ids[1]).ToArray(),Walls=group.Walls.Concat(ids[2]).ToArray()};
+        ExpandPrimitiveGroups(groups,ids.SelectMany(x=>x).ToArray(),m.Positions.Skip(file.Meshes[target].Positions.Count));RecalculateBrothers(groups);
+        all[target]=m with{Faces=faces,Groups=groups,Floors=oldFloor+counts[0],Slopes=oldSlope+counts[1],Walls=m.Walls+counts[2]};Write(file,all,output);
+        var check=Ps2EsatReader.Read(output,file.Kind);if(check.FaceCount!=file.FaceCount+imported.Length)throw new InvalidDataException("Falha ao validar a colisão inserida.");
+    }
+
     private static MeshData Copy(EsatMesh m)=>new(m,new(m.Positions),new(m.Normals),new(m.EdgeVectors),new(m.Faces),m.Groups.Select(CopyGroup).ToList(),m.FloorCount,m.SlopeCount,m.WallCount);
     private static GroupData CopyGroup(EsatGroup g)=>new(g.Position,g.Size,g.Flags,g.BrotherDistance,g.FloorFaces,g.SlopeFaces,g.WallFaces,GroupLength(g.FloorFaces.Length+g.SlopeFaces.Length+g.WallFaces.Length));
 
@@ -239,18 +260,14 @@ public static class Ps2EsatPrimitiveWriter
         foreach(var t in triangles){Vector3 a=m.Positions[t.A],b=m.Positions[t.B],c=m.Positions[t.C],normal=Vector3.Normalize(Vector3.Cross(b-a,c-a));ushort ni=(ushort)normals.Count;normals.Add(normal);ushort ei=(ushort)edges.Count;edges.Add(b-a);edges.Add(c-b);edges.Add(a-c);byte connectivity=0;var pairs=new[]{(t.A,t.B),(t.B,t.C),(t.C,t.A)};for(int e=0;e<3;e++){var key=(Math.Min(pairs[e].Item1,pairs[e].Item2),Math.Max(pairs[e].Item1,pairs[e].Item2));if(seam.Contains(key)||counts[key]>1)connectivity|=(byte)(0x20<<e);}created.Add(new((ushort)t.A,(ushort)t.B,(ushort)t.C,ni,ei,(ushort)(ei+1),(ushort)(ei+2),0,0,0,0,connectivity));}
         var sourceFaces=new List<EsatFace>(m.Faces);foreach(var x in selections){EsatFace f=sourceFaces[x.FaceIndex];sourceFaces[x.FaceIndex]=f with{Connectivity=(byte)(f.Connectivity|(0x20<<Math.Clamp(x.EdgeSlot,0,2)))};}
         Vector3 average=created.Select(f=>normals[f.Normal]).Aggregate(Vector3.Zero,(a,b)=>a+b)/created.Count;bool floor=MathF.Abs(Vector3.Normalize(average).Y)>=.98f;int insert=floor?m.FloorCount:m.FloorCount+m.SlopeCount;var faces=new List<EsatFace>(m.Faces.Count+created.Count);faces.AddRange(sourceFaces.Take(insert));faces.AddRange(created);faces.AddRange(sourceFaces.Skip(insert));ushort Map(ushort old)=>old<insert?old:(ushort)(old+created.Count);ushort[] added=Enumerable.Range(insert,created.Count).Select(i=>(ushort)i).ToArray();var anchorFaces=selections.Select(x=>x.FaceIndex).ToHashSet();bool assigned=false;
-        var groups=new List<GroupData>();foreach(EsatGroup g in m.Groups){ushort[] gf=g.FloorFaces.Select(Map).ToArray(),gs=g.SlopeFaces.Select(Map).ToArray(),gw=g.WallFaces.Select(Map).ToArray();bool contains=g.Flags==2&&(g.FloorFaces.Any(x=>anchorFaces.Contains(x))||g.SlopeFaces.Any(x=>anchorFaces.Contains(x))||g.WallFaces.Any(x=>anchorFaces.Contains(x)));if(contains){if(floor)gf=gf.Concat(added).ToArray();else gs=gs.Concat(added).ToArray();assigned=true;}groups.Add(new(g.Position,g.Size,g.Flags,g.BrotherDistance,gf,gs,gw,GroupLength(g.FloorFaces.Length+g.SlopeFaces.Length+g.WallFaces.Length)));}if(!assigned)throw new InvalidDataException("As arestas não pertencem a um grupo espacial folha.");RecalculateBrothers(groups);return new(m,new(m.Positions),normals,edges,faces,groups,m.FloorCount+(floor?created.Count:0),m.SlopeCount+(floor?0:created.Count),m.WallCount);
+        var groups=new List<GroupData>();foreach(EsatGroup g in m.Groups){ushort[] gf=g.FloorFaces.Select(Map).ToArray(),gs=g.SlopeFaces.Select(Map).ToArray(),gw=g.WallFaces.Select(Map).ToArray();bool contains=g.Flags==2&&(g.FloorFaces.Any(x=>anchorFaces.Contains(x))||g.SlopeFaces.Any(x=>anchorFaces.Contains(x))||g.WallFaces.Any(x=>anchorFaces.Contains(x)));if(contains){if(floor)gf=gf.Concat(added).ToArray();else gs=gs.Concat(added).ToArray();assigned=true;}groups.Add(new(g.Position,g.Size,g.Flags,g.BrotherDistance,gf,gs,gw,GroupLength(g.FloorFaces.Length+g.SlopeFaces.Length+g.WallFaces.Length)));}if(!assigned)throw new InvalidDataException("As arestas não pertencem a um grupo espacial folha.");ExpandPrimitiveGroups(groups,added,vertices.Select(i=>m.Positions[i]));RecalculateBrothers(groups);return new(m,new(m.Positions),normals,edges,faces,groups,m.FloorCount+(floor?created.Count:0),m.SlopeCount+(floor?0:created.Count),m.WallCount);
     }
     private static void ExpandPrimitiveGroups(List<GroupData> groups,IReadOnlyCollection<ushort> createdFaces,IEnumerable<Vector3> points)
     {
         Vector3[] vertices=points.ToArray();if(vertices.Length==0)return;Vector3 min=vertices.Aggregate(Vector3.Min)-new Vector3(1.11111f),max=vertices.Aggregate(Vector3.Max)+new Vector3(1.11111f);int[] leaves=Enumerable.Range(0,groups.Count).Where(i=>groups[i].Flags==2&&(groups[i].Floors.Any(createdFaces.Contains)||groups[i].Slopes.Any(createdFaces.Contains)||groups[i].Walls.Any(createdFaces.Contains))).ToArray();var targets=new HashSet<int>(leaves);
-        foreach(int leafIndex in leaves){GroupData leaf=groups[leafIndex];Vector3 leafMin=leaf.Position,leafMax=leaf.Position+leaf.Size;for(int i=0;i<groups.Count;i++){if(groups[i].Flags!=1)continue;Vector3 parentMin=groups[i].Position,parentMax=parentMin+groups[i].Size;if(Contains(parentMin,parentMax,leafMin,leafMax))targets.Add(i);}}
+        var ancestors=EsatSpatialHierarchy.Ancestors(groups.Select(g=>g.OriginalLength).ToArray(),groups.Select(g=>g.Brother).ToArray(),groups.Select(g=>(g.Flags&1)!=0).ToArray());
+        foreach(int leafIndex in leaves)foreach(int parent in ancestors[leafIndex])targets.Add(parent);
         foreach(int index in targets){GroupData group=groups[index];Vector3 oldMin=group.Position,oldMax=group.Position+group.Size,newMin=Vector3.Min(oldMin,min),newMax=Vector3.Max(oldMax,max);groups[index]=group with{Position=newMin,Size=newMax-newMin};}
-        static bool Contains(Vector3 outerMin,Vector3 outerMax,Vector3 innerMin,Vector3 innerMax)=>innerMin.X>=outerMin.X-2f&&innerMin.Y>=outerMin.Y-2f&&innerMin.Z>=outerMin.Z-2f&&innerMax.X<=outerMax.X+2f&&innerMax.Y<=outerMax.Y+2f&&innerMax.Z<=outerMax.Z+2f;
-    }    private static Dictionary<int,List<int>> BuildGroupAncestorMap(IReadOnlyList<GroupData> groups)
-    {
-        var result=new Dictionary<int,List<int>>();int index=0;try{while(index<groups.Count)Parse(new List<int>());}catch{result.Clear();}return result;
-        void Parse(List<int> parents){if(index>=groups.Count)throw new InvalidDataException();int current=index++;result[current]=new List<int>(parents);if(groups[current].Flags!=1)return;var next=new List<int>(parents){current};for(int child=0;child<4;child++)Parse(next);}
     }
     private static void RecalculateBrothers(List<GroupData> groups)
     {
@@ -272,9 +289,19 @@ public static class Ps2EsatPrimitiveWriter
     internal static void WriteEditedCopy(EsatFile file,string path)=>Write(file,file.Meshes.Select(Copy).ToList(),path);
     private static void Write(EsatFile file,List<MeshData> meshes,string path)
     {
+        meshes=meshes.Select(NormalizeCategories).ToList();
         using var s=new FileStream(path,FileMode.Create,FileAccess.Write,FileShare.None);using var w=new BinaryWriter(s);
         if(file.ContainerMagic==0x80){w.Write((byte)0x80);w.Write((byte)meshes.Count);w.Write(file.ContainerUnknown);long table=s.Position;foreach(var _ in meshes)w.Write(0u);for(int i=0;i<meshes.Count;i++){long pos=s.Position,longBack=pos;s.Position=table+i*4;w.Write((uint)pos);s.Position=longBack;WriteMesh(w,meshes[i]);}}
         else WriteMesh(w,meshes[0]);int pad=32-(int)(s.Position%32);w.Write(Enumerable.Repeat((byte)0xCD,pad).ToArray());
+    }
+    private static MeshData NormalizeCategories(MeshData m)
+    {
+        if(!m.Source.RequiresCategoryRebuild)return m;
+        var originals=new Dictionary<EsatFace,EsatFaceCategory>(ReferenceEqualityComparer.Instance);for(int i=0;i<m.Source.Faces.Count;i++)originals[m.Source.Faces[i]]=m.Source.GetFaceCategory(i);
+        var categories=m.Faces.Select((face,i)=>originals.TryGetValue(face,out var category)?category:i<m.Floors?EsatFaceCategory.Floor:i<m.Floors+m.Slopes?EsatFaceCategory.Slope:EsatFaceCategory.Wall).ToArray();
+        int[] order=Enumerable.Range(0,m.Faces.Count).OrderBy(i=>categories[i]).ToArray();var map=new ushort[order.Length];for(int i=0;i<order.Length;i++)map[order[i]]=checked((ushort)i);
+        var groups=m.Groups.Select(g=>{var refs=g.Floors.Concat(g.Slopes).Concat(g.Walls).ToArray();ushort[] List(EsatFaceCategory category)=>refs.Where(i=>categories[i]==category).Select(i=>map[i]).ToArray();return g with{Floors=List(EsatFaceCategory.Floor),Slopes=List(EsatFaceCategory.Slope),Walls=List(EsatFaceCategory.Wall)};}).ToList();
+        return m with{Faces=order.Select(i=>m.Faces[i]).ToList(),Groups=groups,Floors=categories.Count(c=>c==EsatFaceCategory.Floor),Slopes=categories.Count(c=>c==EsatFaceCategory.Slope),Walls=categories.Count(c=>c==EsatFaceCategory.Wall)};
     }
     private static void WriteMesh(BinaryWriter w,MeshData m)
     {

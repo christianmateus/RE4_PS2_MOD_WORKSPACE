@@ -59,8 +59,14 @@ public partial class Form1
 
     private void OpenAssetModelEditor(string? initialPath = null)
     {
-        var editor = new AssetModelEditorForm(project.RootPath,project.IsoPath,project.ActiveAfsPath,RegisterWeaponPackages,settings.Ps2BinToolPath,path=>{settings.Ps2BinToolPath=path;SaveSettings();});
+        var editor = new AssetModelEditorForm(project.RootPath,project.IsoPath,project.ActiveAfsPath,RegisterWeaponPackages);
         if (!string.IsNullOrWhiteSpace(initialPath) && File.Exists(initialPath)) editor.LoadPackage(initialPath);
+        editor.Show(this);
+    }
+
+    private void OpenEtmEditor()
+    {
+        var editor = new AssetModelEditorForm(project.RootPath, etmOnly: true);
         editor.Show(this);
     }
 

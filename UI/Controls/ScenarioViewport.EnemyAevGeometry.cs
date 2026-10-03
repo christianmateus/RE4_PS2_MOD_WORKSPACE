@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 using RE4_PS2_MOD_WORKSPACE.Core.Effects;
@@ -202,7 +202,21 @@ public sealed partial class ScenarioViewport : GLControl
         if (y1 < y0) (y0, y1) = (y1, y0);
     }
 
-    private static void AddAevTransformGizmo(List<float>[] axes, AevEntry entry, float sceneRadius, AevGizmoMode mode)
+    private NVector3[] GetAevTransformAxes(AevEntry entry)
+    {
+        if(AevTransformSpace==AevTransformSpace.Local&&entry.IsSquare)
+        {
+            var edge=entry.Position2-entry.Position1;
+            if(edge.LengthSquared()>1e-8f)
+            {
+                var x=NVector3.Normalize(new NVector3(edge.X,0,edge.Y));
+                return new[]{x,NVector3.UnitY,new NVector3(-x.Z,0,x.X)};
+            }
+        }
+        return new[]{NVector3.UnitX,NVector3.UnitY,NVector3.UnitZ};
+    }
+
+    private void AddAevTransformGizmo(List<float>[] axes, AevEntry entry, float sceneRadius, AevGizmoMode mode)
     {
         GetAevYRange(entry, out float y0, out float y1);
         System.Numerics.Vector2 center2 = entry.IsCircle ? entry.Position1 : GetAevCenterXZ(entry);
@@ -217,9 +231,10 @@ public sealed partial class ScenarioViewport : GLControl
         float length = size * 4.2f;
         if (mode == AevGizmoMode.Move)
         {
-            AddAevAxisArrow(axes[0], origin, NVector3.UnitX, length, size);
+            var directions=GetAevTransformAxes(entry);
+            AddAevAxisArrow(axes[0], origin, directions[0], length, size);
             AddAevAxisArrow(axes[1], origin, NVector3.UnitY, length, size);
-            AddAevAxisArrow(axes[2], origin, NVector3.UnitZ, length, size);
+            AddAevAxisArrow(axes[2], origin, directions[2], length, size);
         }
         else
         {
@@ -328,7 +343,7 @@ public sealed partial class ScenarioViewport : GLControl
                 }
                 if ((EnemyModelFacePickingEnabled && selectedEnemyModelFaceFlags.Count > 0) ||
                     (EnemyModelPartPickingEnabled && highlightedEnemyModelType == e.EnemyType && highlightedEnemyModelPart >= 0))
-                    AddEnemyMeshGizmoLines(sel, e, model);
+                    AddEnemyMeshGizmoLines(gizmoAxes, e);
             }
         }
 
@@ -357,13 +372,26 @@ public sealed partial class ScenarioViewport : GLControl
         NVector3 origin = EslToWorld(entry);
         float rx = entry.RotX * (MathF.PI / 32768f), ry = entry.RotY * (MathF.PI / 32768f), rz = entry.RotZ * (MathF.PI / 32768f);
         var smoothNormals = BuildEnemySmoothNormals(part.Triangles);
+        NVector3 rotationPivot = (part.BoundsMin + part.BoundsMax) * 0.5f;
+        NQuaternion previewRotation = NQuaternion.CreateFromYawPitchRoll(
+            enemyFaceGizmoRotationDegrees.Y * MathF.PI / 180f,
+            enemyFaceGizmoRotationDegrees.X * MathF.PI / 180f,
+            enemyFaceGizmoRotationDegrees.Z * MathF.PI / 180f);
         foreach (EnemyModelTriangle sourceTriangle in part.Triangles)
         {
             if (EnemyModelFacePickingEnabled && selectedEnemyModelFaceFlags.Count > 0 && (part.BinIndex != selectedEnemyModelFaceBin || !selectedEnemyModelFaceFlags.Contains(sourceTriangle.StripFlagOffset))) continue;
             if (enemyDiagnosticBoneId.HasValue && !TriangleUsesBone(sourceTriangle, enemyDiagnosticBoneId.Value)) continue;
             EnemyModelTriangle triangle = ApplyEnemyTextureAssignment(entry.EnemyType, part.BinIndex, sourceTriangle);
+            triangle = ApplyEnemyGameplayModelTransform(entry,triangle);
             bool movingSelectedFace = EnemyModelFacePickingEnabled && part.BinIndex == selectedEnemyModelFaceBin && selectedEnemyModelFaceFlags.Contains(sourceTriangle.StripFlagOffset);
             bool movingSelectedPart = !EnemyModelFacePickingEnabled && highlightedEnemyModelType == entry.EnemyType && part.BinIndex == highlightedEnemyModelPart;
+            if (movingSelectedPart && EnemyModelGizmoMode == EnemyMeshGizmoMode.Rotate && enemyFaceGizmoRotationDegrees.LengthSquared() > 0.000001f)
+                triangle = triangle with
+                {
+                    A = NVector3.Transform(triangle.A - rotationPivot, previewRotation) + rotationPivot,
+                    B = NVector3.Transform(triangle.B - rotationPivot, previewRotation) + rotationPivot,
+                    C = NVector3.Transform(triangle.C - rotationPivot, previewRotation) + rotationPivot
+                };
             if (enemyFaceGizmoAxis != 0 && (movingSelectedFace || movingSelectedPart))
                 triangle = triangle with { A = triangle.A + enemyFaceGizmoDelta, B = triangle.B + enemyFaceGizmoDelta, C = triangle.C + enemyFaceGizmoDelta };
             if (enemyDiagnosticBoneId.HasValue)
@@ -421,34 +449,55 @@ public sealed partial class ScenarioViewport : GLControl
     private bool TryGetEnemyMeshGizmo(out NVector3 center, out float length)
     {
         center = NVector3.Zero; length = 1f;
+        if (!EnemyModelGizmoEnabled) return false;
         byte? modelType = EnemyModelFacePickingEnabled ? enemyModels.Keys.FirstOrDefault() : highlightedEnemyModelType;
         if (!modelType.HasValue || !enemyModels.TryGetValue(modelType.Value, out EnemyModelScene? model)) return false;
         int binIndex = EnemyModelFacePickingEnabled ? selectedEnemyModelFaceBin : highlightedEnemyModelPart;
         if (EnemyModelFacePickingEnabled && selectedEnemyModelFaceFlags.Count == 0) return false;
         EnemyModelPart? part = model.Parts.FirstOrDefault(x => x.BinIndex == binIndex);
-        if (part == null) return false;
+        if (part == null || !IsEnemyModelPartVisible(modelType.Value, binIndex)) return false;
         EnemyModelTriangle[] faces = EnemyModelFacePickingEnabled
             ? part.Triangles.Where(x => selectedEnemyModelFaceFlags.Contains(x.StripFlagOffset)).ToArray()
             : part.Triangles.ToArray();
         if (faces.Length == 0) return false;
-        foreach (EnemyModelTriangle face in faces) center += (face.A + face.B + face.C) / 3f;
-        center = center / faces.Length + enemyFaceGizmoDelta;
+        if (EnemyModelFacePickingEnabled)
+        {
+            foreach (EnemyModelTriangle face in faces) center += (face.A + face.B + face.C) / 3f;
+            center /= faces.Length;
+        }
+        else center = (part.BoundsMin + part.BoundsMax) * 0.5f;
+        center += enemyFaceGizmoDelta;
         length = Math.Max(0.35f, Math.Max(model.Size.X, Math.Max(model.Size.Y, model.Size.Z)) * 0.09f);
         return true;
     }
 
-    private void AddEnemyMeshGizmoLines(List<float> values, EslEnemyEntry entry, EnemyModelScene model)
+    private void AddEnemyMeshGizmoLines(List<float>[] axes, EslEnemyEntry entry)
     {
         if (!TryGetEnemyMeshGizmo(out NVector3 center, out float length)) return;
         center += EslToWorld(entry);
-        void P(NVector3 p) { values.Add(p.X); values.Add(p.Y); values.Add(p.Z); values.Add(0); values.Add(0); values.Add(0); }
-        void L(NVector3 a, NVector3 b) { P(a); P(b); }
-        foreach (NVector3 axis in new[] { NVector3.UnitX, NVector3.UnitY, NVector3.UnitZ })
+        void P(List<float> values, NVector3 p) { values.Add(p.X); values.Add(p.Y); values.Add(p.Z); values.Add(0); values.Add(0); values.Add(0); }
+        void L(List<float> values, NVector3 a, NVector3 b) { P(values, a); P(values, b); }
+        NVector3[] directions = { NVector3.UnitX, NVector3.UnitY, NVector3.UnitZ };
+        for (int i = 0; i < directions.Length; i++)
         {
-            NVector3 tip = center + axis * length; L(center, tip);
+            NVector3 axis = directions[i];
+            if (EnemyModelGizmoMode == EnemyMeshGizmoMode.Rotate && !EnemyModelFacePickingEnabled)
+            {
+                NVector3 u = directions[(i + 1) % 3], v = directions[(i + 2) % 3];
+                const int segments = 64;
+                for (int segment = 0; segment < segments; segment++)
+                {
+                    float a = MathF.Tau * segment / segments, b = MathF.Tau * (segment + 1) / segments;
+                    L(axes[i], center + (u * MathF.Cos(a) + v * MathF.Sin(a)) * length,
+                               center + (u * MathF.Cos(b) + v * MathF.Sin(b)) * length);
+                }
+                continue;
+            }
+            NVector3 tip = center + axis * length;
             NVector3 side = axis == NVector3.UnitY ? NVector3.UnitX : NVector3.UnitY;
-            L(tip, tip - axis * length * 0.22f + side * length * 0.10f);
-            L(tip, tip - axis * length * 0.22f - side * length * 0.10f);
+            L(axes[i], center, tip);
+            L(axes[i], tip, tip - axis * length * 0.22f + side * length * 0.10f);
+            L(axes[i], tip, tip - axis * length * 0.22f - side * length * 0.10f);
         }
     }
 
@@ -461,12 +510,28 @@ public sealed partial class ScenarioViewport : GLControl
         NVector3[] axes = { NVector3.UnitX, NVector3.UnitY, NVector3.UnitZ };
         for (int i = 0; i < axes.Length; i++)
         {
-            if (!TryProjectWorldToScreen(center + axes[i] * length, out PointF end)) continue;
-            float distance = DistanceToScreenSegment(mouse, start, end);
-            if (distance < best) { best = distance; axisIndex = i + 1; }
+            if (EnemyModelGizmoMode == EnemyMeshGizmoMode.Rotate && !EnemyModelFacePickingEnabled)
+            {
+                NVector3 u = axes[(i + 1) % 3], v = axes[(i + 2) % 3];
+                for (int segment = 0; segment < 64; segment++)
+                {
+                    float a = MathF.Tau * segment / 64f, b = MathF.Tau * (segment + 1) / 64f;
+                    if (!TryProjectWorldToScreen(center + (u * MathF.Cos(a) + v * MathF.Sin(a)) * length, out PointF first) ||
+                        !TryProjectWorldToScreen(center + (u * MathF.Cos(b) + v * MathF.Sin(b)) * length, out PointF second)) continue;
+                    float ringDistance = DistanceToScreenSegment(mouse, first, second);
+                    if (ringDistance < best) { best = ringDistance; axisIndex = i + 1; }
+                }
+            }
+            else if (TryProjectWorldToScreen(center + axes[i] * length, out PointF end))
+            {
+                float distance = DistanceToScreenSegment(mouse, start, end);
+                if (distance < best) { best = distance; axisIndex = i + 1; }
+            }
         }
         if (axisIndex == 0) return false;
-        enemyFaceGizmoAxis = axisIndex; enemyFaceGizmoStartMouse = mouse; enemyFaceGizmoDelta = NVector3.Zero; return true;
+        enemyFaceGizmoAxis = axisIndex; enemyFaceGizmoStartMouse = mouse;
+        enemyFaceGizmoDelta = NVector3.Zero; enemyFaceGizmoRotationDegrees = NVector3.Zero;
+        return true;
     }
 
     private static float DistanceToScreenSegment(Point point, PointF a, PointF b)
@@ -560,9 +625,22 @@ public sealed partial class ScenarioViewport : GLControl
             foreach (EnemyModelTriangle sourceTriangle in part.Triangles)
             {
                 EnemyModelTriangle tri = ApplyEnemyTextureAssignment(entry.EnemyType, part.BinIndex, sourceTriangle);
+                tri = ApplyEnemyGameplayModelTransform(entry, tri);
                 AddEnemyTriangleToBucket(buckets, entry, tri, origin, rx, ry, rz, model, attachToHand, animationPose, bindPose, attachmentPivot, animateBody, smoothNormals,animationId,attachmentBone,attachmentRotation,attachmentOffset);
             }
         }
+    }
+
+    private static EnemyModelTriangle ApplyEnemyGameplayModelTransform(EslEnemyEntry entry,EnemyModelTriangle triangle)
+    {
+        // em2a_R0_Init uses the ESL HP as the tripwire length for both bomb variants:
+        // scale = hp * 0.001 * 0.5, then parts 1/2 have their local Z multiplied by it.
+        // Apply it in model space, before the ESL RotMatrix-equivalent rotation below. This is
+        // important for pitched/rolled traps: scaling world Z makes the wire appear mis-rotated.
+        if(entry.EnemyType!=0x2A || entry.Subtype is not (0x01 or 0x02))return triangle;
+        float wireScale=Math.Max(1,(int)entry.Health)*0.0005f;
+        NVector3 ScaleWire(NVector3 value)=>new(value.X,value.Y,value.Z*wireScale);
+        return triangle with { A=ScaleWire(triangle.A),B=ScaleWire(triangle.B),C=ScaleWire(triangle.C) };
     }
 
     private static int ResolveEnemyAttachmentBone(Ps2BinSkeleton? skeleton,EnemyEquipmentCatalog.AttachmentPoint point)
@@ -812,4 +890,3 @@ public sealed partial class ScenarioViewport : GLControl
         }
     }
 }
-

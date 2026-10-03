@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 
 namespace RE4_PS2_MOD_WORKSPACE
 {
@@ -32,7 +32,7 @@ namespace RE4_PS2_MOD_WORKSPACE
         private Label lblMessageFile = null!, lblMessageStatus = null!, lblMessageSelection = null!, lblMessageValidation = null!, lblMessageSize = null!, lblHudPage = null!;
         private HudMessagePreview messageHudPreview = null!;
         private ComboBox cmbEnemyFiles = null!, cmbEnemyTypeFriendly = null!, cmbEnemySubtypeFriendly = null!, cmbEnemyLocationFilter = null!;
-        private Button btnEnemyOpen = null!, btnEnemyReextract = null!, btnEnemySave = null!, btnEnemyRefresh = null!;
+        private Button btnEnemyOpen = null!, btnEnemyReextract = null!, btnEnemySave = null!, btnEnemyRefresh = null!, btnEnemyQuickAdjustments = null!;
         private CheckBox chkEnemyActiveOnly = null!;
         private ListBox lstEnemyEntries = null!;
         private PropertyGrid pgEnemyProperties = null!;
@@ -53,7 +53,7 @@ namespace RE4_PS2_MOD_WORKSPACE
         private Button btnBrowseWorkspace = null!, btnCreateWorkspace = null!, btnOpenWorkspace = null!, btnBrowseIso = null!, btnDashboardWorkspace = null!;
         private Button btnBrowseTpl = null!, btnBrowsePcsx2 = null!, btnOpenTpl = null!, btnOpenPcsx2 = null!, btnSettingsRunSetup = null!;
         private ComboBox cmbAfsEntries = null!, cmbDatEntries = null!, cmbAssetType = null!, cmbTextureDat = null!, cmbTextureSmd = null!;
-        private Button btnScanIso = null!, btnExtractScenario = null!, btnExtractAllScenarios = null!, btnRestoreDat = null!, btnRefreshContent = null!, btnOpenContentFolder = null!;
+        private Button btnScanIso = null!, btnExtractScenario = null!, btnExtractAllScenarios = null!, btnRestoreDat = null!, btnRefreshContent = null!, btnOpenContentFolder = null!, btnExtractBatch = null!;
         private CheckBox chkShowAllAfsFiles = null!, chkTextureShowEff = null!;
         private Label lblDatCurrentSize = null!, lblDatReservedSize = null!, lblDatFreeSpace = null!, lblAfsName = null!, lblContentSummary = null!;
         private TextBox txtAssetSearch = null!;
@@ -79,7 +79,8 @@ namespace RE4_PS2_MOD_WORKSPACE
         private Button btnVisualCollisionMoveXZ = null!, btnVisualCollisionMoveY = null!, btnVisualCollisionEdge = null!, btnVisualCollisionMoveFace = null!, btnVisualCollisionMoveSide = null!, btnVisualCollisionObject = null!, btnVisualCollisionRotateLeft = null!, btnVisualCollisionRotateRight = null!, btnVisualCollisionDuplicate = null!, btnVisualCollisionRemove = null!, btnVisualCollisionFlip = null!, btnVisualCollisionCube = null!, btnVisualCollisionSave = null!;
         private TrackBar trkVisualMoveSpeed = null!, trkVisualLookSpeed = null!;
         private Label lblVisualMoveSpeed = null!, lblVisualLookSpeed = null!;
-        private CheckBox chkVisualAevLabels = null!, chkVisualAevEditMode = null!, chkVisualEnemyLabels = null!, chkVisualEnemyInactive = null!, chkVisualEnemySnap = null!, chkVisualEnemyAnimated = null!, chkVisualEnemyIgnoreRootMotion = null!;
+        private CheckBox chkVisualAevEditMode = null!, chkVisualEnemyInactive = null!, chkVisualEnemySnap = null!, chkVisualEnemyAnimated = null!, chkVisualEnemyIgnoreRootMotion = null!, chkVisualEffMist = null!;
+        private MultiSelectDropDownButton btnVisualLabels = null!;
         private CheckBox chkVisualCollisionSat = null!, chkVisualCollisionEat = null!, chkVisualCollisionFloor = null!, chkVisualCollisionSlope = null!, chkVisualCollisionWall = null!;
         private ComboBox cmbVisualRenderMode = null!, cmbVisualCollisionStyle = null!, cmbVisualCollisionMesh = null!, cmbVisualCollisionVertex = null!;
         private TrackBar trkVisualCollisionOpacity = null!;
@@ -88,7 +89,7 @@ namespace RE4_PS2_MOD_WORKSPACE
         private Label lblVisualCollisionInfo = null!;
         private Label lblVisualStage = null!, lblVisualStatus = null!, lblVisualFps = null!;
         private CheckedListBox clbVisualLayers = null!;
-        private ListBox lstVisualAevEntries = null!, lstVisualEnemyEntries = null!, lstVisualObjectEntries = null!, lstVisualItaEntries = null!, lstVisualEseEntries = null!, lstVisualFseEntries = null!, lstVisualDseEntries = null!, lstVisualSmdEntries = null!, lstVisualLitEntries = null!, lstVisualEffEntries = null!, lstVisualRtpNodes = null!, lstVisualCamEntries = null!, lstVisualCamParts = null!;
+        private ListBox lstVisualAevEntries = null!, lstVisualEnemyEntries = null!, lstVisualObjectEntries = null!, lstVisualItaEntries = null!, lstVisualEseEntries = null!, lstVisualFseEntries = null!, lstVisualDseEntries = null!, lstVisualSmdEntries = null!, lstVisualLitEntries = null!, lstVisualEffEntries = null!, lstVisualRtpNodes = null!, lstVisualEmiEntries = null!, lstVisualCamEntries = null!, lstVisualCamParts = null!;
         private PictureBox picVisualEffTexture = null!;
         private Label lblVisualEffTexture = null!;
         private NumericUpDown nudVisualEffFrame = null!;
@@ -98,7 +99,7 @@ namespace RE4_PS2_MOD_WORKSPACE
         private Button btnVisualFseMove = null!, btnVisualFseVertex = null!, btnVisualFseFace = null!;
         private Button btnVisualSmdMove = null!, btnVisualSmdRotate = null!, btnVisualSmdScale = null!, btnVisualSmdVertex = null!, btnVisualSmdEdge = null!, btnVisualSmdFace = null!, btnVisualSmdImport = null!, btnVisualSmdDuplicate = null!, btnVisualSmdCatalog = null!;
         private CheckBox chkVisualSmdSnap = null!, chkVisualSmdMagnet = null!, chkVisualSmdEditMode = null!;
-        private ComboBox cmbVisualSmdTransformSpeed = null!, cmbVisualSmdTransformSpace = null!;
+        private ComboBox cmbVisualSmdTransformSpeed = null!, cmbVisualSmdTransformSpace = null!, cmbVisualAevTransformSpace = null!;
         private CheckBox chkVisualObjectSnap = null!;
         private FlowLayoutPanel flpVisualObjectTextures = null!;
         private Label lblVisualObjectTextureDebug = null!;
@@ -106,7 +107,7 @@ namespace RE4_PS2_MOD_WORKSPACE
         private FlowLayoutPanel flpVisualSmdTextures = null!;
         private Label lblVisualSmdTextures = null!;
         private TabControl tabVisualEntities = null!, tabVisualSound = null!;
-        private TabPage tabVisualRtp = null!;
+        private TabPage tabVisualRtp = null!, tabVisualEmi = null!;
         private CamTimelineControl visualCamTimeline = null!;
         private Label lblVisualPropertiesTitle = null!;
         private ComboBox cmbVisualAevTypeFilter = null!, cmbVisualEnemyLocationFilter = null!;
@@ -175,7 +176,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             btnSidebarToggle.Text = "RETRAIR  ‹"; btnSidebarToggle.Dock = DockStyle.Top; btnSidebarToggle.Height = 34; btnSidebarToggle.FlatStyle = FlatStyle.Flat; btnSidebarToggle.FlatAppearance.BorderSize = 0; btnSidebarToggle.BackColor = Sidebar; btnSidebarToggle.ForeColor = TextMuted; btnSidebarToggle.Font = new Font("Segoe UI Semibold", 8F); btnSidebarToggle.TextAlign = ContentAlignment.MiddleRight; btnSidebarToggle.Cursor = Cursors.Hand; btnSidebarToggle.Click += btnSidebarToggle_Click;
             lblSidebarModules.Text = "Módulos"; lblSidebarModules.Dock = DockStyle.Top; lblSidebarModules.Height = 34; lblSidebarModules.Padding = new Padding(8, 4, 0, 8); lblSidebarModules.TextAlign = ContentAlignment.MiddleLeft; lblSidebarModules.ForeColor = Color.FromArgb(180, 187, 199); lblSidebarModules.Font = new Font("Bahnschrift SemiBold", 9F);
             lblSidebarModules.Paint += (_, e) => { using var pen = new Pen(Color.FromArgb(68, 74, 86)); e.Graphics.DrawLine(pen, 8, lblSidebarModules.Height - 4, Math.Max(8, lblSidebarModules.Width - 8), lblSidebarModules.Height - 4); };
-            lblVersion.Text = "v0.8.1"; lblVersion.Dock = DockStyle.Bottom; lblVersion.Height = 26; lblVersion.ForeColor = TextMuted; lblVersion.TextAlign = ContentAlignment.MiddleLeft;
+            lblVersion.Text = "v0.9.0"; lblVersion.Dock = DockStyle.Bottom; lblVersion.Height = 26; lblVersion.ForeColor = TextMuted; lblVersion.TextAlign = ContentAlignment.MiddleLeft;
             pnlSidebar.Controls.Add(btnNavLogs); pnlSidebar.Controls.Add(btnNavSettings); pnlSidebar.Controls.Add(btnNavTools); pnlSidebar.Controls.Add(btnNavBuild); pnlSidebar.Controls.Add(btnNavVideos); pnlSidebar.Controls.Add(btnNavSounds); pnlSidebar.Controls.Add(btnNavAnimations); pnlSidebar.Controls.Add(btnNavEnemies); pnlSidebar.Controls.Add(btnNavCharacters); pnlSidebar.Controls.Add(btnNavVisualEditor); pnlSidebar.Controls.Add(btnNavMessages); pnlSidebar.Controls.Add(btnNavTextures); pnlSidebar.Controls.Add(btnNavAssets); pnlSidebar.Controls.Add(btnNavWorkspace); pnlSidebar.Controls.Add(btnNavDashboard); pnlSidebar.Controls.Add(lblSidebarModules); pnlSidebar.Controls.Add(btnSidebarToggle); pnlSidebar.Controls.Add(lblLogoSub); pnlSidebar.Controls.Add(lblLogo); pnlSidebar.Controls.Add(lblVersion);
 
             pnlTop.BackColor = Bg;
@@ -273,10 +274,11 @@ namespace RE4_PS2_MOD_WORKSPACE
             StatLabel(extract, "TAMANHO", 524, 104, out lblDatCurrentSize); StatLabel(extract, "RESERVADO", 636, 104, out lblDatReservedSize); StatLabel(extract, "LIVRE", 748, 104, out lblDatFreeSpace);
 
             var toolbar = new Panel { Left = 0, Top = 246, Width = 882, Height = 66, BackColor = Bg }; pnlAssets.Controls.Add(toolbar);
-            txtAssetSearch = new TextBox { Left = 0, Top = 25, Width = 300, Height = 30, PlaceholderText = "Filtrar por nome ou caminho...", BackColor = Surface2, ForeColor = TextPrimary, BorderStyle = BorderStyle.FixedSingle }; txtAssetSearch.TextChanged += assetFilter_Changed; toolbar.Controls.Add(txtAssetSearch);
-            cmbAssetType = new ComboBox { Left = 312, Top = 25, Width = 135, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextPrimary, FlatStyle = FlatStyle.Flat }; cmbAssetType.Items.AddRange(new object[] { "Todos", "SMD", "TPL", "BIN", "AEV", "ESL", "SND", "SEQ", "Outros" }); cmbAssetType.SelectedIndex = 0; cmbAssetType.SelectedIndexChanged += assetFilter_Changed; toolbar.Controls.Add(cmbAssetType);
-            btnRefreshContent = new Button { Left = 584, Top = 23 }; SetupSecondary(btnRefreshContent, "ATUALIZAR", 110); btnRefreshContent.Click += btnRefreshContent_Click; toolbar.Controls.Add(btnRefreshContent);
-            btnOpenContentFolder = new Button { Left = 706, Top = 23 }; SetupSecondary(btnOpenContentFolder, "ABRIR PASTA", 126); btnOpenContentFolder.Click += btnOpenContentFolder_Click; toolbar.Controls.Add(btnOpenContentFolder);
+            txtAssetSearch = new TextBox { Left = 0, Top = 25, Width = 260, Height = 30, PlaceholderText = "Filtrar por nome ou caminho...", BackColor = Surface2, ForeColor = TextPrimary, BorderStyle = BorderStyle.FixedSingle }; txtAssetSearch.TextChanged += assetFilter_Changed; toolbar.Controls.Add(txtAssetSearch);
+            cmbAssetType = new ComboBox { Left = 272, Top = 25, Width = 115, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextPrimary, FlatStyle = FlatStyle.Flat }; cmbAssetType.Items.AddRange(new object[] { "Todos", "SMD", "TPL", "BIN", "AEV", "ESL", "SND", "SEQ", "Outros" }); cmbAssetType.SelectedIndex = 0; cmbAssetType.SelectedIndexChanged += assetFilter_Changed; toolbar.Controls.Add(cmbAssetType);
+            btnRefreshContent = new Button { Left = 399, Top = 23 }; SetupSecondary(btnRefreshContent, "ATUALIZAR", 110); btnRefreshContent.Click += btnRefreshContent_Click; toolbar.Controls.Add(btnRefreshContent);
+            btnOpenContentFolder = new Button { Left = 521, Top = 23 }; SetupSecondary(btnOpenContentFolder, "ABRIR PASTA", 126); btnOpenContentFolder.Click += btnOpenContentFolder_Click; toolbar.Controls.Add(btnOpenContentFolder);
+            btnExtractBatch = new Button { Left = 659, Top = 23, Enabled = false }; SetupButton(btnExtractBatch, "EXTRAIR LOTE", Accent, 140); btnExtractBatch.Click += btnExtractBatch_Click; toolbar.Controls.Add(btnExtractBatch);
             lblContentSummary = new Label { Text = "Nenhum pacote DAT carregado.", Left = 0, Top = 2, Width = 540, Height = 20, ForeColor = TextMuted, AutoEllipsis = true }; toolbar.Controls.Add(lblContentSummary);
 
             var gridHost = new Panel { Left = 0, Top = 314, Width = 882, Height = 300, BackColor = Bg };
@@ -456,13 +458,37 @@ namespace RE4_PS2_MOD_WORKSPACE
             cmbEnemyLocationFilter = new ComboBox { Left = 14, Top = 9, Width = 132, Height = 30, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextPrimary, FlatStyle = FlatStyle.Flat };
             cmbEnemyLocationFilter.SelectedIndexChanged += cmbEnemyLocationFilter_SelectedIndexChanged; toolbar.Controls.Add(cmbEnemyLocationFilter);
             chkEnemyActiveOnly = new CheckBox { Text = "Somente ativos", Checked = true, AutoSize = true, Left = 158, Top = 15, ForeColor = Color.FromArgb(210, 214, 221) }; chkEnemyActiveOnly.CheckedChanged += chkEnemyActiveOnly_CheckedChanged; toolbar.Controls.Add(chkEnemyActiveOnly);
-            lblEnemyEntryCount = new Label { Text = "Nenhum ESL aberto", Left = 286, Top = 14, Width = 252, Height = 20, ForeColor = TextMuted }; toolbar.Controls.Add(lblEnemyEntryCount);
-            lblEnemyStatus = new Label { Text = "Selecione um arquivo emleon*.ESL do AFS.", Left = 550, Top = 14, Width = 312, Height = 20, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Right }; toolbar.Controls.Add(lblEnemyStatus);
+            lblEnemyEntryCount = new Label { Text = "Nenhum ESL aberto", Left = 286, Top = 14, Width = 180, Height = 20, ForeColor = TextMuted }; toolbar.Controls.Add(lblEnemyEntryCount);
+            lblEnemyStatus = new Label { Text = "Selecione um ESL.", Left = 472, Top = 14, Width = 188, Height = 20, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Right }; toolbar.Controls.Add(lblEnemyStatus);
+            btnEnemyQuickAdjustments = new Button { Left = 674, Top = 7, Anchor = AnchorStyles.Top | AnchorStyles.Right }; SetupSecondary(btnEnemyQuickAdjustments, "AJUSTES RÁPIDOS", 188); btnEnemyQuickAdjustments.Height=34;btnEnemyQuickAdjustments.Click += btnEnemyQuickAdjustments_Click; btnEnemyQuickAdjustments.Enabled=false;toolbar.Controls.Add(btnEnemyQuickAdjustments);btnEnemyQuickAdjustments.BringToFront();
 
             var left = Card(0, 258, 356, 444); left.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left; pnlEnemies.Controls.Add(left);
-            lstEnemyEntries = new ListBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Surface, ForeColor = TextPrimary, Font = new Font("Consolas", 9.5F), IntegralHeight = false, SelectionMode = SelectionMode.MultiExtended }; lstEnemyEntries.SelectedIndexChanged += lstEnemyEntries_SelectedIndexChanged; left.Controls.Add(lstEnemyEntries);
+            lstEnemyEntries = new ListBox { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Surface, ForeColor = TextPrimary, Font = new Font("Consolas", 9.5F), IntegralHeight = false, SelectionMode = SelectionMode.MultiExtended, DrawMode = DrawMode.OwnerDrawFixed };
+            lstEnemyEntries.DrawItem += (_, e) =>
+            {
+                if (e.Index < 0) return;
+                bool selected = (e.State & DrawItemState.Selected) != 0;
+                using var background = new SolidBrush(selected ? Color.FromArgb(92, 42, 45) : Surface);
+                e.Graphics.FillRectangle(background, e.Bounds);
+                TextRenderer.DrawText(e.Graphics, lstEnemyEntries.Items[e.Index]?.ToString() ?? "", lstEnemyEntries.Font,
+                    e.Bounds, TextPrimary,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+                e.DrawFocusRectangle();
+            };
+            lstEnemyEntries.SelectedIndexChanged += lstEnemyEntries_SelectedIndexChanged; left.Controls.Add(lstEnemyEntries);
             var right = Card(368, 258, 514, 444); right.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; pnlEnemies.Controls.Add(right);
-            pgEnemyProperties = new PropertyGrid { Dock = DockStyle.Fill, HelpVisible = true, ToolbarVisible = false, BackColor = Surface, ForeColor = TextPrimary }; pgEnemyProperties.PropertyValueChanged += pgEnemyProperties_PropertyValueChanged; right.Controls.Add(pgEnemyProperties);
+            pgEnemyProperties = new PropertyGrid
+            {
+                Dock = DockStyle.Fill, HelpVisible = true, ToolbarVisible = false, PropertySort = PropertySort.Categorized,
+                BackColor = Surface, ForeColor = TextPrimary,
+                ViewBackColor = Surface, ViewForeColor = TextPrimary, ViewBorderColor = Border,
+                LineColor = Border, CategoryForeColor = Color.FromArgb(220, 146, 149),
+                HelpBackColor = Surface2, HelpForeColor = TextPrimary,
+                CommandsBackColor = Surface2, CommandsForeColor = TextPrimary, CommandsBorderColor = Border,
+                SelectedItemWithFocusBackColor = Color.FromArgb(92, 42, 45),
+                SelectedItemWithFocusForeColor = TextPrimary
+            };
+            pgEnemyProperties.PropertyValueChanged += pgEnemyProperties_PropertyValueChanged; right.Controls.Add(pgEnemyProperties);
 
             void ResizeEnemyLayout()
             {
@@ -734,7 +760,7 @@ namespace RE4_PS2_MOD_WORKSPACE
 
             lblVisualStage = new Label { Text = "Nenhum DAT ativo", Left = 496, Top = 13, Width = 126, Height = 20, ForeColor = TextMuted, AutoEllipsis = true };
             toolbar.Controls.Add(lblVisualStage);
-            lblVisualStatus = new Label { UseMnemonic = false, Text = "v0.8.1 • Visual Editor", Left = 628, Top = 10, Width = 242, Height = 27, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right, AutoEllipsis = false };
+            lblVisualStatus = new Label { UseMnemonic = false, Text = "v0.9.0 • Visual Editor", Left = 628, Top = 10, Width = 242, Height = 27, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleRight, Anchor = AnchorStyles.Top | AnchorStyles.Right, AutoEllipsis = false };
             toolbar.Controls.Add(lblVisualStatus);
 
             lblVisualMoveSpeed = new Label(); trkVisualMoveSpeed = new TrackBar { Minimum=10, Maximum=300, Value=100 };
@@ -744,16 +770,13 @@ namespace RE4_PS2_MOD_WORKSPACE
             trkVisualLookSpeed.Scroll += visualLookSpeed_Scroll;
             toolbar.Controls.Add(trkVisualLookSpeed);
 
-            chkVisualAevLabels = new CheckBox { Text = "AEV LABELS", Left = 286, Top = 47, Width = 106, Height = 22, Checked = true, ForeColor = TextPrimary, BackColor = Surface, FlatStyle = FlatStyle.Standard, UseVisualStyleBackColor = false };
-            chkVisualAevLabels.CheckedChanged += (_, _) => { if (visualViewport != null) { visualViewport.ShowAevLabels = chkVisualAevLabels.Checked; visualViewport.Invalidate(); } };
-            toolbar.Controls.Add(chkVisualAevLabels);
-
-            chkVisualEnemyLabels = new CheckBox { Text = "ENEMY LABELS", Left = 398, Top = 47, Width = 126, Height = 22, Checked = false, ForeColor = TextPrimary, BackColor = Surface, FlatStyle = FlatStyle.Standard, UseVisualStyleBackColor = false };
-            chkVisualEnemyLabels.CheckedChanged += (_, _) => { settings.VisualEnemyLabels = chkVisualEnemyLabels.Checked; if (!restoringSession) SaveSettings(); if (visualViewport != null) { visualViewport.ShowEnemyLabels = chkVisualEnemyLabels.Checked; visualViewport.Invalidate(); } };
-            toolbar.Controls.Add(chkVisualEnemyLabels);
-            btnVisualLayersToggle=new Button{Left=536,Top=43,Height=27};SetupButton(btnVisualLayersToggle,"OCULTAR LAYERS",Surface2,132);btnVisualLayersToggle.Height=27;btnVisualLayersToggle.Click+=(_,_)=>ToggleVisualLayersPanel();toolbar.Controls.Add(btnVisualLayersToggle);
-            btnVisualPropertiesToggle=new Button{Left=676,Top=43,Height=27};SetupButton(btnVisualPropertiesToggle,"OCULTAR PROPS",Surface2,132);btnVisualPropertiesToggle.Height=27;btnVisualPropertiesToggle.Click+=(_,_)=>ToggleVisualPropertiesPanel();toolbar.Controls.Add(btnVisualPropertiesToggle);
-            var visualPanelTip=new ToolTip();visualPanelTip.SetToolTip(btnVisualLayersToggle,"Recolher ou mostrar Layers e abas");visualPanelTip.SetToolTip(btnVisualPropertiesToggle,"Recolher ou mostrar Propriedades");
+            btnVisualLabels=new MultiSelectDropDownButton{Left=286,Top=43,Height=27};SetupButton(btnVisualLabels,"LABELS  ▾",Surface2,112);btnVisualLabels.Height=27;
+            btnVisualLabels.AddOption("aev","AEV",true);btnVisualLabels.AddOption("enemy","Inimigos");btnVisualLabels.AddOption("emi","EMI",true);
+            btnVisualLabels.OptionChanged+=(_,_)=>{settings.VisualAevLabels=btnVisualLabels.IsChecked("aev");settings.VisualEnemyLabels=btnVisualLabels.IsChecked("enemy");settings.VisualEmiLabels=btnVisualLabels.IsChecked("emi");if(!restoringSession)SaveSettings();if(visualViewport!=null){visualViewport.ShowAevLabels=settings.VisualAevLabels;visualViewport.ShowEnemyLabels=settings.VisualEnemyLabels;visualViewport.ShowEmiLabels=settings.VisualEmiLabels;visualViewport.Invalidate();}};
+            toolbar.Controls.Add(btnVisualLabels);
+            btnVisualLayersToggle=new Button{Left=406,Top=43,Height=27};SetupButton(btnVisualLayersToggle,"OCULTAR CAMADAS",Surface2,142);btnVisualLayersToggle.Height=27;btnVisualLayersToggle.Click+=(_,_)=>ToggleVisualLayersPanel();toolbar.Controls.Add(btnVisualLayersToggle);
+            btnVisualPropertiesToggle=new Button{Left=546,Top=43,Height=27};SetupButton(btnVisualPropertiesToggle,"OCULTAR PROPS",Surface2,132);btnVisualPropertiesToggle.Height=27;btnVisualPropertiesToggle.Click+=(_,_)=>ToggleVisualPropertiesPanel();toolbar.Controls.Add(btnVisualPropertiesToggle);
+            var visualPanelTip=new ToolTip();visualPanelTip.SetToolTip(btnVisualLayersToggle,"Recolher ou mostrar camadas e abas");visualPanelTip.SetToolTip(btnVisualPropertiesToggle,"Recolher ou mostrar Propriedades");
             splitVisualWorkspace = new SplitContainer { Left = 0, Top = 166, Width = Math.Max(1, pnlVisualEditor.ClientSize.Width), Height = Math.Max(1, pnlVisualEditor.ClientSize.Height - 166), SplitterDistance = 210, FixedPanel = FixedPanel.Panel1, BackColor = Border, BorderStyle = BorderStyle.None };
             splitVisualWorkspace.SplitterMoved += splitVisualWorkspace_SplitterMoved;
             splitVisualWorkspace.Panel1.BackColor = Surface; splitVisualWorkspace.Panel2.BackColor = Bg; pnlVisualEditor.Controls.Add(splitVisualWorkspace);
@@ -771,9 +794,9 @@ namespace RE4_PS2_MOD_WORKSPACE
             }
             pnlVisualEditor.Resize += (_, _) => ResizeVisualEditor();
 
-            var layersTitle = new Label { Text = "LAYERS", Dock = DockStyle.Top, Height = 34, Padding = new Padding(12, 10, 0, 0), ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8.5F) };
-            clbVisualLayers = new CheckedListBox { Dock = DockStyle.Top, Height = 165, BackColor = Surface, ForeColor = TextPrimary, BorderStyle = BorderStyle.None, CheckOnClick = true, Font = new Font("Segoe UI", 9.5F), Padding = new Padding(8) };
-            clbVisualLayers.Items.Add("Scenario", true); clbVisualLayers.Items.Add("AEV Events", true); clbVisualLayers.Items.Add("Enemies", false); clbVisualLayers.Items.Add("Objects", false); clbVisualLayers.Items.Add("Collision", false); clbVisualLayers.Items.Add("Lighting", true); clbVisualLayers.Items.Add("Effects", true); clbVisualLayers.Items.Add("RTP Routes", true); clbVisualLayers.Items.Add("CAM Cameras", true); clbVisualLayers.Items.Add("ITA Items", true); clbVisualLayers.Items.Add("Sound ESE/FSE", false); clbVisualLayers.ItemCheck += clbVisualLayers_ItemCheck;
+            var layersTitle = new Label { Text = "CAMADAS", Dock = DockStyle.Top, Height = 34, Padding = new Padding(12, 10, 0, 0), ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8.5F) };
+            clbVisualLayers = new CheckedListBox { Dock = DockStyle.Top, Height = 184, BackColor = Surface, ForeColor = TextPrimary, BorderStyle = BorderStyle.None, CheckOnClick = true, Font = new Font("Segoe UI", 9.5F), Padding = new Padding(8) };
+            clbVisualLayers.Items.Add("Cenário", true); clbVisualLayers.Items.Add("Eventos AEV", true); clbVisualLayers.Items.Add("Inimigos", false); clbVisualLayers.Items.Add("Objetos", false); clbVisualLayers.Items.Add("Colisão", false); clbVisualLayers.Items.Add("Iluminação", true); clbVisualLayers.Items.Add("Efeitos", true); clbVisualLayers.Items.Add("Rotas RTP", true); clbVisualLayers.Items.Add("Câmeras CAM", true); clbVisualLayers.Items.Add("Itens ITA", true); clbVisualLayers.Items.Add("Som ESE/FSE", false); clbVisualLayers.Items.Add("Jogabilidade EMI", true); clbVisualLayers.ItemCheck += clbVisualLayers_ItemCheck;
 
             tabVisualEntities = new TabControl { Dock = DockStyle.Fill, Appearance = TabAppearance.Normal, BackColor = Surface, ForeColor = TextPrimary, Padding = new Point(10, 4) };
             var tabAev = new TabPage("AEV") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
@@ -784,10 +807,11 @@ namespace RE4_PS2_MOD_WORKSPACE
             var tabLit = new TabPage("ILUMINAÇÃO") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
             var tabEff = new TabPage("EFEITOS") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
             tabVisualRtp = new TabPage("RTP") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
+            tabVisualEmi = new TabPage("EMI") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
             var tabCam = new TabPage("CAM") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
             var tabIta = new TabPage("ITENS") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
             var tabSound = new TabPage("SOM") { BackColor = Surface, ForeColor = TextPrimary, Padding = new Padding(0) };
-            tabVisualEntities.TabPages.Add(tabAev); tabVisualEntities.TabPages.Add(tabEnemies); tabVisualEntities.TabPages.Add(tabObjects); tabVisualEntities.TabPages.Add(tabCollision); tabVisualEntities.TabPages.Add(tabSmd); tabVisualEntities.TabPages.Add(tabLit); tabVisualEntities.TabPages.Add(tabEff); tabVisualEntities.TabPages.Add(tabVisualRtp); tabVisualEntities.TabPages.Add(tabCam); tabVisualEntities.TabPages.Add(tabIta); tabVisualEntities.TabPages.Add(tabSound);
+            tabVisualEntities.TabPages.Add(tabAev); tabVisualEntities.TabPages.Add(tabEnemies); tabVisualEntities.TabPages.Add(tabObjects); tabVisualEntities.TabPages.Add(tabCollision); tabVisualEntities.TabPages.Add(tabSmd); tabVisualEntities.TabPages.Add(tabLit); tabVisualEntities.TabPages.Add(tabEff); tabVisualEntities.TabPages.Add(tabVisualRtp); tabVisualEntities.TabPages.Add(tabCam); tabVisualEntities.TabPages.Add(tabIta); tabVisualEntities.TabPages.Add(tabSound); tabVisualEntities.TabPages.Add(tabVisualEmi);
             tabVisualEntities.SelectedIndexChanged += tabVisualEntities_SelectedIndexChanged;
 
             var rtpHint=new Label{Text="WAYPOINTS • Ctrl+clique seleciona 2 • Ctrl+L conecta",Dock=DockStyle.Top,Height=44,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
@@ -799,6 +823,15 @@ namespace RE4_PS2_MOD_WORKSPACE
             var btnRtpChild=new Button();SetupButton(btnRtpChild,"+ FILHO",Surface2,72);btnRtpChild.Click+=(_,_)=>CreateChildRtpNode();
             var btnRtpConnect=new Button();SetupButton(btnRtpConnect,"CONECTAR",Accent,82);btnRtpConnect.Click+=(_,_)=>ConnectSelectedRtpNodes();
             var btnRtpDelete=new Button();SetupButton(btnRtpDelete,"EXCLUIR",Surface2,72);btnRtpDelete.Click+=(_,_)=>DeleteSelectedRtpNode();rtpBar.Controls.Add(btnRtpConnect);rtpBar.Controls.Add(btnRtpDuplicate);rtpBar.Controls.Add(btnRtpChild);rtpBar.Controls.Add(btnRtpDelete);tabVisualRtp.Controls.Add(rtpBar);
+
+            var emiHint=new Label{Text="PONTOS DE GAMEPLAY • posição, direção, tipo e Work 0–2",Dock=DockStyle.Top,Height=44,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
+            lstVisualEmiEntries=new ListBox{Dock=DockStyle.Fill,BorderStyle=BorderStyle.None,BackColor=Surface,ForeColor=TextPrimary,Font=new Font("Consolas",8.5F),IntegralHeight=false};
+            lstVisualEmiEntries.SelectedIndexChanged+=lstVisualEmiEntries_SelectedIndexChanged;lstVisualEmiEntries.KeyDown+=lstVisualEmiEntries_KeyDown;
+            var emiBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
+            var btnEmiAdd=new Button();SetupButton(btnEmiAdd,"+ NOVO",Accent,72);btnEmiAdd.Click+=(_,_)=>AddEmiEntry();
+            var btnEmiDuplicate=new Button();SetupButton(btnEmiDuplicate,"DUPLICAR",Surface2,82);btnEmiDuplicate.Click+=(_,_)=>DuplicateSelectedEmiEntry();
+            var btnEmiDelete=new Button();SetupButton(btnEmiDelete,"EXCLUIR",Surface2,72);btnEmiDelete.Click+=(_,_)=>DeleteSelectedEmiEntry();
+            emiBar.Controls.Add(btnEmiAdd);emiBar.Controls.Add(btnEmiDuplicate);emiBar.Controls.Add(btnEmiDelete);tabVisualEmi.Controls.Add(lstVisualEmiEntries);tabVisualEmi.Controls.Add(emiHint);
 
             var camHint=new Label{Text="CAM • F foca • 1 mover • 2 escala • 3 vértice • 4 face • 5 frame",Dock=DockStyle.Top,Height=42,Padding=new Padding(8,7,5,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
             var camSplit=new SplitContainer{Dock=DockStyle.Fill,Orientation=Orientation.Horizontal,SplitterDistance=190,BackColor=Border};
@@ -878,7 +911,10 @@ namespace RE4_PS2_MOD_WORKSPACE
             btnVisualAevMove = new Button(); SetupButton(btnVisualAevMove,"MOVE (G)",Accent,82); btnVisualAevMove.Height=28; btnVisualAevMove.Click+=(_,_)=>SetAevGizmoMode(AevGizmoMode.Move);
             btnVisualAevRotate = new Button(); SetupButton(btnVisualAevRotate,"ROTATE (R)",Surface2,92); btnVisualAevRotate.Height=28; btnVisualAevRotate.Click+=(_,_)=>SetAevGizmoMode(AevGizmoMode.Rotate);
             chkVisualAevEditMode = new CheckBox { Text="EDIT MODE", AutoSize=false, Width=92, Height=27, TextAlign=ContentAlignment.MiddleLeft, Margin=new Padding(7,3,0,3), ForeColor=Color.FromArgb(255,170,55), BackColor=Surface };
-            chkVisualAevEditMode.CheckedChanged+=(_,_)=>{bool edit=chkVisualAevEditMode.Checked;visualViewport?.SetAevEditMode(edit);btnVisualAevMove.Enabled=btnVisualAevRotate.Enabled=!edit;};
+            chkVisualAevEditMode.CheckedChanged+=(_,_)=>{bool edit=chkVisualAevEditMode.Checked;visualViewport?.SetAevEditMode(edit);btnVisualAevMove.Enabled=btnVisualAevRotate.Enabled=!edit;if(cmbVisualAevTransformSpace!=null)cmbVisualAevTransformSpace.Enabled=!edit;};
+            cmbVisualAevTransformSpace=new ComboBox{Width=78,Height=27,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat,Margin=new Padding(5,5,0,3)};
+            cmbVisualAevTransformSpace.Items.AddRange(new object[]{"WORLD","LOCAL"});cmbVisualAevTransformSpace.SelectedIndex=0;
+            cmbVisualAevTransformSpace.SelectedIndexChanged+=(_,_)=>visualViewport?.SetAevTransformSpace(cmbVisualAevTransformSpace.SelectedIndex==1?AevTransformSpace.Local:AevTransformSpace.World);
             var aevEditHint = new Label { Text="G/R transforma • Edit Mode altera altura e vértices", Dock=DockStyle.Bottom, Height=38, Padding=new Padding(8,7,0,0), ForeColor=TextMuted, Font=new Font("Segoe UI Semibold",8F) };
             tabAev.Controls.Add(lstVisualAevEntries); tabAev.Controls.Add(aevEditHint); tabAev.Controls.Add(cmbVisualAevTypeFilter); tabAev.Controls.Add(aevHint);
 
@@ -895,9 +931,10 @@ namespace RE4_PS2_MOD_WORKSPACE
             var enemyGizmoBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 36, BackColor = Surface, Padding = new Padding(6, 3, 3, 2), FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
             btnVisualEnemyGizmoMove = new Button(); SetupButton(btnVisualEnemyGizmoMove, "MOVE (G)", Accent, 82); btnVisualEnemyGizmoMove.Height = 28; btnVisualEnemyGizmoMove.Click += btnVisualEnemyGizmoMove_Click;
             btnVisualEnemyGizmoRotate = new Button(); SetupButton(btnVisualEnemyGizmoRotate, "ROTATE (R)", Surface2, 92); btnVisualEnemyGizmoRotate.Height = 28; btnVisualEnemyGizmoRotate.Click += btnVisualEnemyGizmoRotate_Click;
+            var btnVisualEnemyQuickAdjustments=new Button();SetupSecondary(btnVisualEnemyQuickAdjustments,"AJUSTES RÁPIDOS",154);btnVisualEnemyQuickAdjustments.Height=28;btnVisualEnemyQuickAdjustments.Click+=btnEnemyQuickAdjustments_Click;
             chkVisualEnemySnap = new CheckBox { Text = "Snap", AutoSize = true, Margin = new Padding(8, 6, 0, 0), BackColor = Surface, ForeColor = TextPrimary, Checked = false }; chkVisualEnemySnap.CheckedChanged += chkVisualEnemySnap_CheckedChanged;
             chkVisualEnemyAnimated = new CheckBox { Text = "Animated", AutoSize = true, Margin = new Padding(10, 6, 0, 0), BackColor = Surface, ForeColor = TextPrimary, Checked = false }; chkVisualEnemyAnimated.CheckedChanged += chkVisualEnemyAnimated_CheckedChanged;
-            enemyGizmoBar.Controls.Add(btnVisualEnemyGizmoMove); enemyGizmoBar.Controls.Add(btnVisualEnemyGizmoRotate); enemyGizmoBar.Controls.Add(chkVisualEnemySnap); enemyGizmoBar.Controls.Add(chkVisualEnemyAnimated);
+            enemyGizmoBar.Controls.Add(btnVisualEnemyGizmoMove); enemyGizmoBar.Controls.Add(btnVisualEnemyGizmoRotate);enemyGizmoBar.Controls.Add(btnVisualEnemyQuickAdjustments); enemyGizmoBar.Controls.Add(chkVisualEnemySnap); enemyGizmoBar.Controls.Add(chkVisualEnemyAnimated);
             chkVisualEnemyIgnoreRootMotion = new CheckBox { Text = "Sem root", AutoSize = true, Margin = new Padding(7, 6, 0, 0), BackColor = Surface, ForeColor = TextPrimary, Checked = true };
             chkVisualEnemyIgnoreRootMotion.CheckedChanged += (_,_) => visualViewport?.SetEnemyAnimationIgnoreRootMotion(chkVisualEnemyIgnoreRootMotion.Checked);
             enemyGizmoBar.Controls.Add(chkVisualEnemyIgnoreRootMotion);
@@ -943,7 +980,10 @@ namespace RE4_PS2_MOD_WORKSPACE
             btnVisualSmdCatalog=new Button();SetupButton(btnVisualSmdCatalog,"CATÁLOGO",Color.FromArgb(77,67,122),86);btnVisualSmdCatalog.Height=27;btnVisualSmdCatalog.Click+=btnVisualSmdCatalog_Click;
             smdBar.Controls.Add(btnVisualSmdMove);smdBar.Controls.Add(btnVisualSmdRotate);smdBar.Controls.Add(btnVisualSmdScale);smdBar.Controls.Add(chkVisualSmdSnap);smdBar.Controls.Add(chkVisualSmdEditMode);smdBar.Controls.Add(btnVisualSmdVertex);smdBar.Controls.Add(btnVisualSmdEdge);smdBar.Controls.Add(btnVisualSmdFace);smdBar.Controls.Add(chkVisualSmdMagnet);smdBar.Controls.Add(cmbVisualSmdTransformSpace);smdBar.Controls.Add(cmbVisualSmdTransformSpeed);smdBar.Controls.Add(btnVisualSmdDuplicate);smdBar.Controls.Add(btnVisualSmdImport);smdBar.Controls.Add(btnVisualSmdCatalog);
             tabSmd.Controls.Add(lstVisualSmdEntries);tabSmd.Controls.Add(smdHint);
-            var smdMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var smdDuplicate=new ToolStripMenuItem("Duplicar   Ctrl+D");smdDuplicate.Click+=(_,_)=>DuplicateSelectedSmdEntries();var smdDelete=new ToolStripMenuItem("Excluir   Del");smdDelete.Click+=(_,_)=>DeleteSelectedSmdEntries();var smdTextures=new ToolStripMenuItem("Editar texturas deste modelo...");smdTextures.Click+=(_,_)=>EditSelectedSmdTextures();var smdPivot=new ToolStripMenuItem("Recalcular pivô para o centro do modelo");smdPivot.Click+=(_,_)=>RecalculateSelectedSmdPivot();var smdAddSmx=new ToolStripMenuItem("SMX: criar propriedades para esta entry");smdAddSmx.Click+=(_,_)=>CreateSelectedSmdSmx();var smdRemoveSmx=new ToolStripMenuItem("SMX: remover propriedades desta entry...");smdRemoveSmx.Click+=(_,_)=>RemoveSelectedSmdSmx();var smdSeparateFaces=new ToolStripMenuItem("Separar faces selecionadas em uma entry   Ctrl+K");smdSeparateFaces.Click+=(_,_)=>SeparateSelectedSmdFaces();var smdJoin=new ToolStripMenuItem("Join: juntar seleção em um único BIN...");smdJoin.Click+=async (_,_)=>await JoinSelectedSmdEntriesAsync();var smdToCatalog=new ToolStripMenuItem("Adicionar seleção ao catálogo...");smdToCatalog.Click+=(_,_)=>AddSelectedSmdToCatalog();var smdExportBin=new ToolStripMenuItem("Exportar modelo BIN...");smdExportBin.Click+=(_,_)=>ExportSelectedSmdBin();var smdExportBins=new ToolStripMenuItem("Exportar BINs selecionados separadamente...");smdExportBins.Click+=(_,_)=>ExportSelectedSmdBinsSeparately();var smdExportObj=new ToolStripMenuItem("Exportar modelo OBJ + texturas...");smdExportObj.Click+=(_,_)=>ExportSelectedSmdObj();var smdExportObjs=new ToolStripMenuItem("Exportar selecionados em OBJs separados + texturas...");smdExportObjs.Click+=(_,_)=>ExportSelectedSmdObjsSeparately();var smdExportCombinedObj=new ToolStripMenuItem("Exportar selecionados em um único OBJ + texturas...");smdExportCombinedObj.Click+=(_,_)=>ExportSelectedSmdCombinedObj();smdMenu.Items.Add(smdSeparateFaces);smdMenu.Items.Add(smdPivot);smdMenu.Items.Add(smdTextures);smdMenu.Items.Add(smdJoin);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdAddSmx);smdMenu.Items.Add(smdRemoveSmx);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdToCatalog);smdMenu.Items.Add(smdExportBin);smdMenu.Items.Add(smdExportBins);smdMenu.Items.Add(smdExportObj);smdMenu.Items.Add(smdExportObjs);smdMenu.Items.Add(smdExportCombinedObj);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdDuplicate);smdMenu.Items.Add(smdDelete);smdMenu.Opening+=(_,_)=>{bool any=lstVisualSmdEntries.SelectedItems.Count>0;bool one=lstVisualSmdEntries.SelectedItems.Count==1;bool many=lstVisualSmdEntries.SelectedItems.Count>1;ScenarioEntry? selectedSmd=lstVisualSmdEntries.SelectedItem as ScenarioEntry;smdAddSmx.Enabled=one&&selectedSmd?.Smx==null&&selectedSmd.SmxId!=0xFF&&visualViewport?.Scene?.Smx!=null;smdRemoveSmx.Enabled=one&&selectedSmd?.Smx!=null;smdSeparateFaces.Enabled=one&&chkVisualSmdEditMode.Checked&&(visualViewport?.SelectedSmdFaceCount??0)>0;smdPivot.Enabled=one;smdTextures.Enabled=one;smdJoin.Enabled=many;smdToCatalog.Enabled=any;smdExportBin.Enabled=one;smdExportBins.Enabled=any;smdExportObj.Enabled=one;smdExportObjs.Enabled=any;smdExportCombinedObj.Enabled=any;smdDuplicate.Enabled=any;smdDelete.Enabled=any;};lstVisualSmdEntries.ContextMenuStrip=smdMenu;
+            var smdMenu=new ContextMenuStrip{BackColor=Surface2,ForeColor=TextPrimary,ShowImageMargin=false};var smdDuplicate=new ToolStripMenuItem("Duplicar   Ctrl+D");smdDuplicate.Click+=(_,_)=>DuplicateSelectedSmdEntries();var smdDelete=new ToolStripMenuItem("Excluir   Del");smdDelete.Click+=(_,_)=>DeleteSelectedSmdEntries();var smdTextures=new ToolStripMenuItem("Editar texturas deste modelo...");smdTextures.Click+=(_,_)=>EditSelectedSmdTextures();var smdPivot=new ToolStripMenuItem("Recalcular pivô para o centro do modelo");smdPivot.Click+=(_,_)=>RecalculateSelectedSmdPivot();var smdAddSmx=new ToolStripMenuItem("SMX: criar propriedades para esta entry");smdAddSmx.Click+=(_,_)=>CreateSelectedSmdSmx();var smdRemoveSmx=new ToolStripMenuItem("SMX: remover propriedades desta entry...");smdRemoveSmx.Click+=(_,_)=>RemoveSelectedSmdSmx();var smdSeparateFaces=new ToolStripMenuItem("Separar faces selecionadas em uma entry   Ctrl+K");smdSeparateFaces.Click+=(_,_)=>SeparateSelectedSmdFaces();var smdJoin=new ToolStripMenuItem("Join: juntar seleção em um único BIN...");smdJoin.Click+=async (_,_)=>await JoinSelectedSmdEntriesAsync();var smdToCatalog=new ToolStripMenuItem("Adicionar seleção ao catálogo...");smdToCatalog.Click+=(_,_)=>AddSelectedSmdToCatalog();var smdExportBin=new ToolStripMenuItem("Exportar modelo BIN...");smdExportBin.Click+=(_,_)=>ExportSelectedSmdBin();var smdExportBins=new ToolStripMenuItem("Exportar BINs selecionados separadamente...");smdExportBins.Click+=(_,_)=>ExportSelectedSmdBinsSeparately();var smdExportObj=new ToolStripMenuItem("Exportar modelo OBJ + texturas...");smdExportObj.Click+=(_,_)=>ExportSelectedSmdObj();var smdExportObjs=new ToolStripMenuItem("Exportar selecionados em OBJs separados + texturas...");smdExportObjs.Click+=(_,_)=>ExportSelectedSmdObjsSeparately();var smdExportCombinedObj=new ToolStripMenuItem("Exportar selecionados em um único OBJ + texturas...");smdExportCombinedObj.Click+=(_,_)=>ExportSelectedSmdCombinedObj();smdMenu.Items.Add(smdSeparateFaces);smdMenu.Items.Add(smdPivot);smdMenu.Items.Add(smdTextures);smdMenu.Items.Add(smdJoin);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdAddSmx);smdMenu.Items.Add(smdRemoveSmx);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdToCatalog);var smdUnlinkCollision=new ToolStripMenuItem("Desvincular colisão do catálogo");smdUnlinkCollision.Click+=(_,_)=>UnlinkSelectedSmdCatalogCollision();smdMenu.Items.Add(smdUnlinkCollision);smdMenu.Items.Add(smdExportBin);smdMenu.Items.Add(smdExportBins);smdMenu.Items.Add(smdExportObj);smdMenu.Items.Add(smdExportObjs);smdMenu.Items.Add(smdExportCombinedObj);smdMenu.Items.Add(new ToolStripSeparator());smdMenu.Items.Add(smdDuplicate);smdMenu.Items.Add(smdDelete);smdMenu.Opening+=(_,_)=>{ScenarioEntry? selectedSmd=lstVisualSmdEntries.SelectedItem as ScenarioEntry;bool any=selectedSmd!=null;bool one=selectedSmd!=null&&lstVisualSmdEntries.SelectedItems.Count<=1;bool many=lstVisualSmdEntries.SelectedItems.Count>1;smdAddSmx.Enabled=one&&selectedSmd!.Smx==null&&selectedSmd.SmxId!=0xFF&&visualViewport?.Scene?.Smx!=null;smdRemoveSmx.Enabled=one&&selectedSmd!.Smx!=null;smdSeparateFaces.Enabled=one&&chkVisualSmdEditMode.Checked&&(visualViewport?.SelectedSmdFaceCount??0)>0;smdPivot.Enabled=one;smdTextures.Enabled=one;smdJoin.Enabled=many;smdToCatalog.Enabled=any;smdExportBin.Enabled=one;smdExportBins.Enabled=any;smdExportObj.Enabled=one;smdExportObjs.Enabled=any;smdExportCombinedObj.Enabled=any;smdDuplicate.Enabled=any;smdDelete.Enabled=any;};lstVisualSmdEntries.ContextMenuStrip=smdMenu;
+
+            var smdNormalizeLighting=new ToolStripMenuItem("SMX: normalizar iluminação pelo cenário...");smdNormalizeLighting.Click+=(_,_)=>NormalizeSelectedSmdLighting();smdMenu.Items.Insert(6,smdNormalizeLighting);
+            smdMenu.Opening+=(_,_)=>{ScenarioEntry[] selected=lstVisualSmdEntries.SelectedItems.Cast<ScenarioEntry>().ToArray();if(selected.Length==0&&lstVisualSmdEntries.SelectedItem is ScenarioEntry current)selected=new[]{current};smdAddSmx.Text=selected.Length>1?"SMX: criar propriedades compartilhadas para a seleção":"SMX: criar propriedades para esta entry";smdAddSmx.Enabled=selected.Length>0&&selected.All(x=>x.Smx==null&&x.SmxId!=0xFF)&&visualViewport?.Scene?.Smx!=null;smdNormalizeLighting.Enabled=selected.Length==1&&selected[0].LocalTriangles.Count>0&&visualViewport?.Scene?.Smx!=null;};
 
             var litHint=new Label{Text="LIT • selecione um grupo e uma luz",Dock=DockStyle.Top,Height=27,Padding=new Padding(8,7,0,0),ForeColor=TextMuted,Font=new Font("Segoe UI Semibold",8F)};
             cmbVisualLitFile=new ComboBox{Dock=DockStyle.Top,Height=30,DropDownStyle=ComboBoxStyle.DropDownList,BackColor=Surface2,ForeColor=TextPrimary,FlatStyle=FlatStyle.Flat};
@@ -963,17 +1003,23 @@ namespace RE4_PS2_MOD_WORKSPACE
             lstVisualEffEntries.SelectedIndexChanged+=lstVisualEffEntries_SelectedIndexChanged;
             var effBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
             btnVisualExtractCore=new Button();SetupButton(btnVisualExtractCore,"EXTRAIR CORE.DAT",Surface2,132);btnVisualExtractCore.Height=28;btnVisualExtractCore.Click+=btnVisualExtractCore_Click;effBar.Controls.Add(btnVisualExtractCore);
+            chkVisualEffMist=new CheckBox{Text="Mostrar névoa",AutoSize=true,Margin=new Padding(10,6,0,0),BackColor=Surface,ForeColor=TextPrimary,Checked=true};
+            chkVisualEffMist.CheckedChanged+=(_,_)=>{settings.VisualEffMistVisible=chkVisualEffMist.Checked;if(visualViewport!=null){visualViewport.EffMistVisible=chkVisualEffMist.Checked;visualViewport.Invalidate();}if(!restoringSession)SaveSettings();};
+            effBar.Controls.Add(chkVisualEffMist);
             var effPreview=new Panel{Dock=DockStyle.Bottom,Height=196,BackColor=Surface2,Padding=new Padding(7)};
             picVisualEffTexture=new PictureBox{Left=7,Top=7,Width=150,Height=142,BackColor=Color.Black,SizeMode=PictureBoxSizeMode.Zoom};
             lblVisualEffTexture=new Label{Left=7,Top=151,Width=196,Height=38,ForeColor=TextMuted,Font=new Font("Segoe UI",7.5F),Text="Selecione um efeito",AutoEllipsis=true};
             nudVisualEffFrame=new NumericUpDown{Left=161,Top=7,Width=42,Height=26,Minimum=0,Maximum=0,BackColor=Surface,ForeColor=TextPrimary,Enabled=false};nudVisualEffFrame.ValueChanged+=nudVisualEffFrame_ValueChanged;
             effPreview.Controls.Add(picVisualEffTexture);effPreview.Controls.Add(lblVisualEffTexture);effPreview.Controls.Add(nudVisualEffFrame);
             tabEff.Controls.Add(lstVisualEffEntries);tabEff.Controls.Add(effPreview);tabEff.Controls.Add(effHint);
+            lstVisualObjectEntries.MouseDown += (_, e) => { if (e.Button == MouseButtons.Right) { int index = lstVisualObjectEntries.IndexFromPoint(e.Location); if (index >= 0 && !lstVisualObjectEntries.SelectedIndices.Contains(index)) { lstVisualObjectEntries.ClearSelected(); lstVisualObjectEntries.SetSelected(index, true); } } };
             var objectMenu = new ContextMenuStrip { BackColor = Surface2, ForeColor = TextPrimary, ShowImageMargin = false };
+            var replaceObjectModel = new ToolStripMenuItem("Alterar modelo..."); replaceObjectModel.Click += (_, _) => AlterarModeloEtmSelecionado();
+            var addItemToObject = new ToolStripMenuItem("Adicionar item como filho..."); addItemToObject.Click += (_, _) => AddItaItemsToSelectedObjects();
             var duplicateObject = new ToolStripMenuItem("Duplicate   Ctrl+D"); duplicateObject.Click += (_, _) => DuplicateSelectedEtsObject();
             var deleteObject = new ToolStripMenuItem("Delete   Del"); deleteObject.Click += (_, _) => DeleteSelectedEtsObject();
-            objectMenu.Items.Add(duplicateObject); objectMenu.Items.Add(deleteObject);
-            objectMenu.Opening += (_, _) => { bool selected = lstVisualObjectEntries.SelectedItem != null; duplicateObject.Enabled = selected; deleteObject.Enabled = selected; };
+            objectMenu.Items.Add(replaceObjectModel); objectMenu.Items.Add(addItemToObject); objectMenu.Items.Add(new ToolStripSeparator()); objectMenu.Items.Add(duplicateObject); objectMenu.Items.Add(deleteObject);
+            objectMenu.Opening += (_, _) => { bool hasSelection = lstVisualObjectEntries.SelectedItems.Count > 0; replaceObjectModel.Enabled = lstVisualObjectEntries.SelectedItems.Count == 1 && visualEtmCatalog?.Objects.ContainsKey(((EtsEntry)lstVisualObjectEntries.SelectedItem!).ObjectId) == true; addItemToObject.Enabled = hasSelection; duplicateObject.Enabled = hasSelection; deleteObject.Enabled = hasSelection; };
             lstVisualObjectEntries.ContextMenuStrip = objectMenu;
 
             ctxVisualAevEntries = new ContextMenuStrip { BackColor = Surface2, ForeColor = TextPrimary, ShowImageMargin = false };
@@ -984,7 +1030,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             lstVisualAevEntries.ContextMenuStrip = ctxVisualAevEntries;
             var aevBar=new FlowLayoutPanel{BackColor=Surface,Padding=new Padding(6,5,3,3),WrapContents=false};
             var btnAevDuplicate=new Button();SetupButton(btnAevDuplicate,"DUPLICAR",Surface2,82);btnAevDuplicate.Click+=(_,_)=>DuplicateSelectedAev();
-            var btnAevDelete=new Button();SetupButton(btnAevDelete,"EXCLUIR",Surface2,72);btnAevDelete.Click+=(_,_)=>DeleteSelectedAev();aevBar.Controls.Add(btnVisualAevMove);aevBar.Controls.Add(btnVisualAevRotate);aevBar.Controls.Add(chkVisualAevEditMode);aevBar.Controls.Add(btnAevDuplicate);aevBar.Controls.Add(btnAevDelete);
+            var btnAevDelete=new Button();SetupButton(btnAevDelete,"EXCLUIR",Surface2,72);btnAevDelete.Click+=(_,_)=>DeleteSelectedAev();aevBar.Controls.Add(btnVisualAevMove);aevBar.Controls.Add(btnVisualAevRotate);aevBar.Controls.Add(chkVisualAevEditMode);aevBar.Controls.Add(cmbVisualAevTransformSpace);aevBar.Controls.Add(btnAevDuplicate);aevBar.Controls.Add(btnAevDelete);
 
             ctxVisualEnemyEntries = new ContextMenuStrip { BackColor = Surface2, ForeColor = TextPrimary, ShowImageMargin = false };
             var focusEnemyItem = new ToolStripMenuItem("Focar na viewport   F"); focusEnemyItem.Click += (_, _) => FocusSelectedEnemy();
@@ -1020,7 +1066,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             visualViewport.FpsUpdated += fps => { if (!lblVisualFps.IsDisposed) lblVisualFps.Text = $"{fps} FPS"; };
             viewportHost.Controls.Add(lblVisualFps);
             lblVisualFps.BringToFront();
-            visualContextActionBars.Clear();visualContextActionBars[0]=aevBar;visualContextActionBars[1]=enemyGizmoBar;visualContextActionBars[2]=objectBar;visualContextActionBars[3]=collisionMoveBar;visualContextActionBars[4]=smdBar;visualContextActionBars[5]=litContextBar;visualContextActionBars[6]=effBar;visualContextActionBars[7]=rtpBar;visualContextActionBars[8]=camBar;visualContextActionBars[9]=itaBar;visualContextActionBars[10]=soundBar;
+            visualContextActionBars.Clear();visualContextActionBars[0]=aevBar;visualContextActionBars[1]=enemyGizmoBar;visualContextActionBars[2]=objectBar;visualContextActionBars[3]=collisionMoveBar;visualContextActionBars[4]=smdBar;visualContextActionBars[5]=litContextBar;visualContextActionBars[6]=effBar;visualContextActionBars[7]=rtpBar;visualContextActionBars[8]=camBar;visualContextActionBars[9]=itaBar;visualContextActionBars[10]=soundBar;visualContextActionBars[11]=emiBar;
             UpdateVisualContextActions();
             tblVisualWorkspaceRight.Controls.Add(viewportHost, 0, 0);
 
@@ -1050,22 +1096,51 @@ namespace RE4_PS2_MOD_WORKSPACE
 
         private void BuildToolsDesigner()
         {
-            AddPageHeader(pnlTools, "Ferramentas", "DAT, AFS e ISO são manipulados nativamente. Configure apenas as ferramentas opcionais.");
-            var box = Card(0, 76, 882, 204); pnlTools.Controls.Add(box);
-            txtTplManager = ToolRow(box, "TPL Manager (opcional)", 16, out btnBrowseTpl, out btnOpenTpl); btnBrowseTpl.Click += btnBrowseTpl_Click; btnOpenTpl.Click += btnOpenTpl_Click;
-            txtPcsx2 = ToolRow(box, "PCSX2", 94, out btnBrowsePcsx2, out btnOpenPcsx2); btnBrowsePcsx2.Click += btnBrowsePcsx2_Click; btnOpenPcsx2.Click += btnOpenPcsx2_Click;
-            var assetCard = Card(0, 298, 882, 112); pnlTools.Controls.Add(assetCard);
-            assetCard.Controls.Add(new Label { Text = "EDITOR DE MODELOS DE OBJETOS", Left = 16, Top = 14, Width = 420, Height = 22, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 10F) });
-            assetCard.Controls.Add(new Label { Text = "Edite modelos e texturas de armas, itens (ITM) e objetos interativos (ETM). Também abre com duplo clique na lista de Arquivos.", Left = 16, Top = 42, Width = 650, Height = 45, ForeColor = TextMuted });
-            var openAssetEditor = new Button { Left = 690, Top = 34 }; SetupButton(openAssetEditor, "ABRIR EDITOR 3D", Accent, 160); openAssetEditor.Click += (_, _) => OpenAssetModelEditor(); assetCard.Controls.Add(openAssetEditor);
-            var executableCard = Card(0, 428, 882, 126); pnlTools.Controls.Add(executableCard);
-            executableCard.Controls.Add(new Label { Text = "EDITOR DE EXECUTÁVEL", Left = 16, Top = 14, Width = 420, Height = 22, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 10F) });
-            executableCard.Controls.Add(new Label { Text = "Edite armas e limites no ELF do RE4 PS2 e injete o HUD de vida dos inimigos no SLPS debug. Compatível com SLUS, SLES e SLPS debug.", Left = 16, Top = 42, Width = 650, Height = 58, ForeColor = TextMuted });
-            var openExecutableEditor = new Button { Left = 690, Top = 43 }; SetupButton(openExecutableEditor, "ABRIR EDITOR", Accent, 160); openExecutableEditor.Click += (_, _) => OpenExecutableEditor(); executableCard.Controls.Add(openExecutableEditor);
-            var relPatchCard = Card(0, 572, 882, 126); pnlTools.Controls.Add(relPatchCard);
-            relPatchCard.Controls.Add(new Label { Text = "PATCHES PARA REL", Left = 16, Top = 14, Width = 420, Height = 22, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 10F) });
-            relPatchCard.Controls.Add(new Label { Text = "Injete patches independentes nos módulos REL da ISO de Build. Configure o tamanho global e individual dos inimigos via ESL.", Left = 16, Top = 42, Width = 650, Height = 58, ForeColor = TextMuted });
-            var openRelPatches = new Button { Left = 690, Top = 43 }; SetupButton(openRelPatches, "ABRIR", Accent, 160); openRelPatches.Click += (_, _) => OpenRelPatchManager(); relPatchCard.Controls.Add(openRelPatches);
+            AddPageHeader(pnlTools, "Ferramentas", "Editores e conversores para os arquivos do RE4 PS2.");
+            pnlTools.AutoScroll = true;
+            var grid = new TableLayoutPanel { Left = 0, Top = 76, Width = 882, Height = 543, ColumnCount = 2, RowCount = 3, BackColor = Bg, Padding = Padding.Empty };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 177)); grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 177));
+            grid.RowStyles.Add(new RowStyle(SizeType.Absolute, 177));
+            pnlTools.Controls.Add(grid);
+            pnlTools.Resize += (_, _) => grid.Width = Math.Max(680, pnlTools.ClientSize.Width - 2);
+            grid.Width = Math.Max(680, pnlTools.ClientSize.Width - 2);
+
+            Panel ToolCard(string title, string description)
+            {
+                var card = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 12, 12), BackColor = Surface };
+                card.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 3, BackColor = Accent });
+                var heading = new Label { Text = title, Left = 18, Top = 19, Height = 24, ForeColor = TextPrimary, Font = new Font("Segoe UI Semibold", 10F) };
+                var body = new Label { Text = description, Left = 18, Top = 52, Height = 58, ForeColor = TextMuted, Font = new Font("Segoe UI", 8.5F) };
+                card.Controls.Add(heading); card.Controls.Add(body);
+                card.Resize += (_, _) => { heading.Width = Math.Max(100, card.ClientSize.Width - 36); body.Width = heading.Width; };
+                return card;
+            }
+            Button Action(Panel card, string text, int x, int width, Color color, Action action)
+            {
+                var button = new Button { Left = x, Top = 121 };
+                SetupButton(button, text, color, width); button.Click += (_, _) => action(); card.Controls.Add(button); return button;
+            }
+
+            var assetCard = ToolCard("EDITOR DE MODELOS", "Edite modelos e texturas de armas, itens ITM e objetos ETM em uma viewport 3D.");
+            Action(assetCard, "ABRIR EDITOR 3D", 18, 158, Accent, () => OpenAssetModelEditor());
+            grid.Controls.Add(assetCard, 0, 0);
+
+            var etmCard = ToolCard("EDITOR DE ETM", "Explore objetos em 3D e seus BINs, texturas TPL e efeitos EFF. Importe OBJ/SMD e exporte modelos com texturas.");
+            Action(etmCard, "ABRIR EDITOR", 18, 158, Accent, OpenEtmEditor);
+            grid.Controls.Add(etmCard, 0, 2);
+            var converterCard = ToolCard("CONVERSOR DE MODELOS", "Carregue um BIN do PS2 e exporte OBJ com MTL e PNG, ou um modelo SMD.");
+            Action(converterCard, "CONVERTER BIN", 18, 158, Accent, () => { using var dialog = new BinModelConverterDialog(); dialog.ShowLocalizedDialog(this); });
+            grid.Controls.Add(converterCard, 1, 0);
+
+            var executableCard = ToolCard("EDITOR DE EXECUTÁVEL", "Edite armas e limites do ELF e os recursos do SLPS debug.");
+            Action(executableCard, "ABRIR EDITOR", 18, 138, Accent, OpenExecutableEditor);
+            grid.Controls.Add(executableCard, 0, 1);
+
+            var relCard = ToolCard("REL: PATCHES E INSPEÇÃO", "Aplique patches ou examine símbolos, dependências e realocações SNR2.");
+            Action(relCard, "PATCHES", 18, 118, Accent, OpenRelPatchManager);
+            Action(relCard, "INSPECIONAR REL", 146, 146, Surface2, OpenRelInspector);
+            grid.Controls.Add(relCard, 1, 1);
         }
 
         private void BuildSettingsDesigner()
@@ -1082,7 +1157,7 @@ namespace RE4_PS2_MOD_WORKSPACE
             }
             pnlSettings.SizeChanged+=(_,_)=>ResizeSettingsTabs();
             ResizeSettingsTabs();
-            var generalTab=new TabPage("GERAL"){BackColor=Surface,ForeColor=TextPrimary,Padding=new Padding(18)};
+            var generalTab=new TabPage("GERAL"){BackColor=Surface,ForeColor=TextPrimary,Padding=new Padding(18),AutoScroll=true};
             var generalCard=Card(18,18,790,330);generalCard.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
             generalCard.Controls.Add(new Label{Text="SALVAMENTO AUTOMÁTICO",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
             chkSettingsAutoSave=new CheckBox{Text="Ativar auto-save do cenário no Editor Visual",Left=18,Top=48,Width=420,Height=26,ForeColor=TextPrimary,BackColor=Surface2};
@@ -1110,7 +1185,12 @@ namespace RE4_PS2_MOD_WORKSPACE
             setupCard.Controls.Add(new Label{Text="CONFIGURAÇÃO INICIAL",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
             setupCard.Controls.Add(new Label{Text="Troque a ISO, mova o workspace ou revise as ferramentas usando o assistente guiado.",Left=18,Top=48,Width=540,Height=42,ForeColor=TextMuted,Font=new Font("Segoe UI",8.5F)});
             btnSettingsRunSetup=new Button{Left=598,Top=43};SetupSecondary(btnSettingsRunSetup,"ABRIR ASSISTENTE",164);btnSettingsRunSetup.Click+=btnSettingsRunSetup_Click;setupCard.Controls.Add(btnSettingsRunSetup);
-            generalTab.Controls.Add(setupCard);tabs.TabPages.Add(generalTab);
+            generalTab.Controls.Add(setupCard);
+            var externalToolsCard=Card(18,510,790,193);externalToolsCard.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
+            externalToolsCard.Controls.Add(new Label{Text="FERRAMENTAS EXTERNAS",Left=18,Top=13,Width=350,Height=23,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
+            txtPcsx2=ToolRow(externalToolsCard,"PCSX2",40,out btnBrowsePcsx2,out btnOpenPcsx2);btnBrowsePcsx2.Click+=btnBrowsePcsx2_Click;btnOpenPcsx2.Click+=btnOpenPcsx2_Click;
+            txtTplManager=ToolRow(externalToolsCard,"TPL Manager (opcional)",111,out btnBrowseTpl,out btnOpenTpl);btnBrowseTpl.Click+=btnBrowseTpl_Click;btnOpenTpl.Click+=btnOpenTpl_Click;
+            generalTab.Controls.Add(externalToolsCard);tabs.TabPages.Add(generalTab);
             var smdTab=new TabPage("SMD"){BackColor=Surface,ForeColor=TextPrimary,Padding=new Padding(18)};
             var card=Card(18,18,790,150);card.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right;
             card.Controls.Add(new Label{Text="PROTEÇÃO DE ÍNDICES",Left=18,Top=15,Width=350,Height=22,ForeColor=TextPrimary,Font=new Font("Segoe UI Semibold",10F)});
@@ -1132,9 +1212,12 @@ namespace RE4_PS2_MOD_WORKSPACE
         private TextBox ToolRow(Panel parent, string label, int y, out Button browse, out Button open)
         {
             parent.Controls.Add(new Label { Text = label, Left = 16, Top = y, Width = 220, Height = 18, ForeColor = TextMuted, Font = new Font("Segoe UI Semibold", 8.5F) });
-            var t = new TextBox { Left = 16, Top = y + 22, Width = 640, Height = 30, BackColor = Surface2, ForeColor = TextPrimary, BorderStyle = BorderStyle.FixedSingle };
-            browse = new Button { Left = 670, Top = y + 20 }; SetupSecondary(browse, "...", 46);
-            open = new Button { Left = 728, Top = y + 20 }; SetupSecondary(open, "ABRIR", 106);
+            var t = new TextBox { Left = 16, Top = y + 22, Height = 30, BackColor = Surface2, ForeColor = TextPrimary, BorderStyle = BorderStyle.FixedSingle };
+            browse = new Button { Top = y + 20 }; SetupSecondary(browse, "...", 42);
+            open = new Button { Top = y + 20 }; SetupSecondary(open, "ABRIR", 90);
+            Button browseButton = browse, openButton = open;
+            void ResizeRow() { t.Width = Math.Max(120, parent.ClientSize.Width - 174); browseButton.Left = parent.ClientSize.Width - 148; openButton.Left = parent.ClientSize.Width - 98; }
+            parent.Resize += (_, _) => ResizeRow(); ResizeRow();
             parent.Controls.Add(t); parent.Controls.Add(browse); parent.Controls.Add(open); return t;
         }
 

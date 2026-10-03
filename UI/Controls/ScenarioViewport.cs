@@ -1,4 +1,4 @@
-using RE4_PS2_MOD_WORKSPACE.Core.Visual;
+﻿using RE4_PS2_MOD_WORKSPACE.Core.Visual;
 using RE4_PS2_MOD_WORKSPACE.Core.Textures;
 using RE4_PS2_MOD_WORKSPACE.Core.Animation;
 using RE4_PS2_MOD_WORKSPACE.Core.Effects;
@@ -20,6 +20,9 @@ public enum ScenarioRenderMode
     SolidWireframe,
     Wireframe
 }
+public enum AevTransformSpace { World, Local }
+
+public enum EnemyMeshGizmoMode { Move, Rotate }
 
 public enum EnemyGizmoMode
 {
@@ -132,6 +135,7 @@ public sealed partial class ScenarioViewport : GLControl
     private int enemyFaceGizmoAxis;
     private Point enemyFaceGizmoStartMouse;
     private NVector3 enemyFaceGizmoDelta;
+    private NVector3 enemyFaceGizmoRotationDegrees;
     private readonly Dictionary<(byte EnemyType, int BinIndex), (int TplEntry, int TextureIndex)> enemyTextureAssignments = new();
     private int enemyModelVao, enemyModelVbo, enemyModelVertexCount, selectedEnemyModelVao, selectedEnemyModelVbo, selectedEnemyModelVertexCount;
     private readonly List<EnemyModelDrawBatch> enemyModelBatches = new();
@@ -183,6 +187,7 @@ public sealed partial class ScenarioViewport : GLControl
     private float verticalMoveStartY;
     private float verticalMovePixelsPerWorldUnit = 1f;
     private float aevRotationStartAngle;
+    public AevTransformSpace AevTransformSpace { get; private set; }
     public AevGizmoMode AevTransformMode { get; set; } = AevGizmoMode.Move;
     public bool AevEditMode { get; private set; }
     private readonly Stack<Action> aevUndo = new();
@@ -210,6 +215,7 @@ public sealed partial class ScenarioViewport : GLControl
     public event Action<EnemyModelFaceHit?, bool>? EnemyModelFaceClicked;
     public event Action<NVector3>? EnemyModelFaceTranslationRequested;
     public event Action<NVector3>? EnemyModelPartTranslationRequested;
+    public event Action<NVector3>? EnemyModelPartRotationRequested;
     public event Action? ExternalUndoRequested;
     public event Action? ExternalRedoRequested;
     public event Action<EslEnemyEntry>? EnemyEntryEdited;
@@ -250,8 +256,24 @@ public sealed partial class ScenarioViewport : GLControl
     public float LookSensitivity { get; set; } = 0.0032f;
     public bool ShowAevLabels { get; set; } = true;
     public bool ShowEnemyLabels { get; set; } = false;
+    public bool ShowEmiLabels { get; set; } = true;
     public bool EnemyModelPartPickingEnabled { get; set; }
+    public bool EnemyModelGizmoEnabled { get; set; } = true;
+    public EnemyMeshGizmoMode EnemyModelGizmoMode { get; private set; } = EnemyMeshGizmoMode.Move;
+    public void SetEnemyModelGizmoMode(EnemyMeshGizmoMode mode)
+    {
+        EnemyModelGizmoMode = mode;
+        enemyFaceGizmoAxis = 0;
+        enemyFaceGizmoDelta = NVector3.Zero;
+        enemyFaceGizmoRotationDegrees = NVector3.Zero;
+        enemyGpuDirty = true;
+        Invalidate();
+    }
     public bool EnemyModelFacePickingEnabled { get; set; }
+    public bool EnemyModelEditWireframeVisible { get; set; }
+    public bool ShowWorldOriginMarker { get; set; }
+    public bool GridAtWorldOrigin { get; set; }
+    public float GridRadiusOverride { get; set; }
     public ScenarioRenderMode RenderMode { get; set; } = ScenarioRenderMode.Solid;
 
     public void SetStatusMessage(string? message)
@@ -317,6 +339,7 @@ public sealed partial class ScenarioViewport : GLControl
     public void SetScene(ScenarioScene? value, bool fit = true)
     {
         scene = value;
+        unlitSceneExposure=CalculateUnlitSceneExposure(value);
         if(value!=null)RebuildScenarioGeometry();
         selectedSmdEntry = -1;
         smdOverlayDirty = true;
@@ -368,7 +391,7 @@ public sealed partial class ScenarioViewport : GLControl
     public void SetEnemyAttachmentOffset(float x,float y,float z) { enemyAttachmentOffset=new NVector3(x,y,z); enemyGpuDirty=true; Invalidate(); }
     public void SetEnemyAttachmentRotation(float x,float y,float z) { enemyAttachmentRotationDegrees=new NVector3(x,y,z); enemyGpuDirty=true; Invalidate(); }
     public void SetEnemyAttachmentAnimation(FcvAnimation? animation,float frame,bool applyToAll=false) { enemyAttachmentAnimation=animation; enemyAttachmentFrame=frame; enemyAttachmentAnimationForAll=applyToAll;ClearEnemyAnimationFrameCaches();enemyGpuDirty=true; Invalidate(); }
-    public void SetEnemyAnimationIgnoreRootMotion(bool ignore) { enemyAnimationIgnoreRootMotion=ignore; enemyGpuDirty=true; Invalidate(); }
+    public void SetEnemyAnimationIgnoreRootMotion(bool ignore) { if(enemyAnimationIgnoreRootMotion==ignore)return; enemyAnimationIgnoreRootMotion=ignore; ClearEnemyAnimationFrameCaches(); enemyGpuDirty=true; Invalidate(); }
     public void SetEnemyIdleAnimation(bool enabled, float frame, FcvAnimation? animation=null, bool stabilizeFeet=false)
     {
         enemyIdleAnimationEnabled=enabled;
@@ -404,6 +427,16 @@ public sealed partial class ScenarioViewport : GLControl
         enemyGpuDirty = true; Invalidate();
     }
     public void ShowAllEnemyModelParts(byte enemyType) { manualEnemyModelPartTypes.Add(enemyType); hiddenEnemyModelParts.Remove(enemyType); enemyGpuDirty=true; Invalidate(); }
+    public void SetVisibleEnemyModelParts(byte enemyType, IReadOnlySet<int> visibleBins)
+    {
+        if (!enemyModels.TryGetValue(enemyType, out EnemyModelScene? model)) return;
+        manualEnemyModelPartTypes.Add(enemyType);
+        var hidden = model.Parts.Where(part => !visibleBins.Contains(part.BinIndex)).Select(part => part.BinIndex).ToHashSet();
+        if (hidden.Count == 0) hiddenEnemyModelParts.Remove(enemyType);
+        else hiddenEnemyModelParts[enemyType] = hidden;
+        enemyGpuDirty = true;
+        Invalidate();
+    }
     public void UseAutomaticEnemyModelParts(byte enemyType) { manualEnemyModelPartTypes.Remove(enemyType); hiddenEnemyModelParts.Remove(enemyType); enemyGpuDirty=true; Invalidate(); }
     public void SoloEnemyModelPart(byte enemyType, int binIndex)
     {
@@ -470,6 +503,11 @@ public sealed partial class ScenarioViewport : GLControl
         AevTransformMode = mode;
         aevGpuDirty = true;
         Invalidate();
+    }
+
+    public void SetAevTransformSpace(AevTransformSpace space)
+    {
+        AevTransformSpace=space;aevGpuDirty=true;Invalidate();
     }
 
     public void SetAevEditMode(bool enabled)
@@ -701,6 +739,7 @@ public sealed partial class ScenarioViewport : GLControl
         if (litGpuDirty) UploadLit();
         if (effGpuDirty) UploadEff();
         if (rtpGpuDirty) UploadRtp();
+        if (emiGpuDirty) UploadEmi();
         // CAM edit handles are screen-sized, so their world-space geometry must be
         // refreshed whenever the event-driven viewport paints after camera motion.
         if(camScene!=null&&selectedCamEntry>=0)camGpuDirty=true;
@@ -726,7 +765,7 @@ public sealed partial class ScenarioViewport : GLControl
         GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
 
         bool hasEtsGeometry = etsVertexCount > 0 || selectedEtsVertexCount > 0 || etsModelVertexCount > 0 || selectedEtsModelVertexCount > 0;
-        if ((scene != null && ScenarioVisible) || (aevScene != null && AevVisible && aevVertexCount > 0) || (eslScene != null && EnemiesVisible && enemyVertexCount > 0) || (etsScene != null && ObjectsVisible && hasEtsGeometry) || (itaScene != null && ItaVisible) || (SoundVisible && (eseScene!=null||fseScene!=null)) || (CollisionVisible && (satCollisionVertexCount > 0 || eatCollisionVertexCount > 0)) || (litScene != null && LightingVisible && litVertexCount > 0) || (effScene != null && EffectsVisible) || (rtpScene != null && RtpVisible) || (camScene != null && CamVisible))
+        if ((scene != null && ScenarioVisible) || (aevScene != null && AevVisible && aevVertexCount > 0) || (eslScene != null && EnemiesVisible && enemyVertexCount > 0) || (etsScene != null && ObjectsVisible && hasEtsGeometry) || (itaScene != null && ItaVisible) || (SoundVisible && (eseScene!=null||fseScene!=null)) || (CollisionVisible && (satCollisionVertexCount > 0 || eatCollisionVertexCount > 0)) || (litScene != null && LightingVisible && litVertexCount > 0) || (effScene != null && EffectsVisible) || (rtpScene != null && RtpVisible) || (emiScene != null && EmiVisible) || (camScene != null && CamVisible))
         {
             Matrix4 mvp = BuildMvp();
             GL.UseProgram(shaderProgram);
@@ -751,6 +790,7 @@ public sealed partial class ScenarioViewport : GLControl
             DrawLitGpu();
             DrawEffGpu();
             DrawRtpGpu();
+            DrawEmiGpu();
             DrawCamGpu();
             DrawAssetOverlay();
 
@@ -761,6 +801,7 @@ public sealed partial class ScenarioViewport : GLControl
         if (ShowAevLabels && AevVisible && aevScene != null) DrawAevLabelsGpu();
         if (ShowEnemyLabels && EnemiesVisible && eslScene != null) DrawEnemyLabelsGpu();
         if (CamVisible && camScene != null) DrawCamFrameLabelsGpu();
+        if (ShowEmiLabels && EmiVisible && emiScene != null) DrawEmiLabelsGpu();
         if (statusMessage != null) DrawStatusMessageGpu(statusMessage);
         DrawSmdFaceSelectionBox();
         SwapBuffers();

@@ -1,4 +1,4 @@
-using OpenTK.Graphics.OpenGL4;
+﻿using OpenTK.Graphics.OpenGL4;
 using OpenTK.Mathematics;
 using RE4_PS2_MOD_WORKSPACE.Core.Collision;
 using NVector3 = System.Numerics.Vector3;
@@ -101,7 +101,7 @@ public sealed partial class ScenarioViewport
     private void UploadCollisionHandles()
     {
         if(!glReady)return;for(int i=0;i<3;i++)EnsureCollisionBuffer(ref collisionHandleVaos[i],ref collisionHandleVbos[i]);
-        List<float>[] handles=BuildCollisionHandle();for(int i=0;i<3;i++)UploadLineBuffer(collisionHandleVaos[i],collisionHandleVbos[i],handles[i],out collisionHandleVertexCounts[i]);
+        List<float>[] handles=CatalogCollisionPicking?new[]{new List<float>(),new List<float>(),new List<float>()}:BuildCollisionHandle();for(int i=0;i<3;i++)UploadLineBuffer(collisionHandleVaos[i],collisionHandleVbos[i],handles[i],out collisionHandleVertexCounts[i]);
     }
     private void UploadCollisionTransformPreview()
     {
@@ -148,6 +148,7 @@ public sealed partial class ScenarioViewport
 
     private List<float> BuildSelectedCollisionVertices()
     {
+        if(CatalogCollisionPicking)return BuildCatalogCollisionVertices();
         var output = new List<float>(24);
         if (selectedCollision == null) return output;
         if (!CategoryVisible(selectedCollision.Category)) return output;
@@ -276,7 +277,7 @@ public sealed partial class ScenarioViewport
         var clusters=new List<(NVector3 Direction,int Count,float Length)>();foreach(var pair in pairs){NVector3 edge=mesh.Positions[pair.Item2]-mesh.Positions[pair.Item1];float length=edge.Length();if(length<0.001f)continue;NVector3 direction=edge/length;if(MathF.Abs(NVector3.Dot(direction,y))>.01f)continue;int found=clusters.FindIndex(x=>MathF.Abs(NVector3.Dot(x.Direction,direction))>.999f);if(found<0)clusters.Add((direction,1,length));else{var old=clusters[found];clusters[found]=(old.Direction,old.Count+1,old.Length+length);}}if(clusters.Count==0)return world;var best=clusters.OrderByDescending(x=>x.Count).ThenByDescending(x=>MathF.Abs(NVector3.Dot(x.Direction,NVector3.UnitX))).ThenByDescending(x=>x.Length).First();NVector3 x=best.Direction-y*NVector3.Dot(best.Direction,y);if(x.LengthSquared()<0.000001f)return world;x=NVector3.Normalize(x);if(NVector3.Dot(x,NVector3.UnitX)<0)x=-x;NVector3 z=NVector3.Normalize(NVector3.Cross(x,y));x=NVector3.Normalize(NVector3.Cross(y,z));return new[]{x,y,z};
     }
     private bool CategoryVisible(EsatFaceCategory c) => c switch { EsatFaceCategory.Floor => CollisionFloorVisible, EsatFaceCategory.Slope => CollisionSlopeVisible, _ => CollisionWallVisible };
-    private static EsatFaceCategory GetCategory(EsatMesh mesh, int index) => index < mesh.FloorCount ? EsatFaceCategory.Floor : index < mesh.FloorCount + mesh.SlopeCount ? EsatFaceCategory.Slope : EsatFaceCategory.Wall;
+    private static EsatFaceCategory GetCategory(EsatMesh mesh, int index) => mesh.GetFaceCategory(index);
 
     private static void WriteCollisionVertex(List<float> output, NVector3 position, NVector3 normal)
     {
@@ -400,7 +401,7 @@ public sealed partial class ScenarioViewport
 
     private bool TryBeginCollisionVertexDrag(Point screen)
     {
-        if(!CollisionVisible||selectedCollision==null||(selectedCollisionVertexSlot<0&&!HasMarkedCollisionEdges))return false;
+        if(CatalogCollisionPicking||!CollisionVisible||selectedCollision==null||(selectedCollisionVertexSlot<0&&!HasMarkedCollisionEdges))return false;
         NVector3 p=SelectedVertexWorld();float length=CamScreenSize(p,72f);if(!TryProjectWorldToScreen(p,out PointF origin))return false;float best=12f;collisionDragAxis=0;NVector3[] directions=CollisionGizmoAxes();if(CollisionTransformMode==CollisionGizmoMode.Rotate){const int segments=64;for(int ring=0;ring<3;ring++){NVector3 u=directions[(ring+1)%3],v=directions[(ring+2)%3];PointF? previous=null;for(int i=0;i<=segments;i++){float angle=MathF.Tau*i/segments;NVector3 world=p+(u*MathF.Cos(angle)+v*MathF.Sin(angle))*length;if(!TryProjectWorldToScreen(world,out PointF point)){previous=null;continue;}if(previous.HasValue){float d=DistancePointToSegment(screen,previous.Value,point);if(d<best){best=d;collisionDragAxis=ring+1;}}previous=point;}}}else for(int i=0;i<3;i++)if(TryProjectWorldToScreen(p+directions[i]*length,out PointF end)){float d=DistancePointToSegment(screen,origin,end);if(d<best){best=d;collisionDragAxis=i+1;}}if(collisionDragAxis==0)return false;collisionDragWorldAxis=directions[collisionDragAxis-1];
         draggingCollisionVertex=true;collisionGpuPreviewActive=CollisionRegionActive||HasMarkedCollisionEdges;collisionGpuPreviewModel=Matrix4.Identity;collisionGpuDirty=true;collisionDragStartMouse=screen;collisionDragStartPosition=SelectedVertexWorld();
         collisionDragStartVertices=SelectedFaceVertexIndices().ToDictionary(x=>x,x=>selectedCollision.Mesh.Positions[x]);collisionDragStartNormals.Clear();if(CollisionTransformMode==CollisionGizmoMode.Rotate){IEnumerable<int> faces=CollisionRegionActive&&selectedCollisionRegionFaces.Count>0?selectedCollisionRegionFaces:selectedCollisionManualFaces.Count>0?selectedCollisionManualFaces:new[]{selectedCollision.FaceIndex};collisionDragStartNormals=faces.Select(i=>(int)selectedCollision.Mesh.Faces[i].Normal).Distinct().ToDictionary(i=>i,i=>selectedCollision.Mesh.Normals[i]);var radial=new System.Numerics.Vector2(screen.X-origin.X,screen.Y-origin.Y);if(radial.LengthSquared()>.01f){radial=System.Numerics.Vector2.Normalize(radial);collisionDragScreenAxis=new(-radial.Y,radial.X);}}

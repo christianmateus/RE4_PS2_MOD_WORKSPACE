@@ -169,10 +169,22 @@ public static class FcvSkeletonEvaluator
         Vector3 storedAxis=bindFrame.Transform(Vector3.UnitX);
         Vector3 animatedAxis=Vector3.Transform(storedAxis,before[upper]);
         GameBasis aimFrame=CreateOrientationZX(direction,animatedAxis);
-        // The ZX frame's Y column is the actual bend-plane direction selected by ikCalc. Use it
-        // for the geometric two-link solution; this preserves the source's plane construction
-        // while avoiding a row/column convention dependency when converting the final GC matrix.
-        Vector3 pole=aimFrame.Y;
+        // The animated FK elbow establishes the bend side for this pose. The GameCube IK
+        // matrix also carries a bind correction before applying the cosine-law angle; using
+        // the ZX frame's Y column alone loses that correction and can mirror Leon's elbow
+        // through his chest. Keep the authored bend plane, with the controller as fallback.
+        Vector3 pole=worldPositions[elbow]-shoulder;
+        pole-=direction*Vector3.Dot(pole,direction);
+        if(pole.LengthSquared()<0.0001f)
+        {
+            Vector3 bindPole=GetBindWorldPosition(skeleton,elbow)-GetBindWorldPosition(skeleton,upper);
+            int parent=skeleton.Bones[upper].ParentIndex;
+            pole=parent>=0?Vector3.Transform(bindPole,before[parent]):bindPole;
+            pole-=direction*Vector3.Dot(pole,direction);
+        }
+        if(pole.LengthSquared()<0.0001f) pole=aimFrame.Y-direction*Vector3.Dot(aimFrame.Y,direction);
+        if(pole.LengthSquared()<0.0001f)return;
+        pole=Vector3.Normalize(pole);
         float reachable=Math.Clamp(distance,MathF.Abs(upperLength-lowerLength)+0.001f,upperLength+lowerLength-0.001f);
         float along=(upperLength*upperLength-lowerLength*lowerLength+reachable*reachable)/(2f*reachable);
         float bend=MathF.Sqrt(MathF.Max(0f,upperLength*upperLength-along*along));
@@ -386,6 +398,27 @@ public static class FcvSkeletonEvaluator
         // lands on the FCV coordinates while the hip remains in the same coordinate space.
         Vector3 rawTarget=SampleTrackRaw(targetTrack,frame);
         Vector3 target=Vector3.Transform(rawTarget,rootRotation)+rootMotion;
+        Quaternion animatedFootRotation=worldRotations[foot];
+        if((controllerTrack.Type&0x20)!=0)
+        {
+            // GameCube InverseKinematics uses heel2toe for kind 0x20: the FCV target is
+            // where the toe lands. Solve the leg against the heel after subtracting the
+            // animated heel-to-toe offset. The heel matrix is built from its own local
+            // rotation against the model matrix, before the thigh/calf IK rotations.
+            FcvTrack? footRotation=animation.Tracks.FirstOrDefault(t=>t.NodeId==skeleton.Bones[foot].Id&&(t.Type&0x02)!=0);
+            if(footRotation!=null)
+            {
+                int encoding=footRotation.DataType>>4;
+                animatedFootRotation=Quaternion.Normalize(rootRotation*CreateGameEulerRotation(
+                    (float)EvalOrZero(footRotation.X,frame,encoding),
+                    (float)EvalOrZero(footRotation.Y,frame,encoding),
+                    (float)EvalOrZero(footRotation.Z,frame,encoding)));
+            }
+            int toe=Enumerable.Range(0,skeleton.Bones.Count)
+                .FirstOrDefault(i=>skeleton.Bones[i].ParentIndex==foot,-1);
+            if(toe>=0)
+                target-=Vector3.Transform(skeleton.Bones[toe].LocalPosition,animatedFootRotation);
+        }
         Vector3 hip=worldPositions[thigh];
         Vector3 toTarget=target-hip;
         float distance=toTarget.Length();
@@ -450,7 +483,6 @@ public static class FcvSkeletonEvaluator
         float bend=MathF.Sqrt(MathF.Max(0f,upperLength*upperLength-along*along));
         Vector3 knee=hip+direction*along+pole*bend;
         Quaternion[] rotationsBeforeIk=(Quaternion[])worldRotations.Clone();
-        Quaternion animatedFootRotation=worldRotations[foot];
 
         Vector3 currentUpper=Vector3.Transform(skeleton.Bones[calf].LocalPosition,worldRotations[thigh]);
         Quaternion upperCorrection=RotationBetween(currentUpper,knee-hip);

@@ -13,7 +13,8 @@ public sealed partial class ScenarioViewport
     private int selectedLitGroup=-1,selectedLitLight=-1;
     private bool litGpuDirty;
     private int litVao,litVbo,litVertexCount,litShader,litMvp;
-    private int uLitEnabled,uLitCount,uLitAmbient,uLitTime;
+    private int uLitEnabled,uLitCount,uLitAmbient,uLitTime,uLitSelectMask,uLitSceneScale;
+    private float unlitSceneExposure=1f;
     private int uFogEnabled,uFogType,uFogColor,uFogRange,uCameraPosition,uCameraForward;
     private readonly int[] uLitPosRange=new int[MaxPreviewLights],uLitColorIntensity=new int[MaxPreviewLights],uLitDirectionType=new int[MaxPreviewLights];
     private readonly int[] uLitAttnA=new int[MaxPreviewLights],uLitAttnK=new int[MaxPreviewLights],uLitBehavior0=new int[MaxPreviewLights],uLitBehavior1=new int[MaxPreviewLights],uLitMeta=new int[MaxPreviewLights];
@@ -32,7 +33,7 @@ public sealed partial class ScenarioViewport
 
     private void InitializeLitShaderBindings()
     {
-        uLitEnabled=GL.GetUniformLocation(shaderProgram,"uLitEnabled");uLitCount=GL.GetUniformLocation(shaderProgram,"uLitCount");uLitAmbient=GL.GetUniformLocation(shaderProgram,"uLitAmbient");uLitTime=GL.GetUniformLocation(shaderProgram,"uLitTime");
+        uLitEnabled=GL.GetUniformLocation(shaderProgram,"uLitEnabled");uLitCount=GL.GetUniformLocation(shaderProgram,"uLitCount");uLitAmbient=GL.GetUniformLocation(shaderProgram,"uLitAmbient");uLitTime=GL.GetUniformLocation(shaderProgram,"uLitTime");uLitSelectMask=GL.GetUniformLocation(shaderProgram,"uLitSelectMask");uLitSceneScale=GL.GetUniformLocation(shaderProgram,"uLitSceneScale");
         uFogEnabled=GL.GetUniformLocation(shaderProgram,"uFogEnabled");uFogType=GL.GetUniformLocation(shaderProgram,"uFogType");uFogColor=GL.GetUniformLocation(shaderProgram,"uFogColor");uFogRange=GL.GetUniformLocation(shaderProgram,"uFogRange");uCameraPosition=GL.GetUniformLocation(shaderProgram,"uCameraPosition");uCameraForward=GL.GetUniformLocation(shaderProgram,"uCameraForward");
         for(int i=0;i<MaxPreviewLights;i++)
         {
@@ -44,23 +45,55 @@ public sealed partial class ScenarioViewport
     private void ApplyLitShaderUniforms()
     {
         LitGroup? group=litScene?.Groups.FirstOrDefault(x=>x.SlotIndex==selectedLitGroup)??litScene?.Groups.FirstOrDefault();
-        if(!LightingVisible||group==null){GL.Uniform1(uLitEnabled,0);GL.Uniform1(uLitCount,0);GL.Uniform1(uFogEnabled,0);return;}
+        if(!LightingVisible||group==null){GL.Uniform1(uLitEnabled,0);GL.Uniform1(uLitCount,0);GL.Uniform1(uLitSceneScale,unlitSceneExposure);GL.Uniform1(uFogEnabled,0);return;}
         float fogStart=group.FogStart/100f,fogEnd=group.FogEnd/100f;bool fogValid=group.FogType!=0&&float.IsFinite(fogStart)&&float.IsFinite(fogEnd)&&fogEnd>fogStart;
         NVector3 cameraForward=GetForward();
         GL.Uniform1(uFogEnabled,fogValid?1:0);GL.Uniform1(uFogType,(int)group.FogType);GL.Uniform3(uFogColor,group.FogR/255f,group.FogG/255f,group.FogB/255f);GL.Uniform2(uFogRange,fogStart,fogEnd);GL.Uniform3(uCameraPosition,cameraPosition.X,cameraPosition.Y,cameraPosition.Z);GL.Uniform3(uCameraForward,cameraForward.X,cameraForward.Y,cameraForward.Z);
-        LitLight[] lights=group.Lights.Where(x=>x.IsActive).Take(MaxPreviewLights).ToArray();GL.Uniform1(uLitEnabled,1);GL.Uniform1(uLitCount,lights.Length);GL.Uniform1(uLitTime,(float)((Stopwatch.GetTimestamp()-litAnimationEpoch)/(double)Stopwatch.Frequency));
+        var lights=group.Lights.Select((light,index)=>(Light:light,SourceIndex:index)).Where(x=>x.Light.IsActive).Take(MaxPreviewLights).ToArray();GL.Uniform1(uLitEnabled,1);GL.Uniform1(uLitCount,lights.Length);GL.Uniform1(uLitTime,(float)((Stopwatch.GetTimestamp()-litAnimationEpoch)/(double)Stopwatch.Frequency));GL.Uniform1(uLitSelectMask,uint.MaxValue);
         GL.Uniform4(uLitAmbient,group.BaseR/255f,group.BaseG/255f,group.BaseB/255f,group.BaseA/255f);
+        // GX TEV scale is encoded as 0/4 = 1x, 1/5 = 2x, 2/6 = 4x.
+        // r106 uses 5, which is therefore 2x rather than a literal 5x.
+        float sceneScale=group.SmdMultiplier switch{1 or 5=>2f,2 or 6=>4f,_=>1f};
+        GL.Uniform1(uLitSceneScale,sceneScale);
         for(int i=0;i<lights.Length;i++)
         {
-            LitLight l=lights[i];ResolveLitTransform(l,out NVector3 p,out NVector3 rawDirection);NVector3 d=rawDirection;if(!Finite(d)||d.LengthSquared()<.000001f)d=new NVector3(-.35f,.75f,-.55f);else d=NVector3.Normalize(d);
+            LitLight l=lights[i].Light;ResolveLitTransform(l,out NVector3 p,out NVector3 rawDirection);NVector3 d=rawDirection;if(!Finite(d)||d.LengthSquared()<.000001f)d=new NVector3(-.35f,.75f,-.55f);else d=NVector3.Normalize(d);
             float radius=float.IsFinite(l.Range)?MathF.Abs(l.Range)/100f:0f;float intensity=float.IsFinite(l.Intensity)?Math.Clamp(l.Intensity,0f,64f):0f;float alpha=l.ColorA/128f;
             GL.Uniform4(uLitPosRange[i],p.X,p.Y,p.Z,radius);GL.Uniform4(uLitColorIntensity[i],l.ColorR/255f*alpha,l.ColorG/255f*alpha,l.ColorB/255f*alpha,intensity);GL.Uniform4(uLitDirectionType[i],d.X,d.Y,d.Z,l.Type);
             GL.Uniform4(uLitAttnA[i],Safe(l.A0),Safe(l.A1)/100f,Safe(l.A2),Safe(rawDirection.X)/100f);GL.Uniform4(uLitAttnK[i],Safe(l.K0),Safe(l.K1),Safe(l.K2),0f);
             GL.Uniform4(uLitBehavior0[i],Safe(l.WorkFloat(0)),Safe(l.WorkFloat(1)),Safe(l.WorkFloat(2)),Safe(l.WorkFloat(3)));GL.Uniform4(uLitBehavior1[i],Safe(l.WorkFloat(4)),Safe(l.WorkFloat(5)),Safe(l.WorkFloat(6)),Safe(l.WorkFloat(7)));
-            GL.Uniform4(uLitMeta[i],l.Attribute,l.FlickerRange/255f,(float)(l.Work0&0xFF),l.Priority);
+            int packedMaskAndIndex=(l.Mask<<8)|(lights[i].SourceIndex&0xFF);
+            GL.Uniform4(uLitMeta[i],l.Attribute,l.FlickerRange/255f,(float)(l.Work0&0xFF),packedMaskAndIndex);
         }
         static bool Finite(NVector3 v)=>float.IsFinite(v.X)&&float.IsFinite(v.Y)&&float.IsFinite(v.Z);
         static float Safe(float v)=>float.IsFinite(v)?v:0f;
+    }
+
+    private static float CalculateUnlitSceneExposure(ScenarioScene? scene)
+    {
+        if(scene==null)return 1f;
+        // Average each embedded BIN once. Repeated entries must not bias the
+        // exposure, and imported full-white models should remain a small part
+        // of the room-wide reference rather than defining it.
+        var levels=new List<float>();
+        foreach(ScenarioEntry entry in scene.Entries.GroupBy(x=>x.BinId).Select(x=>x.First()))
+        {
+            if(entry.LocalTriangles.Count==0)continue;
+            double sum=0;long count=0;
+            foreach(ScenarioTriangle triangle in entry.LocalTriangles)
+            {
+                sum+=(triangle.ColorA.X+triangle.ColorA.Y+triangle.ColorA.Z)/3.0;
+                sum+=(triangle.ColorB.X+triangle.ColorB.Y+triangle.ColorB.Z)/3.0;
+                sum+=(triangle.ColorC.X+triangle.ColorC.Y+triangle.ColorC.Z)/3.0;
+                count+=3;
+            }
+            if(count>0){float level=(float)(sum/count);if(float.IsFinite(level)&&level>0.001f)levels.Add(level);}
+        }
+        if(levels.Count==0)return 1f;
+        levels.Sort();
+        // Median is robust against a few unusually bright/dark special models.
+        float median=levels[levels.Count/2];
+        return Math.Clamp(0.65f/MathF.Max(0.01f,median),1f,6f);
     }
 
     private void UploadLit()
