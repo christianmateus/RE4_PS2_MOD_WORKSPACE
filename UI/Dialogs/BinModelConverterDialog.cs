@@ -56,7 +56,7 @@ public sealed class BinModelConverterDialog : AppForm
         StyleButton(convert, "CONVERTER", Accent, 392, 315, 103);
         convert.Click += async (_, _) => await ConvertAsync();
         Controls.Add(convert);
-        var close = new Button(); StyleButton(close, "FECHAR", Surface2, 505, 315, 101);
+        var close = new Button(); StyleButton(close, LanguageService.T("common.btn.close"), Surface2, 505, 315, 101);
         close.Click += (_, _) => Close(); Controls.Add(close);
         CancelButton = close;
         UpdateButtons();

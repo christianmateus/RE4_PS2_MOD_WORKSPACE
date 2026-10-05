@@ -30,7 +30,7 @@ internal sealed class EtmReplicationDialog:AppForm
         var footer=new TableLayoutPanel{Dock=DockStyle.Bottom,Height=96,ColumnCount=3,Padding=new Padding(20,10,20,10)};footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,218));footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,115));
         var selectAll=new CheckBox{Text="Selecionar todos os compatíveis",AutoSize=true,ForeColor=Color.White};selectAll.CheckedChanged+=(_,_)=>{foreach(ListViewItem row in targets.Items)if(row.Tag is EtmReplicationTarget t&&t.Compatible)row.Checked=selectAll.Checked;};
         var info=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false};info.Controls.Add(selectAll);summary.Height=30;summary.Width=540;info.Controls.Add(summary);
-        apply.FlatAppearance.BorderSize=0;apply.Click+=async(_,_)=>await ApplyAsync();var cancel=new Button{Text="FECHAR",Width=100,Height=36,FlatStyle=FlatStyle.Flat,ForeColor=Color.Gainsboro,BackColor=Color.FromArgb(38,43,52)};cancel.FlatAppearance.BorderSize=0;cancel.Click+=(_,_)=>Close();
+        apply.FlatAppearance.BorderSize=0;apply.Click+=async(_,_)=>await ApplyAsync();var cancel=new Button{Text=LanguageService.T("common.btn.close"),Width=100,Height=36,FlatStyle=FlatStyle.Flat,ForeColor=Color.Gainsboro,BackColor=Color.FromArgb(38,43,52)};cancel.FlatAppearance.BorderSize=0;cancel.Click+=(_,_)=>Close();
         footer.Controls.Add(info,0,0);footer.Controls.Add(apply,1,0);footer.Controls.Add(cancel,2,0);
         Controls.Add(body);Controls.Add(footer);Controls.Add(heading);Controls.Add(progress);
         Shown+=async(_,_)=>await ScanAsync();FormClosing+=(_,e)=>{if(loading)e.Cancel=true;};

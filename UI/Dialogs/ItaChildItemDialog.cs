@@ -81,7 +81,7 @@ public sealed class ItaChildItemDialog : AppForm
         Controls.Add(card);
 
         Controls.Add(new Label { Text = "A mesma configuração será aplicada a cada objeto selecionado.", Left = 28, Top = 302, Width = 500, Height = 22, ForeColor = Muted });
-        Button cancel = MakeButton("CANCELAR", Field, 296, 336, 108);
+        Button cancel = MakeButton(LanguageService.T("common.btn.cancel"), Field, 296, 336, 108);
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         Button add = MakeButton("ADICIONAR ITEM", Accent, 416, 336, 140);
         add.Enabled = HasItems;

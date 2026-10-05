@@ -161,7 +161,7 @@ public sealed class RelInspectorForm : AppForm
         field.Margin = new Padding(2, 4, 8, 4);
         StyleTextBox(field);
         parent.Controls.Add(field, 1, row);
-        var browse = new Button { Text = "PROCURAR", Dock = DockStyle.Fill,
+        var browse = new Button { Text = LanguageService.T("common.btn.browse"), Dock = DockStyle.Fill,
             Margin = new Padding(4, 2, 0, 2), BackColor = Color.FromArgb(40, 44, 52),
             ForeColor = TextColor, FlatStyle = FlatStyle.Flat };
         browse.FlatAppearance.BorderSize = 0;
