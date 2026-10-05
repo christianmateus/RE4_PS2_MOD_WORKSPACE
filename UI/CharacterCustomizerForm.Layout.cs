@@ -114,7 +114,7 @@ public sealed partial class CharacterCustomizerForm : AppForm
         presetPanel.Controls.Add(cmbViewPreset);
         presetPanel.Controls.Add(TextureButton("NOVO", (_, _) => CreatePreset(), 55));
         presetPanel.Controls.Add(TextureButton("DUPLICAR", (_, _) => DuplicatePreset(), 78));
-        presetPanel.Controls.Add(TextureButton("SALVAR", (_, _) => SaveActivePreset(), 65));
+        presetPanel.Controls.Add(TextureButton(LanguageService.T("common.btn.save"), (_, _) => SaveActivePreset(), 65));
         presetPanel.Controls.Add(TextureButton("RENOMEAR", (_, _) => RenamePreset(), 80));
         presetPanel.Controls.Add(TextureButton("EXCLUIR", (_, _) => DeletePreset(), 70));
         var materialPanel = new Panel { Dock = DockStyle.Bottom, Height = 74, BackColor = Color.FromArgb(28, 31, 37), Padding = new Padding(5) };
@@ -139,7 +139,7 @@ public sealed partial class CharacterCustomizerForm : AppForm
         ConfigureTextureButton(btnUndo, "DESFAZER", (_, _) => UndoTextureEdit(), 80);
         ConfigureTextureButton(btnRedo, "REFAZER", (_, _) => RedoTextureEdit(), 76);
         historyTools.Controls.Add(btnCompare); historyTools.Controls.Add(btnUndo); historyTools.Controls.Add(btnRedo);
-        historyTools.Controls.Add(TextureButton("RESTAURAR", (_, _) => RestoreSelectedTexture(), 88));
+        historyTools.Controls.Add(TextureButton(LanguageService.T("common.btn.restore"), (_, _) => RestoreSelectedTexture(), 88));
         txtTextureName.Leave += (_, _) => SaveSelectedTextureName();
         txtTextureName.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { SaveSelectedTextureName(); e.Handled = true; e.SuppressKeyPress = true; } };
         textureSplit.Panel1.Controls.Add(lstTextures); textureSplit.Panel1.Controls.Add(historyTools);

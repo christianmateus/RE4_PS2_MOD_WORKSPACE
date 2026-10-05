@@ -101,7 +101,7 @@ public sealed class AfsBatchExtractionDialog : AppForm
         StyleButton(extract, "EXTRAIR", Accent, 481, 480, 112);
         extract.Click += async (_, _) => await ExtractAsync();
         Controls.Add(extract);
-        StyleButton(cancel, "FECHAR", Surface2, 605, 480, 112);
+        StyleButton(cancel, LanguageService.T("common.btn.close"), Surface2, 605, 480, 112);
         cancel.Click += (_, _) => { if (running) cancellation?.Cancel(); else Close(); };
         Controls.Add(cancel);
         CancelButton = cancel;
@@ -139,7 +139,7 @@ public sealed class AfsBatchExtractionDialog : AppForm
         extract.Enabled = false;
         overwrite.Enabled = false;
         foreach (CheckBox choice in choices.Values) choice.Enabled = false;
-        cancel.Text = "CANCELAR";
+        cancel.Text = LanguageService.T("common.btn.cancel");
         progress.Maximum = selected.Length;
         progress.Value = 0;
         bool replaceExisting = overwrite.Checked;
@@ -186,7 +186,7 @@ public sealed class AfsBatchExtractionDialog : AppForm
             overwrite.Enabled = true;
             foreach (var pair in choices) pair.Value.Enabled = files.Any(file => file.Format == pair.Key.Format && file.Group == pair.Key.Group);
             extract.Enabled = selected.Length > 0;
-            cancel.Text = "FECHAR";
+            cancel.Text = LanguageService.T("common.btn.close");
         }
     }
 }

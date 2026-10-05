@@ -57,7 +57,7 @@ public sealed class CnsEditorForm : AppForm
 
         var footer = new Panel { Dock = DockStyle.Fill, BackColor = Surface, Padding = new Padding(14, 9, 14, 9), Margin = Padding.Empty };
         statusLabel = new Label { Dock = DockStyle.Fill, ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
-        var cancel = MakeButton("FECHAR", Surface2, 104); cancel.Dock = DockStyle.Right; cancel.DialogResult = DialogResult.Cancel;
+        var cancel = MakeButton(LanguageService.T("common.btn.close"), Surface2, 104); cancel.Dock = DockStyle.Right; cancel.DialogResult = DialogResult.Cancel;
         saveButton = MakeButton("SALVAR CNS", Accent, 132); saveButton.Dock = DockStyle.Right; saveButton.Margin = new Padding(10, 0, 0, 0); saveButton.Click += SaveButton_Click;
         footer.Controls.Add(statusLabel); footer.Controls.Add(cancel); footer.Controls.Add(saveButton);
         windowLayout.Controls.Add(footer, 0, 2);

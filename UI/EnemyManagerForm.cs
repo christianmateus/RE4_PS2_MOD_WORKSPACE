@@ -49,7 +49,7 @@ public sealed class EnemyManagerForm : AppForm
         cmbFiles.Left = 16; cmbFiles.Top = 70; cmbFiles.Width = 310; cmbFiles.Height = 30; cmbFiles.DropDownStyle = ComboBoxStyle.DropDownList; cmbFiles.BackColor = Color.FromArgb(28, 31, 37); cmbFiles.ForeColor = Color.FromArgb(238, 240, 244); cmbFiles.FlatStyle = FlatStyle.Flat; cmbFiles.SelectedIndexChanged += (_, _) => UpdateFileInfo();
         btnOpen.SetBounds(338, 68, 110, 32); StyleButton(btnOpen, "ABRIR ESL", true); btnOpen.Click += (_, _) => OpenSelected(false);
         btnReextract.SetBounds(456, 68, 118, 32); StyleButton(btnReextract, "RE-EXTRAIR", false); btnReextract.Click += (_, _) => OpenSelected(true);
-        btnSave.SetBounds(582, 68, 105, 32); StyleButton(btnSave, "SALVAR", true); btnSave.Enabled = false; btnSave.Click += (_, _) => SaveCurrent();
+        btnSave.SetBounds(582, 68, 105, 32); StyleButton(btnSave, LanguageService.T("common.btn.save"), true); btnSave.Enabled = false; btnSave.Click += (_, _) => SaveCurrent();
         lblFileInfo.SetBounds(700, 66, 310, 38); lblFileInfo.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; lblFileInfo.ForeColor = Color.FromArgb(145, 151, 163); lblFileInfo.TextAlign = ContentAlignment.MiddleRight; lblFileInfo.AutoEllipsis = true;
         header.Controls.AddRange(new Control[] { title, sub, cmbFiles, btnOpen, btnReextract, btnSave, lblFileInfo });
 

@@ -24,7 +24,7 @@ public sealed partial class AssetModelEditorForm
                     using var picker=new AppForm{Text="Escolher textura do TPL",StartPosition=FormStartPosition.CenterParent,ClientSize=new Size(390,145),FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,BackColor=BackColor,ForeColor=ForeColor,Font=Font};
                     var select=new ComboBox{Left=18,Top=25,Width=354,DropDownStyle=ComboBoxStyle.DropDownList};StyleEditorCombo(select);
                     for(int i=0;i<count;i++){var info=reader.ReadTexture(dialog.FileName,i);select.Items.Add($"#{i:D2} • {info.width} × {info.height}");}select.SelectedIndex=Math.Min(selectedIndex,count-1);
-                    var ok=B("IMPORTAR",(_,_)=>picker.DialogResult=DialogResult.OK,115);ok.Location=new Point(257,88);picker.Controls.Add(select);picker.Controls.Add(ok);picker.AcceptButton=ok;
+                    var ok=B(LanguageService.T("common.btn.import"),(_,_)=>picker.DialogResult=DialogResult.OK,115);ok.Location=new Point(257,88);picker.Controls.Add(select);picker.Controls.Add(ok);picker.AcceptButton=ok;
                     if(picker.ShowLocalizedDialog(this)!=DialogResult.OK)return;sourceIndex=select.SelectedIndex;
                 }
                 if(IsEff(target))data=EtmModelReplacement.Prepare(new[]{new EtmReplacementRequest(target with{Data=Data(target)},selectedIndex,dialog.FileName,sourceIndex)})[target.FileOrder];

@@ -76,7 +76,7 @@ public sealed class EtmModelReplacementDialog : AppForm
         StyleButton(browse, "ESCOLHER ARQUIVO", Surface2, 24, 405, 154);
         browse.Click += (_, _) => Browse();
         Controls.Add(browse);
-        StyleButton(clear, "LIMPAR", Surface2, 188, 405, 82);
+        StyleButton(clear, LanguageService.T("common.btn.clear"), Surface2, 188, 405, 82);
         clear.Click += (_, _) => { if (SelectedSlot() is Slot slot) { slot.SourcePath = null; slot.SourceTextureIndex = 0; RefreshRow(slot); UpdateSelection(); UpdateCount(); } };
         Controls.Add(clear);
         Controls.Add(new Label { Text = "Textura de origem #", Left = 291, Top = 411, Width = 133, Height = 21, ForeColor = Muted });
@@ -95,7 +95,7 @@ public sealed class EtmModelReplacementDialog : AppForm
         apply.Click += (_, _) => Accept();
         Controls.Add(apply);
         var cancel = new Button();
-        StyleButton(cancel, "CANCELAR", Surface2, 602, 455, 104);
+        StyleButton(cancel, LanguageService.T("common.btn.cancel"), Surface2, 602, 455, 104);
         cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
         Controls.Add(cancel);
         CancelButton = cancel;

@@ -39,9 +39,9 @@ public partial class Form1
         var count=new Label{Left=18,Top=12,Width=640,Height=24,Font=new Font("Segoe UI Semibold",11)};
         var hint=new Label{Left=18,Top=39,Width=640,Height=22,Text="Clique nas faces • Ctrl/Shift adiciona ou remove • botão direito navega"};
         var kind=new ComboBox{Left=18,Top=76,Width=130,DropDownStyle=ComboBoxStyle.DropDownList};kind.Items.AddRange(new object[]{"SAT + EAT","Somente SAT","Somente EAT"});kind.SelectedIndex=0;kind.SelectedIndexChanged+=(_,_)=>viewport.CatalogCollisionKind=kind.SelectedIndex==1?EsatKind.Sat:kind.SelectedIndex==2?EsatKind.Eat:null;
-        var clear=new Button{Left=160,Top=73,Width=95,Height=33,Text="LIMPAR"};clear.Click+=(_,_)=>viewport.SetCatalogCollisionFaces(Array.Empty<EsatFaceInspection>());
+        var clear=new Button{Left=160,Top=73,Width=95,Height=33,Text=LanguageService.T("common.btn.clear")};clear.Click+=(_,_)=>viewport.SetCatalogCollisionFaces(Array.Empty<EsatFaceInspection>());
         var confirm=new Button{Left=365,Top=73,Width=170,Height=33,Text="CONFIRMAR SELEÇÃO",BackColor=Color.FromArgb(188,53,62),FlatStyle=FlatStyle.Flat};
-        var cancel=new Button{Left=545,Top=73,Width=115,Height=33,Text="CANCELAR"};cancel.Click+=(_,_)=>done.TrySetResult(null);confirm.Click+=(_,_)=>done.TrySetResult(viewport.CatalogCollisionFaces);bar.FormClosing+=(_,_)=>done.TrySetResult(null);bar.CancelButton=cancel;
+        var cancel=new Button{Left=545,Top=73,Width=115,Height=33,Text=LanguageService.T("common.btn.cancel")};cancel.Click+=(_,_)=>done.TrySetResult(null);confirm.Click+=(_,_)=>done.TrySetResult(viewport.CatalogCollisionFaces);bar.FormClosing+=(_,_)=>done.TrySetResult(null);bar.CancelButton=cancel;
         void Update(){var faces=viewport.CatalogCollisionFaces;count.Text=$"COLISÃO DO CATÁLOGO • {faces.Count(f=>f.File.Kind==EsatKind.Sat)} SAT • {faces.Count(f=>f.File.Kind==EsatKind.Eat)} EAT";confirm.Enabled=faces.Count>0;}
         kind.BackColor=Color.FromArgb(36,41,50);kind.ForeColor=Color.White;kind.FlatStyle=FlatStyle.Flat;
         foreach(var button in new[]{clear,confirm,cancel}){button.FlatStyle=FlatStyle.Flat;button.FlatAppearance.BorderSize=0;button.ForeColor=Color.White;if(button!=confirm)button.BackColor=Color.FromArgb(45,51,62);}

@@ -86,10 +86,19 @@ public static class LanguageService
 
     public static string T(string key, params object?[] arguments)
     {
+        EnsureInitialized();
         string value = TranslationByKey.TryGetValue(key, out string? translated)
             ? translated : SourceByKey.TryGetValue(key, out string? source) ? source : key;
         return arguments.Length == 0 ? value : string.Format(CultureInfo.CurrentCulture, value, arguments);
     }
+
+    private static void EnsureInitialized()
+    {
+        // InitializeComponent can request semantic keys before Form1 loads the saved language.
+        // Use the source language for that first pass; InitializeLocalization replaces it later.
+        if (SourceByKey.Count == 0) SetLanguage(null);
+    }
+
     public static string Translate(string? value)
     {
         if (string.IsNullOrEmpty(value)) return value ?? string.Empty;
